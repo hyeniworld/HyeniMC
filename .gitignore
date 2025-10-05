@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Build outputs
+dist/
+build/
+release/
+out/
+
+# Development
+.vscode/
+.idea/
+*.log
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test
+coverage/
+.nyc_output/
+
+# Electron
+*.asar
+
+# App data (for development)
+.hyenimc-dev/
+
+# Temporary files
+*.tmp
+temp/
