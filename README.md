@@ -15,7 +15,7 @@
 ## 기술 스택
 
 - **Frontend**: Electron, React, TypeScript, TailwindCSS, shadcn/ui
-- **Backend**: Node.js, TypeScript
+- **Backend**: Go 1.22+, gRPC (Electron Main과 로컬 통신)
 - **Build**: Vite, electron-builder
 - **APIs**: Modrinth, CurseForge, Minecraft Launcher Meta
 
@@ -24,10 +24,16 @@
 ```
 HyeniMC/
 ├── src/
-│   ├── main/              # Electron Main Process
+│   ├── main/              # Electron Main (Bridge: gRPC Client + IPC)
 │   ├── renderer/          # React UI
 │   ├── shared/            # 공유 타입 및 상수
 │   └── preload/           # Electron Preload
+├── backend/               # Go gRPC 서버 (Core Daemon)
+│   ├── cmd/hyenimc/       # main 패키지
+│   ├── internal/          # 서비스/도메인/인프라 구현
+│   └── go.mod
+├── proto/                 # Protobuf 정의 및 buf 설정
+│   └── launcher/*.proto
 ├── resources/             # 리소스 파일
 ├── DESIGN.md              # 상세 설계 문서
 └── README.md
@@ -39,6 +45,7 @@ HyeniMC/
 
 - Node.js 20+
 - npm 또는 yarn
+- Go 1.22+
 
 ### 설치
 
@@ -54,6 +61,12 @@ npm run build
 
 # 패키징
 npm run package
+
+# (옵션) Go 백엔드 빌드
+# macOS (arm64 예시)
+GOOS=darwin GOARCH=arm64 go build -o backend/bin/hyenimc-backend ./backend
+# Windows (x64 예시)
+GOOS=windows GOARCH=amd64 go build -o backend/bin/hyenimc-backend.exe ./backend
 ```
 
 ## 문서

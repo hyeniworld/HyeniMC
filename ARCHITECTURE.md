@@ -15,7 +15,7 @@
 
 ## 시스템 개요
 
-혜니MC는 Electron 기반의 크로스 플랫폼 마인크래프트 런처로, Main Process와 Renderer Process로 분리된 아키텍처를 사용합니다.
+혜니MC는 Electron 기반의 크로스 플랫폼 마인크래프트 런처로, Renderer(UI)와 Main(Bridge) 그리고 별도의 **Go gRPC 데몬(Core)** 으로 분리된 아키텍처를 사용합니다.
 
 ### 핵심 원칙
 
@@ -39,7 +39,7 @@
                          │ IPC Bridge
 ┌────────────────────────▼────────────────────────────────────┐
 │                    Application Layer                        │
-│                      (Main Process)                         │
+│                 (Main Process: Bridge)                      │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
 │  │   Managers   │  │   Services   │  │  Controllers │     │
 │  └──────────────┘  └──────────────┘  └──────────────┘     │
@@ -81,8 +81,8 @@
 
 **구성요소**:
 
-#### Managers
-프로필, 모드, 인스턴스 등의 핵심 도메인 관리
+#### Bridge Responsibilities
+Renderer IPC를 수신하여 **Go gRPC 데몬**으로 요청을 포워딩하고, 서버-스트리밍 응답(다운로드 진행, 게임 로그)을 IPC 이벤트로 재브로드캐스트합니다.
 
 ```typescript
 ProfileManager
@@ -104,8 +104,8 @@ InstanceManager
 └── monitorProcess()
 ```
 
-#### Services
-외부 API 통신 및 데이터 변환
+#### Go gRPC Daemon (Core Services)
+외부 API 통신(Modrinth/CurseForge/Minecraft Meta), 파일 IO, 다운로드/검증, 게임 프로세스 관리 등 핵심 비즈니스 로직을 담당합니다.
 
 ```typescript
 ModrinthService
@@ -156,7 +156,7 @@ ProfileController
 
 ## 데이터 플로우
 
-### 1. 프로필 생성 플로우
+### 1. 프로필 생성 플로우 (IPC → gRPC)
 
 ```
 User Input (UI)
@@ -168,10 +168,10 @@ User Input (UI)
 electronAPI.profile.create(data)
     │
     ▼ IPC
-[ProfileController.handleCreate]
+[Main Bridge] handleCreate
     │
-    ▼
-[ProfileManager.createProfile]
+    ▼ gRPC Unary
+[Go] ProfileService.CreateProfile
     │
     ├──▶ [Validation]
     │
@@ -185,7 +185,7 @@ electronAPI.profile.create(data)
 [UI Update]
 ```
 
-### 2. 모드 설치 플로우
+### 2. 모드 설치 플로우 (서버 스트림 포함 가능)
 
 ```
 User Input (모드 선택)
@@ -194,10 +194,10 @@ User Input (모드 선택)
 electronAPI.mod.install(profileId, modData)
     │
     ▼ IPC
-[ModController.handleInstall]
+[Main Bridge] handleInstall
     │
-    ▼
-[ModManager.installMod]
+    ▼ gRPC Unary/Server-Streaming
+[Go] ModService.InstallMod → (필요 시) DownloadService.StreamProgress
     │
     ├──▶ [ModrinthService.getVersion] - 모드 정보 조회
     │
@@ -209,7 +209,7 @@ electronAPI.mod.install(profileId, modData)
     │     │
     │     ├──▶ [File System] - 파일 저장
     │     │
-    │     └──▶ Emit 'download:progress' Event
+    │     └──▶ (gRPC stream) DownloadProgress → (IPC) 'download:progress'
     │
     ├──▶ [File System] - mods 폴더로 이동
     │
@@ -221,7 +221,7 @@ electronAPI.mod.install(profileId, modData)
 [UI Update]
 ```
 
-### 3. 게임 실행 플로우
+### 3. 게임 실행 플로우 (gRPC 서버-스트리밍 로그)
 
 ```
 User Input (Play 버튼)
@@ -230,10 +230,10 @@ User Input (Play 버튼)
 electronAPI.profile.launch(profileId)
     │
     ▼ IPC
-[ProfileController.handleLaunch]
+[Main Bridge] handleLaunch
     │
-    ▼
-[InstanceManager.launchGame]
+    ▼ gRPC Unary + Stream
+[Go] InstanceService.Launch → InstanceService.StreamLogs
     │
     ├──▶ [ProfileManager.getProfile] - 프로필 조회
     │
@@ -251,7 +251,7 @@ electronAPI.profile.launch(profileId)
     │
     ├──▶ [Child Process] - 게임 프로세스 시작
     │     │
-    │     └──▶ Emit 'game:log' Events
+    │     └──▶ (gRPC stream) GameLogs → (IPC) 'game:log'
     │
     └──▶ Return GameInstance
     │

@@ -14,19 +14,98 @@
 
 ## 개발 환경 설정
 
-### 1. 프로젝트 초기화
+### 1. 프로젝트 초기화 (Electron + Go)
 
 ```bash
 # 프로젝트 디렉토리 생성
 mkdir HyeniMC
 cd HyeniMC
 
-# package.json 초기화
+# Node/Electron 초기화
 npm init -y
-
-# TypeScript 설정
 npm install -D typescript @types/node
 npx tsc --init
+
+# Go 워크스페이스 초기화
+mkdir -p backend/{cmd/internal}
+cd backend && go mod init hyenimc/backend && cd ..
+```
+
+### 5. Go 백엔드(gRPC) 설정
+
+#### 5.1 디렉토리 구조
+
+```
+backend/
+├── cmd/hyenimc/main.go         # gRPC 서버 엔트리포인트
+├── internal/
+│   ├── server/                 # gRPC 서버 초기화
+│   ├── services/               # Profile/Version/Download/Instance 등
+│   ├── repo/                   # 파일시스템/캐시 접근
+│   └── domain/                 # 도메인 모델(고)
+└── go.mod
+proto/
+└── launcher/
+    ├── profile.proto
+    ├── version.proto
+    ├── download.proto
+    ├── instance.proto
+    └── mod.proto
+```
+
+#### 5.2 프로토 생성(예)
+
+`proto/launcher/download.proto`
+```proto
+syntax = "proto3";
+package launcher;
+option go_package = "hyenimc/backend/gen/launcher;launcher";
+
+service DownloadService {
+  rpc StreamProgress(ProgressRequest) returns (stream ProgressEvent);
+}
+
+message ProgressRequest { string profile_id = 1; }
+message ProgressEvent { string task_id = 1; int32 progress = 2; int64 downloaded = 3; int64 total = 4; string name = 5; }
+```
+
+생성 명령(예):
+```bash
+buf generate # buf.gen.yaml 구성 시
+# 또는 protoc 사용 예시
+protoc \
+  --go_out=backend/gen --go-grpc_out=backend/gen \
+  --ts_proto_out=src/main/gen --ts_proto_opt=env=both,outputServices=grpc-js \
+  -I proto proto/launcher/*.proto
+```
+
+#### 5.3 gRPC 서버 부팅(예시 코드 스니펫)
+
+```go
+// backend/cmd/hyenimc/main.go (요약)
+lis, _ := net.Listen("tcp", "127.0.0.1:0") // 동적 포트
+grpcSrv := grpc.NewServer()
+launcher.RegisterDownloadServiceServer(grpcSrv, downloadSvc)
+go grpcSrv.Serve(lis)
+fmt.Println(lis.Addr().String()) // Electron Main이 읽어 IPC에 저장
+```
+
+#### 5.4 Electron Main 연동
+
+- 앱 시작 시 OS별 내장 바이너리 `backend/bin/hyenimc-backend`를 spawn
+- 표준 출력으로 포트를 받아 gRPC 클라이언트 초기화(`@grpc/grpc-js`)
+- 서버-스트림은 IPC 이벤트(`IPC_EVENTS`)로 Renderer에 재전달
+
+```ts
+// src/main/grpc/client.ts (요약)
+import { credentials } from '@grpc/grpc-js';
+import { DownloadServiceClient } from './gen/launcher/download_grpc_pb';
+
+export function createClients(addr: string) {
+  return {
+    download: new DownloadServiceClient(addr, credentials.createInsecure()),
+  };
+}
 ```
 
 ### 2. Electron + Vite + React 설정
@@ -53,6 +132,10 @@ npm install -D @types/fs-extra @types/semver
 # 마인크래프트 런처 코어
 npm install minecraft-launcher-core
 npm install node-stream-zip adm-zip
+
+# gRPC/Proto 도구 (로컬 개발용)
+brew install protobuf bufbuild/buf/buf || true
+npm install -D ts-proto @grpc/grpc-js @grpc/proto-loader
 ```
 
 ### 3. 프로젝트 구조 생성
@@ -62,7 +145,7 @@ mkdir -p src/{main,renderer,shared,preload}
 mkdir -p src/main/{managers,services,utils}
 mkdir -p src/renderer/{components,stores,hooks}
 mkdir -p src/shared/{types,constants}
-mkdir -p resources
+mkdir -p resources proto/launcher
 ```
 
 ### 4. 설정 파일
@@ -125,6 +208,7 @@ directories:
 files:
   - dist/**/*
   - package.json
+  - backend/**
 mac:
   category: public.app-category.games
   target:
@@ -253,7 +337,7 @@ function App() {
 export default App;
 ```
 
-### Phase 2: 프로필 관리 구현
+### Phase 2: 프로필 관리 구현 (Bridge → gRPC)
 
 #### 2.1 ProfileManager 구현
 
@@ -476,7 +560,7 @@ export function ProfileList() {
 }
 ```
 
-### Phase 3: Java 관리 구현
+### Phase 3: Java 관리 구현 (Go 서비스)
 
 **src/main/managers/JavaManager.ts**
 
@@ -648,7 +732,7 @@ export class JavaManager {
 }
 ```
 
-### Phase 4: 다운로드 매니저 구현
+### Phase 4: 다운로드 매니저 구현 (서버-스트리밍)
 
 **src/main/managers/DownloadManager.ts**
 

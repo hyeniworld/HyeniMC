@@ -41,14 +41,13 @@
 - **Form Handling**: React Hook Form + Zod
 - **HTTP Client**: Axios
 
-### Backend (Electron Main Process)
-- **Runtime**: Node.js 20+
-- **Language**: TypeScript 5+
-- **Launcher Core**: minecraft-launcher-core
-- **Archive**: node-stream-zip, adm-zip
-- **Version Management**: semver
-- **File System**: fs-extra
-- **HTTP**: axios, got
+### Backend (Go gRPC Daemon)
+- **Runtime**: Go 1.22+
+- **Transport**: gRPC (HTTP/2), 서버-스트리밍 지원
+- **Codegen**: `protoc`/`buf`, Protobuf v3
+- **HTTP Gateway(옵션)**: grpc-gateway(v2)로 REST 노출 가능
+- **Libs**: `net/http`, `crypto`, `archive/zip`, `hash`, `os/exec`, `x/sync/errgroup`
+- **배포**: 단일 정적 바이너리(Windows x64, macOS x64/arm64)
 
 ### Build & Development
 - **Bundler**: Vite
@@ -61,13 +60,12 @@
 - Modrinth API v2
 - CurseForge API v1
 - Minecraft Version Manifest
-- Fabric Meta API
 - Forge Meta API
 - NeoForge Meta API
 
 ---
 
-## 시스템 아키텍처
+### 시스템 아키텍처
 
 ### 전체 아키텍처
 
@@ -85,22 +83,21 @@
 └────────────────────────┬────────────────────────────────────┘
                          │ IPC (contextBridge)
 ┌────────────────────────▼────────────────────────────────────┐
-│                    Main Process (Core)                      │
+│                    Main Process (Bridge)                    │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │                  Core Managers                        │  │
-│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌─────────┐ │  │
-│  │  │ Profile  │ │   Mod    │ │ Version  │ │  Java   │ │  │
-│  │  │ Manager  │ │ Manager  │ │ Manager  │ │ Manager │ │  │
-│  │  └──────────┘ └──────────┘ └──────────┘ └─────────┘ │  │
-│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌─────────┐ │  │
-│  │  │Download  │ │Instance  │ │ Modpack  │ │  Auth   │ │  │
-│  │  │ Manager  │ │ Manager  │ │ Manager  │ │ Manager │ │  │
-│  │  └──────────┘ └──────────┘ └──────────┘ └─────────┘ │  │
+│  │             IPC Router / gRPC Client                  │  │
+│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐            │  │
+│  │  │  IPC     │  │  Auth    │  │  Events  │            │  │
+│  │  │ Handlers │  │ (stub)   │  │ Bridge   │            │  │
+│  │  └──────────┘  └──────────┘  └──────────┘            │  │
 │  └──────────────────────────────────────────────────────┘  │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │                  External Services                    │  │
+│  │               Go gRPC Daemon (Core)                   │  │
 │  │  ┌──────────┐ ┌──────────┐ ┌──────────┐             │  │
-│  │  │Modrinth  │ │CurseForge│ │Minecraft │             │  │
+│  │  │ Profile  │ │ Version  │ │ Download │             │  │
+│  │  │ Service  │ │ Service  │ │ Service  │             │  │
+│  │  ├──────────┤ ├──────────┤ ├──────────┤             │  │
+│  │  │ Mod      │ │ Instance │ │ Modpack  │             │  │
 │  │  │ Service  │ │ Service  │ │ Service  │             │  │
 │  │  └──────────┘ └──────────┘ └──────────┘             │  │
 │  └──────────────────────────────────────────────────────┘  │
