@@ -1465,6 +1465,296 @@ ipcRenderer.on('mod:updates-available', (event, data: {
 
 ---
 
+## 캐싱 시스템 설계
+
+### 개요
+사용자 경험 향상을 위해 자주 조회되는 데이터를 캐싱하여 API 호출을 최소화하고 응답 속도를 개선합니다.
+
+### 캐시 대상 데이터
+
+#### 1. 모드 관련 캐시
+- **모드 검색 결과** (Modrinth/CurseForge)
+  - TTL: 1시간
+  - 키: `mod:search:{source}:{query}:{filters}`
+  - 이유: 동일한 검색 쿼리 반복 방지
+  
+- **모드 상세 정보**
+  - TTL: 24시간
+  - 키: `mod:details:{source}:{modId}`
+  - 이유: 모드 정보는 자주 변경되지 않음
+  
+- **모드 버전 목록**
+  - TTL: 6시간
+  - 키: `mod:versions:{source}:{modId}:{gameVersion}:{loaderType}`
+  - 이유: 새 버전 출시를 놓치지 않으면서도 반복 조회 방지
+  
+- **모드 의존성 정보**
+  - TTL: 24시간
+  - 키: `mod:dependencies:{source}:{versionId}`
+  - 이유: 버전별 의존성은 변경되지 않음
+  
+- **모드 업데이트 확인 결과**
+  - TTL: 30분
+  - 키: `mod:updates:{profileId}:{timestamp}`
+  - 이유: 자주 확인하되, 매번 전체 API 호출 방지
+
+#### 2. 모드팩 관련 캐시
+- **모드팩 검색 결과**
+  - TTL: 1시간
+  - 키: `modpack:search:{query}:{gameVersion}`
+  
+- **모드팩 버전 목록**
+  - TTL: 6시간
+  - 키: `modpack:versions:{modpackId}:{gameVersion}`
+  
+- **모드팩 매니페스트**
+  - TTL: 영구 (버전별 고정)
+  - 키: `modpack:manifest:{versionId}`
+  - 이유: 설치된 모드팩의 매니페스트는 변경되지 않음
+
+#### 3. 게임 버전 관련 캐시
+- **Minecraft 버전 목록**
+  - TTL: 24시간
+  - 키: `minecraft:versions:list`
+  
+- **로더 버전 목록** (Fabric/Forge/NeoForge/Quilt)
+  - TTL: 12시간
+  - 키: `loader:versions:{loaderType}:{gameVersion}`
+
+#### 4. 프로필 관련 캐시
+- **설치된 모드 메타데이터**
+  - TTL: 영구 (파일 변경 시 무효화)
+  - 키: `profile:mods:{profileId}:{fileName}`
+  - 이유: 파일 시스템 스캔 결과 캐싱으로 로딩 속도 개선
+  
+- **리소스팩/셰이더팩 목록**
+  - TTL: 영구 (디렉토리 변경 감지 시 무효화)
+  - 키: `profile:resources:{profileId}:{type}`
+
+### 캐시 저장 구조
+
+#### 디스크 캐시 (영구 저장)
+```
+{userData}/cache/
+├── mod/
+│   ├── search/
+│   │   ├── modrinth/
+│   │   │   └── {hash}.json
+│   │   └── curseforge/
+│   │       └── {hash}.json
+│   ├── details/
+│   │   └── {modId}.json
+│   ├── versions/
+│   │   └── {modId}_{gameVersion}_{loader}.json
+│   └── dependencies/
+│       └── {versionId}.json
+├── modpack/
+│   ├── search/
+│   │   └── {hash}.json
+│   ├── versions/
+│   │   └── {modpackId}.json
+│   └── manifests/
+│       └── {versionId}.json
+├── minecraft/
+│   └── versions.json
+├── loader/
+│   └── {loaderType}_{gameVersion}.json
+└── profile/
+    └── {profileId}/
+        ├── mods_metadata.json
+        ├── resourcepacks.json
+        └── shaderpacks.json
+```
+
+#### 메모리 캐시 (세션 단위)
+- LRU (Least Recently Used) 캐시
+- 최대 크기: 100MB
+- 자주 접근하는 데이터 우선 보관
+- 애플리케이션 종료 시 자동 소멸
+
+### 캐시 메타데이터 구조
+
+```typescript
+interface CacheEntry<T> {
+  key: string;
+  data: T;
+  cachedAt: number;        // Unix timestamp
+  expiresAt: number;       // Unix timestamp
+  ttl: number;             // seconds
+  version: string;         // Cache schema version
+  source?: string;         // API source (modrinth/curseforge)
+  checksum?: string;       // Data integrity check
+}
+```
+
+### 캐시 관리 전략
+
+#### 1. TTL (Time To Live) 기반 만료
+- 각 캐시 항목에 TTL 설정
+- 조회 시 만료 확인
+- 만료된 항목은 재조회 후 업데이트
+
+#### 2. 조건부 무효화
+- **파일 시스템 변경**: 파일 변경 감지 시 관련 캐시 삭제
+- **수동 새로고침**: 사용자 요청 시 강제 새로고침
+- **버전 변경**: 캐시 스키마 버전 변경 시 전체 무효화
+
+#### 3. 백그라운드 갱신
+- TTL 50% 경과 시 백그라운드에서 미리 갱신
+- 사용자는 캐시 데이터를 즉시 받고, 백그라운드에서 업데이트
+
+#### 4. 캐시 크기 제한
+- 디스크 캐시: 최대 500MB
+- 초과 시 LRU 기반 정리
+- 오래된 캐시 우선 삭제
+
+#### 5. 오류 처리
+- API 호출 실패 시 만료된 캐시라도 사용 (Stale-While-Revalidate)
+- 캐시 손상 시 자동 재생성
+- 네트워크 오류 시 오프라인 모드 지원
+
+### 캐시 API 인터페이스
+
+```typescript
+interface CacheManager {
+  // 기본 작업
+  get<T>(key: string): Promise<T | null>;
+  set<T>(key: string, data: T, ttl: number): Promise<void>;
+  has(key: string): Promise<boolean>;
+  delete(key: string): Promise<void>;
+  clear(pattern?: string): Promise<void>;
+  
+  // 고급 작업
+  getOrFetch<T>(
+    key: string,
+    fetchFn: () => Promise<T>,
+    ttl: number
+  ): Promise<T>;
+  
+  invalidate(pattern: string): Promise<void>;
+  prune(): Promise<void>;  // 만료된 캐시 정리
+  getStats(): Promise<CacheStats>;
+}
+
+interface CacheStats {
+  totalSize: number;        // bytes
+  itemCount: number;
+  hitRate: number;          // 0-1
+  missRate: number;         // 0-1
+  oldestEntry: number;      // timestamp
+  newestEntry: number;      // timestamp
+}
+```
+
+### 캐시 구현 방식
+
+#### Option 1: SQLite (권장)
+- **장점**: 
+  - 빠른 쿼리 성능
+  - 트랜잭션 지원
+  - 복잡한 쿼리 가능 (패턴 검색 등)
+  - 인덱싱 지원
+- **단점**: 
+  - 추가 의존성
+  - 마이그레이션 관리 필요
+- **라이브러리**: `better-sqlite3`
+
+```sql
+CREATE TABLE cache (
+  key TEXT PRIMARY KEY,
+  data TEXT NOT NULL,
+  cached_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  ttl INTEGER NOT NULL,
+  version TEXT NOT NULL,
+  source TEXT,
+  checksum TEXT,
+  size INTEGER
+);
+
+CREATE INDEX idx_expires_at ON cache(expires_at);
+CREATE INDEX idx_cached_at ON cache(cached_at);
+CREATE INDEX idx_source ON cache(source);
+```
+
+#### Option 2: JSON 파일 + 인덱스
+- **장점**:
+  - 간단한 구현
+  - 외부 의존성 없음
+  - 사람이 읽기 쉬움
+- **단점**:
+  - 대용량 데이터 처리 느림
+  - 동시성 제어 어려움
+- **구조**:
+  - `index.json`: 모든 캐시 키와 메타데이터
+  - 개별 JSON 파일: 실제 데이터
+
+### 캐시 최적화 전략
+
+#### 1. 압축
+- 대용량 데이터 (>10KB) 자동 압축
+- gzip 또는 brotli 사용
+- 압축률 vs 성능 트레이드오프 고려
+
+#### 2. 증분 업데이트
+- 전체 데이터 대신 변경된 부분만 업데이트
+- 모드 목록 등에 적용
+
+#### 3. 선택적 캐싱
+- 사용자 설정으로 캐시 활성화/비활성화
+- 캐시 유형별 개별 제어
+- 저장 공간 부족 시 자동 정리
+
+#### 4. 스마트 프리페칭
+- 사용자 행동 패턴 분석
+- 자주 접근하는 데이터 미리 로드
+- 예: 프로필 선택 시 해당 프로필의 모드 목록 미리 캐싱
+
+### 캐시 모니터링
+
+#### UI에서 확인 가능한 정보
+- 캐시 크기 (MB)
+- 캐시 히트율
+- 캐시된 항목 수
+- 마지막 정리 시간
+
+#### 개발자 도구
+- 캐시 내용 검사
+- 특정 키 무효화
+- 전체 캐시 클리어
+- 캐시 통계 그래프
+
+### 구현 우선순위
+
+1. **Phase 1** (핵심):
+   - CacheManager 인터페이스 구현
+   - SQLite 기반 디스크 캐시
+   - 메모리 LRU 캐시
+   - 모드 검색 결과 캐싱
+   - 모드 버전 목록 캐싱
+
+2. **Phase 2** (확장):
+   - 모드팩 캐싱
+   - 프로필별 메타데이터 캐싱
+   - 백그라운드 갱신
+   - 압축 지원
+
+3. **Phase 3** (고급):
+   - 스마트 프리페칭
+   - 캐시 통계 UI
+   - 증분 업데이트
+   - 개발자 도구
+
+### 예상 성과
+
+- **API 호출 감소**: 70-80%
+- **검색 속도 향상**: 10배 이상
+- **네트워크 사용량 감소**: 60-70%
+- **오프라인 모드**: 제한적 지원 가능
+- **초기 로딩 속도**: 2-3배 개선
+
+---
+
 ## 개발 로드맵
 
 ### Phase 1: 프로젝트 초기화 및 기본 구조 (1-2주)
@@ -1555,12 +1845,33 @@ ipcRenderer.on('mod:updates-available', (event, data: {
 - [ ] 프로필 변환
 - [ ] 가져오기 UI
 
-### Phase 12: 고급 기능 (2-3주)
-- [ ] 프로필 내보내기/공유
-- [ ] 프로필 복제
-- [ ] 커스텀 모드 추가
-- [x] 리소스팩/셰이더팩 관리
-- [ ] 스크린샷 관리
+### Phase 12: 캐싱 시스템 및 고급 기능 (2-3주)
+- [ ] **캐싱 시스템 (Phase 1 - 핵심)**
+  - [ ] CacheManager 인터페이스 및 구현
+  - [ ] SQLite 기반 디스크 캐시
+  - [ ] LRU 메모리 캐시
+  - [ ] 모드 검색 결과 캐싱
+  - [ ] 모드 버전 목록 캐싱
+  - [ ] 모드 메타데이터 캐싱
+  - [ ] TTL 기반 만료 처리
+  - [ ] 캐시 무효화 전략
+- [ ] **캐싱 시스템 (Phase 2 - 확장)**
+  - [ ] 모드팩 캐싱
+  - [ ] 프로필별 메타데이터 캐싱
+  - [ ] 백그라운드 갱신
+  - [ ] 데이터 압축
+  - [ ] Stale-While-Revalidate 전략
+- [ ] **캐싱 시스템 (Phase 3 - 고급)**
+  - [ ] 스마트 프리페칭
+  - [ ] 캐시 통계 UI
+  - [ ] 증분 업데이트
+  - [ ] 개발자 도구 (캐시 검사/클리어)
+- [ ] **기타 고급 기능**
+  - [ ] 프로필 내보내기/공유
+  - [ ] 프로필 복제
+  - [ ] 커스텀 모드 추가
+  - [x] 리소스팩/셰이더팩 관리
+  - [ ] 스크린샷 관리
 
 ### Phase 13: 최적화 및 테스트 (2-3주)
 - [ ] 성능 최적화
