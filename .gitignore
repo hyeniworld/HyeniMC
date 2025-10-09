@@ -27,6 +27,19 @@ out/
 .DS_Store
 Thumbs.db
 
+# Electron
+*.asar
+
+# Electron-builder output
+/dist_electron/
+
+# Local configuration (contains sensitive data)
+src/main/services/auth-config.ts
+
+# macOS
+.DS_Store
+Thumbs.db
+
 # Test
 coverage/
 .nyc_output/

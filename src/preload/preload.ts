@@ -1,28 +1,42 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { IPC_CHANNELS, IPC_EVENTS } from '../shared/constants';
-import type { Profile, CreateProfileData } from '../shared/types';
+import { IPC_CHANNELS, IPC_EVENTS } from '../shared/constants/ipc';
 
 // Expose protected methods to renderer process
 contextBridge.exposeInMainWorld('electronAPI', {
   // Profile APIs
   profile: {
-    create: (data: CreateProfileData): Promise<Profile> => 
+    create: (data: any): Promise<any> => 
       ipcRenderer.invoke(IPC_CHANNELS.PROFILE_CREATE, data),
     
-    list: (): Promise<Profile[]> => 
+    list: (): Promise<any[]> => 
       ipcRenderer.invoke(IPC_CHANNELS.PROFILE_LIST),
     
-    get: (id: string): Promise<Profile> => 
+    get: (id: string): Promise<any> => 
       ipcRenderer.invoke(IPC_CHANNELS.PROFILE_GET, id),
     
-    update: (id: string, data: Partial<CreateProfileData>): Promise<Profile> => 
+    update: (id: string, data: any): Promise<any> => 
       ipcRenderer.invoke(IPC_CHANNELS.PROFILE_UPDATE, id, data),
     
     delete: (id: string): Promise<void> => 
       ipcRenderer.invoke(IPC_CHANNELS.PROFILE_DELETE, id),
     
-    launch: (id: string): Promise<void> => 
-      ipcRenderer.invoke(IPC_CHANNELS.PROFILE_LAUNCH, id),
+    launch: (id: string, accountId?: string): Promise<void> => 
+      ipcRenderer.invoke(IPC_CHANNELS.PROFILE_LAUNCH, id, accountId),
+  },
+  
+  // Account APIs
+  account: {
+    loginMicrosoft: (): Promise<any> =>
+      ipcRenderer.invoke(IPC_CHANNELS.ACCOUNT_LOGIN_MICROSOFT),
+    
+    addOffline: (username: string): Promise<any> =>
+      ipcRenderer.invoke(IPC_CHANNELS.ACCOUNT_ADD_OFFLINE, username),
+    
+    list: (): Promise<any[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.ACCOUNT_LIST),
+    
+    remove: (id: string): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.ACCOUNT_REMOVE, id),
   },
   
   // Version APIs
@@ -50,6 +64,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
     
     checkCompatibility: (javaVersion: number, minecraftVersion: string): Promise<boolean> => 
       ipcRenderer.invoke(IPC_CHANNELS.JAVA_CHECK_COMPATIBILITY, javaVersion, minecraftVersion),
+  },
+  
+  // Loader APIs
+  loader: {
+    getVersions: (loaderType: string, minecraftVersion?: string, includeUnstable?: boolean): Promise<any> =>
+      ipcRenderer.invoke(IPC_CHANNELS.LOADER_GET_VERSIONS, loaderType, minecraftVersion, includeUnstable),
+    
+    getRecommended: (loaderType: string, minecraftVersion: string): Promise<any> =>
+      ipcRenderer.invoke(IPC_CHANNELS.LOADER_GET_RECOMMENDED, loaderType, minecraftVersion),
+    
+    install: (loaderType: string, minecraftVersion: string, loaderVersion: string): Promise<any> =>
+      ipcRenderer.invoke(IPC_CHANNELS.LOADER_INSTALL, loaderType, minecraftVersion, loaderVersion),
+    
+    checkInstalled: (loaderType: string, minecraftVersion: string, loaderVersion: string): Promise<any> =>
+      ipcRenderer.invoke(IPC_CHANNELS.LOADER_CHECK_INSTALLED, loaderType, minecraftVersion, loaderVersion),
   },
 
   // Event listeners
@@ -84,12 +113,18 @@ declare global {
   interface Window {
     electronAPI: {
       profile: {
-        create: (data: CreateProfileData) => Promise<Profile>;
-        list: () => Promise<Profile[]>;
-        get: (id: string) => Promise<Profile>;
-        update: (id: string, data: Partial<Profile>) => Promise<Profile>;
+        create: (data: any) => Promise<any>;
+        list: () => Promise<any[]>;
+        get: (id: string) => Promise<any>;
+        update: (id: string, data: any) => Promise<any>;
         delete: (id: string) => Promise<void>;
-        launch: (id: string) => Promise<void>;
+        launch: (id: string, accountId?: string) => Promise<void>;
+      };
+      account: {
+        loginMicrosoft: () => Promise<any>;
+        addOffline: (username: string) => Promise<any>;
+        list: () => Promise<any[]>;
+        remove: (id: string) => Promise<void>;
       };
       version: {
         list: () => Promise<string[]>;
@@ -105,6 +140,12 @@ declare global {
         }>>;
         getRecommended: (minecraftVersion: string) => Promise<number>;
         checkCompatibility: (javaVersion: number, minecraftVersion: string) => Promise<boolean>;
+      };
+      loader: {
+        getVersions: (loaderType: string, minecraftVersion?: string, includeUnstable?: boolean) => Promise<any>;
+        getRecommended: (loaderType: string, minecraftVersion: string) => Promise<any>;
+        install: (loaderType: string, minecraftVersion: string, loaderVersion: string) => Promise<any>;
+        checkInstalled: (loaderType: string, minecraftVersion: string, loaderVersion: string) => Promise<any>;
       };
       on: (channel: string, callback: (...args: any[]) => void) => () => void;
       once: (channel: string, callback: (...args: any[]) => void) => void;

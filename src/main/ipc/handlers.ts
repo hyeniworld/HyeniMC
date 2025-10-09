@@ -4,6 +4,8 @@ import { registerProfileHandlers } from './profile';
 import { registerVersionHandlers } from './version';
 import { registerJavaHandlers } from './java';
 import { registerGameHandlers } from './game';
+import { registerAccountHandlers } from './account';
+import { registerLoaderHandlers } from './loader';
 
 /**
  * Register all IPC handlers
@@ -16,6 +18,8 @@ export function registerIpcHandlers(): void {
   registerVersionHandlers();
   registerJavaHandlers();
   registerGameHandlers();
+  registerAccountHandlers();
+  registerLoaderHandlers();
   
   // TODO: Register other handlers
   // registerModHandlers();

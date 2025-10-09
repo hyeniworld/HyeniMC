@@ -20,6 +20,13 @@ export const IPC_CHANNELS = {
   JAVA_GET_RECOMMENDED: 'java:get-recommended',
   JAVA_CHECK_COMPATIBILITY: 'java:check-compatibility',
   
+  // Account channels
+  ACCOUNT_LOGIN_MICROSOFT: 'account:login:microsoft',
+  ACCOUNT_ADD_OFFLINE: 'account:add:offline',
+  ACCOUNT_LIST: 'account:list',
+  ACCOUNT_REMOVE: 'account:remove',
+  ACCOUNT_GET_FOR_LAUNCH: 'account:get:for:launch',
+  
   // Game download channels
   GAME_DOWNLOAD_VERSION: 'game:download-version',
   GAME_GET_VERSION_DETAILS: 'game:get-version-details',
@@ -57,6 +64,12 @@ export const IPC_CHANNELS = {
   VERSION_MINECRAFT_LIST: 'version:minecraft-list',
   VERSION_LOADER_LIST: 'version:loader-list',
   VERSION_CHECK_COMPATIBILITY: 'version:check-compatibility',
+  
+  // Loader channels
+  LOADER_GET_VERSIONS: 'loader:get-versions',
+  LOADER_GET_RECOMMENDED: 'loader:get-recommended',
+  LOADER_INSTALL: 'loader:install',
+  LOADER_CHECK_INSTALLED: 'loader:check-installed',
   
   // Settings
   SETTINGS_GET: 'settings:get',

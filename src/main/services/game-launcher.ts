@@ -50,10 +50,18 @@ export class GameLauncher {
     console.log(`[Game Launcher] JVM Args count: ${jvmArgs.length}`);
     console.log(`[Game Launcher] Game Args count: ${gameArgs.length}`);
     console.log(`[Game Launcher] Game Args:`, gameArgs);
-    console.log(`[Game Launcher] Full command:`);
-    console.log(`"${options.javaPath}" ${allArgs.slice(0, 10).join(' ')}...`);
+    
+    // Debug: Print all arguments
+    console.log('[Game Launcher] All arguments:');
+    allArgs.forEach((arg, i) => {
+      if (arg.length > 200) {
+        console.log(`  [${i}]: ${arg.substring(0, 200)}...`);
+      } else {
+        console.log(`  [${i}]: ${arg}`);
+      }
+    });
 
-    // Spawn process
+    // Launch process
     const childProcess = spawn(options.javaPath, allArgs, {
       cwd: options.gameDir,
       env: {
@@ -147,8 +155,36 @@ export class GameLauncher {
     args.push('-XX:MaxGCPauseMillis=50');
     args.push('-XX:G1HeapRegionSize=32M');
 
-    // Main class
+    // Add JVM arguments from version JSON (for NeoForge, Fabric, Vanilla, etc.)
     const versionJson = await this.loadVersionJson(options.versionId, options.gameDir);
+    if (versionJson.arguments?.jvm) {
+      const { getSharedLibrariesDir } = await import('../utils/paths');
+      const librariesDir = getSharedLibrariesDir();
+      const instanceLibrariesDir = path.join(options.gameDir, 'libraries');
+      
+      for (const arg of versionJson.arguments.jvm) {
+        if (typeof arg === 'string') {
+          // Skip if it's a duplicate (already added above)
+          if (arg.includes('${natives_directory}') || 
+              arg.includes('${classpath}') ||
+              arg === '-cp') {
+            continue;
+          }
+          
+          // Replace placeholders
+          let processedArg = arg
+            .replace(/\$\{library_directory\}/g, instanceLibrariesDir)
+            .replace(/\$\{classpath_separator\}/g, process.platform === 'win32' ? ';' : ':')
+            .replace(/\$\{version_name\}/g, options.versionId)
+            .replace(/\$\{launcher_name\}/g, 'HyeniMC')
+            .replace(/\$\{launcher_version\}/g, '1.0.0');
+          
+          args.push(processedArg);
+        }
+      }
+    }
+
+    // Main class
     args.push(versionJson.mainClass);
 
     return args;
@@ -184,6 +220,10 @@ export class GameLauncher {
       '${user_type}': userType,
       '${version_type}': versionJson.type || 'release',
       '${user_properties}': '{}',
+      '${clientid}': uuid,
+      '${auth_xuid}': uuid,
+      '${resolution_width}': '854',
+      '${resolution_height}': '480',
     };
 
     // Check which format to use
@@ -234,23 +274,67 @@ export class GameLauncher {
     const versionJson = await this.loadVersionJson(versionId, gameDir);
     const classpathParts: string[] = [];
 
-    // Add libraries (from shared directory)
+    // Add libraries (check both instance and shared directories)
     const { getSharedLibrariesDir } = await import('../utils/paths');
-    const librariesDir = getSharedLibrariesDir();
+    const sharedLibrariesDir = getSharedLibrariesDir();
+    const instanceLibrariesDir = path.join(gameDir, 'libraries');
+    
+    console.log(`[Game Launcher] Building classpath for ${versionJson.libraries?.length || 0} libraries`);
+    
     for (const library of versionJson.libraries || []) {
       if (!this.shouldUseLibrary(library)) {
         continue;
       }
 
+      let relativePath: string;
+      
       if (library.downloads?.artifact) {
-        const libPath = path.join(librariesDir, library.downloads.artifact.path);
-        classpathParts.push(libPath);
+        // Minecraft-style library with downloads info
+        relativePath = library.downloads.artifact.path;
+      } else if (library.name) {
+        // Fabric/NeoForge-style library with only name (e.g., "net.fabricmc:fabric-loader:0.17.2")
+        const parts = library.name.split(':');
+        if (parts.length >= 3) {
+          const [group, artifact, version] = parts;
+          const groupPath = group.replace(/\./g, '/');
+          const fileName = `${artifact}-${version}.jar`;
+          relativePath = path.join(groupPath, artifact, version, fileName);
+        } else {
+          console.warn(`[Game Launcher] Invalid library name format: ${library.name}`);
+          continue;
+        }
+      } else {
+        console.warn(`[Game Launcher] Library has no downloads.artifact or name:`, library);
+        continue;
+      }
+      
+      // Check instance libraries first, then shared libraries
+      const instanceLibPath = path.join(instanceLibrariesDir, relativePath);
+      const sharedLibPath = path.join(sharedLibrariesDir, relativePath);
+      
+      try {
+        await fs.access(instanceLibPath);
+        classpathParts.push(instanceLibPath);
+      } catch {
+        // Instance library doesn't exist, use shared library
+        classpathParts.push(sharedLibPath);
       }
     }
 
-    // Add client JAR
-    const clientJar = path.join(gameDir, 'versions', versionId, `${versionId}.jar`);
-    classpathParts.push(clientJar);
+    console.log(`[Game Launcher] Added ${classpathParts.length} libraries to classpath`);
+
+    // Add client JAR (except for NeoForge, which uses its own client JAR)
+    // NeoForge installer creates client-X.X.X-srg.jar which is loaded automatically
+    if (!versionId.startsWith('neoforge-')) {
+      // For versions with inheritsFrom, use the parent's JAR
+      const clientVersionId = (versionJson as any).inheritsFrom || versionId;
+      const clientJar = path.join(gameDir, 'versions', clientVersionId, `${clientVersionId}.jar`);
+      
+      console.log(`[Game Launcher] Client JAR: ${clientJar}`);
+      classpathParts.push(clientJar);
+    } else {
+      console.log(`[Game Launcher] Skipping Minecraft JAR for NeoForge (uses own client JAR)`);
+    }
 
     // Join with platform-specific separator
     const separator = process.platform === 'win32' ? ';' : ':';
@@ -312,12 +396,78 @@ export class GameLauncher {
   }
 
   /**
-   * Load version JSON
+   * Load version JSON (with inheritance support for Fabric/Forge)
    */
-  private async loadVersionJson(versionId: string, gameDir: string): Promise<VersionDetails> {
+  private async loadVersionJson(versionId: string, gameDir: string, visited = new Set<string>()): Promise<VersionDetails> {
+    // Prevent infinite recursion
+    if (visited.has(versionId)) {
+      console.error(`[Game Launcher] Circular dependency detected: ${versionId}`);
+      throw new Error(`Circular version dependency: ${versionId}`);
+    }
+    visited.add(versionId);
+
     const versionJsonPath = path.join(gameDir, 'versions', versionId, `${versionId}.json`);
-    const content = await fs.readFile(versionJsonPath, 'utf-8');
-    return JSON.parse(content);
+    
+    let content: string;
+    try {
+      content = await fs.readFile(versionJsonPath, 'utf-8');
+    } catch (error) {
+      console.error(`[Game Launcher] Failed to read version JSON: ${versionJsonPath}`);
+      throw error;
+    }
+    
+    const versionJson = JSON.parse(content);
+
+    // Check if this version inherits from another (Fabric, Forge, etc.)
+    if (versionJson.inheritsFrom) {
+      console.log(`[Game Launcher] Version ${versionId} inherits from ${versionJson.inheritsFrom}`);
+      
+      // Load parent version (pass visited set to prevent cycles)
+      const parentJson = await this.loadVersionJson(versionJson.inheritsFrom, gameDir, visited);
+      
+      console.log(`[Game Launcher] Merging ${versionId} (${versionJson.libraries?.length || 0} libs) with parent ${versionJson.inheritsFrom} (${parentJson.libraries?.length || 0} libs)`);
+      
+      // Merge libraries and remove duplicates (child libraries take precedence)
+      const childLibs = versionJson.libraries || [];
+      const parentLibs = parentJson.libraries || [];
+      const childLibNames = new Set(childLibs.map((lib: Library) => lib.name));
+      
+      // Filter out parent libraries that are already in child libraries
+      const uniqueParentLibs = parentLibs.filter((lib: Library) => !childLibNames.has(lib.name));
+      
+      const mergedLibraries = [...childLibs, ...uniqueParentLibs];
+      
+      console.log(`[Game Launcher] Removed ${parentLibs.length - uniqueParentLibs.length} duplicate libraries`);
+      
+      // Merge parent and child
+      const merged = {
+        ...parentJson,
+        ...versionJson,
+        id: versionJson.id,
+        libraries: mergedLibraries,
+        // Merge arguments
+        arguments: {
+          game: [
+            ...(versionJson.arguments?.game || []),
+            ...(parentJson.arguments?.game || []),
+          ],
+          jvm: [
+            ...(versionJson.arguments?.jvm || []),
+            ...(parentJson.arguments?.jvm || []),
+          ],
+        },
+        // Use child's mainClass if specified, otherwise parent's
+        mainClass: versionJson.mainClass || parentJson.mainClass,
+      };
+      
+      console.log(`[Game Launcher] Merged version has ${merged.libraries.length} total libraries (after dedup)`);
+      console.log(`[Game Launcher] Using mainClass: ${merged.mainClass}`);
+      
+      return merged;
+    }
+
+    console.log(`[Game Launcher] Version ${versionId} is standalone (${versionJson.libraries?.length || 0} libraries)`);
+    return versionJson;
   }
 
   /**

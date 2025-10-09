@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { Play, Settings, Trash2, Plus, FolderOpen, Clock, Loader2 } from 'lucide-react';
-import type { Profile } from '../../../shared/types';
 import { CreateProfileModal } from './CreateProfileModal';
 import { DownloadModal } from '../DownloadModal';
+import { useAccount } from '../../App';
 
 export function ProfileList() {
-  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const { selectedAccountId } = useAccount();
+  const [profiles, setProfiles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -71,7 +72,8 @@ export function ProfileList() {
       });
 
       try {
-        await window.electronAPI.profile.launch(profileId);
+        // Pass accountId to launch
+        await window.electronAPI.profile.launch(profileId, selectedAccountId);
         
         // Close modal after 2 seconds if game started successfully
         setTimeout(() => {

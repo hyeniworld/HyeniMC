@@ -104,15 +104,14 @@ export function registerProfileHandlers(): void {
       console.log('[IPC Profile] Profile deleted successfully');
       return { success: true };
     } catch (error) {
-      console.error('[IPC Profile] Failed to delete:', error);
       throw new Error(error instanceof Error ? error.message : '프로필 삭제에 실패했습니다');
     }
   });
 
   // Launch profile
-  ipcMain.handle(IPC_CHANNELS.PROFILE_LAUNCH, async (event, id: string) => {
+  ipcMain.handle(IPC_CHANNELS.PROFILE_LAUNCH, async (event, id: string, accountId?: string) => {
     try {
-      console.log('[IPC Profile] Launching profile:', id);
+      console.log('[IPC Profile] Launching profile:', id, 'with account:', accountId || 'default');
       
       const addr = getBackendAddress();
       if (!addr) {
@@ -123,12 +122,14 @@ export function registerProfileHandlers(): void {
       const response = await axios.get(`http://${addr}/api/profiles/${id}`);
       const profile = response.data;
       
+      // Attach accountId to profile for later use
+      (profile as any).accountId = accountId;
+      
       console.log(`[IPC Profile] Profile: ${profile.name}, Version: ${profile.gameVersion}`);
 
       // Import game launcher modules
       const { detectJavaInstallations } = await import('../services/java-detector');
       const { VersionManager } = await import('../services/version-manager');
-      const path = await import('path');
       const { app, BrowserWindow } = await import('electron');
 
       // Detect Java
@@ -175,15 +176,141 @@ export function registerProfileHandlers(): void {
       
       console.log('[IPC Profile] Download verification completed');
 
+      // Install loader if needed
+      let actualVersionId = profile.gameVersion;
+      
+      if (profile.loaderType && profile.loaderType !== 'vanilla') {
+        console.log(`[IPC Profile] Installing ${profile.loaderType} loader...`);
+        
+        const { LoaderManager } = await import('../services/loader-manager');
+        const loaderManager = new LoaderManager();
+        
+        // Get recommended version if not specified
+        let loaderVersion = profile.loaderVersion;
+        if (!loaderVersion) {
+          console.log(`[IPC Profile] Getting recommended ${profile.loaderType} version...`);
+          loaderVersion = await loaderManager.getRecommendedVersion(profile.loaderType, profile.gameVersion);
+          
+          if (!loaderVersion) {
+            throw new Error(`${profile.loaderType} 로더를 찾을 수 없습니다. 다른 로더를 선택해주세요.`);
+          }
+          
+          console.log(`[IPC Profile] Using recommended version: ${loaderVersion}`);
+        }
+        
+        // Check if already installed
+        const isInstalled = await loaderManager.isLoaderInstalled(
+          profile.loaderType,
+          profile.gameVersion,
+          loaderVersion,
+          instanceDir
+        );
+        
+        if (!isInstalled) {
+          console.log(`[IPC Profile] Installing ${profile.loaderType} ${loaderVersion}...`);
+          
+          actualVersionId = await loaderManager.installLoader(
+            profile.loaderType,
+            profile.gameVersion,
+            loaderVersion,
+            instanceDir,
+            (message, current, total) => {
+              if (window) {
+                window.webContents.send('loader:install-progress', {
+                  loaderType: profile.loaderType,
+                  message,
+                  current,
+                  total,
+                  progress: (current / total) * 100,
+                });
+              }
+            }
+          );
+          
+          console.log(`[IPC Profile] Loader installed: ${actualVersionId}`);
+        } else {
+          actualVersionId = loaderManager.getVersionId(profile.loaderType, profile.gameVersion, loaderVersion);
+          console.log(`[IPC Profile] Loader already installed: ${actualVersionId}`);
+        }
+      }
+
+      // Get account info from global state (passed as parameter)
+      let username = 'Player';
+      let uuid = '00000000-0000-0000-0000-000000000000';
+      let accessToken = 'null';
+      let userType = 'legacy';
+      
+      // Check if accountId is passed (for backward compatibility)
+      const accountIdToUse = (profile as any).accountId;
+      
+      if (accountIdToUse) {
+        try {
+          const { getAccountManager } = await import('./account');
+          const { MicrosoftAuthService } = await import('../services/microsoft-auth');
+          const accountManager = getAccountManager();
+          const account = accountManager.getAccount(accountIdToUse);
+          
+          if (!account) {
+            console.warn('[IPC Profile] Account not found, using default');
+          } else if (account.type === 'offline') {
+            username = account.name;
+            uuid = account.uuid;
+            accessToken = 'null';
+            userType = 'legacy';
+          } else {
+            // Microsoft account - get and refresh tokens if needed
+            let tokens = await accountManager.getAccountTokens(accountIdToUse);
+            
+            if (tokens) {
+              // Refresh if expired or expiring soon (within 5 minutes)
+              if (tokens.expiresAt < Date.now() + 5 * 60 * 1000) {
+                console.log('[IPC Profile] Refreshing expired token...');
+                
+                const authService = new MicrosoftAuthService();
+                const newTokens = await authService.refreshToken(tokens.refreshToken);
+                const newExpiresAt = Date.now() + newTokens.expiresIn * 1000;
+                
+                await accountManager.updateAccountTokens(
+                  accountIdToUse,
+                  newTokens.accessToken,
+                  newTokens.refreshToken,
+                  newExpiresAt
+                );
+                
+                tokens = {
+                  accessToken: newTokens.accessToken,
+                  refreshToken: newTokens.refreshToken,
+                  expiresAt: newExpiresAt,
+                };
+              }
+              
+              username = account.name;
+              uuid = account.uuid;
+              accessToken = tokens.accessToken;
+              userType = 'msa';
+              
+              // Update last used
+              await accountManager.updateLastUsed(accountIdToUse);
+            }
+          }
+          
+          console.log(`[IPC Profile] Using account: ${username} (${userType})`);
+        } catch (error) {
+          console.warn('[IPC Profile] Failed to get account info, using default:', error);
+        }
+      }
+
       // Launch game using IPC
-      const { IPC_CHANNELS: IPC } = await import('../../shared/constants');
       const launchOptions = {
-        versionId: profile.gameVersion,
+        versionId: actualVersionId,
         javaPath: java.path,
         gameDir: instanceDir,
         minMemory: 512,
         maxMemory: 4096,
-        username: 'Player',
+        username,
+        uuid,
+        accessToken,
+        userType,
       };
 
       console.log('[IPC Profile] Launching game...');

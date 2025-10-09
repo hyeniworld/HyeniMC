@@ -1,12 +1,15 @@
 import { app, BrowserWindow } from 'electron';
-import path from 'path';
-import { startBackend, stopBackend } from './backend/manager';
+import * as path from 'path';
 import { registerIpcHandlers } from './ipc/handlers';
+import { startBackend, stopBackend } from './backend/manager';
+
+// Disable certificate verification for Microsoft auth (macOS SSL issue workaround)
+app.commandLine.appendSwitch('ignore-certificate-errors');
 
 let mainWindow: BrowserWindow | null = null;
+const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
 async function createWindow() {
-  const isDev = process.env.NODE_ENV === 'development';
   const preloadPath = isDev
     ? path.join(__dirname, '../preload/preload.js')
     : path.join(__dirname, '../preload/preload.js');
