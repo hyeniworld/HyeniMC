@@ -2,7 +2,7 @@
  * 프로필 관련 타입 정의
  */
 
-export type LoaderType = 'vanilla' | 'fabric' | 'forge' | 'neoforge';
+export type LoaderType = 'vanilla' | 'fabric' | 'forge' | 'neoforge' | 'quilt';
 
 export interface Profile {
   id: string;

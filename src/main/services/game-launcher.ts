@@ -5,6 +5,7 @@ import * as os from 'os';
 import { VersionDetails, Library } from './version-manager';
 
 export interface LaunchOptions {
+  profileId?: string;  // Profile ID for tracking
   versionId: string;
   javaPath: string;
   gameDir: string;
@@ -18,12 +19,35 @@ export interface LaunchOptions {
 
 export interface GameProcess {
   process: ChildProcess;
+  profileId?: string;  // Profile ID
   versionId: string;
   startTime: Date;
 }
 
 export class GameLauncher {
   private activeProcesses: Map<string, GameProcess> = new Map();
+
+  /**
+   * Check if a profile is currently running (checks actual process state)
+   */
+  isProfileRunning(versionId: string): boolean {
+    const gameProcess = this.activeProcesses.get(versionId);
+    if (!gameProcess) {
+      return false;
+    }
+    
+    // Check if process is actually alive using PID
+    try {
+      // process.kill(pid, 0) doesn't actually kill, just checks if process exists
+      process.kill(gameProcess.process.pid!, 0);
+      return true;
+    } catch (error) {
+      // Process doesn't exist, clean up
+      console.log(`[Game Launcher] Process ${gameProcess.process.pid} not found, cleaning up`);
+      this.activeProcesses.delete(versionId);
+      return false;
+    }
+  }
 
   /**
    * Launch Minecraft
@@ -33,6 +57,11 @@ export class GameLauncher {
     onLog?: (line: string) => void,
     onExit?: (code: number | null) => void
   ): Promise<GameProcess> {
+    // Check for duplicate launch
+    if (this.isProfileRunning(options.versionId)) {
+      throw new Error(`프로필 ${options.versionId}이(가) 이미 실행 중입니다!`);
+    }
+
     console.log(`[Game Launcher] Launching Minecraft ${options.versionId}`);
 
     // Build JVM arguments
@@ -46,20 +75,7 @@ export class GameLauncher {
 
     console.log(`[Game Launcher] Java: ${options.javaPath}`);
     console.log(`[Game Launcher] Working directory: ${options.gameDir}`);
-    console.log(`[Game Launcher] Args count: ${allArgs.length}`);
-    console.log(`[Game Launcher] JVM Args count: ${jvmArgs.length}`);
-    console.log(`[Game Launcher] Game Args count: ${gameArgs.length}`);
-    console.log(`[Game Launcher] Game Args:`, gameArgs);
-    
-    // Debug: Print all arguments
-    console.log('[Game Launcher] All arguments:');
-    allArgs.forEach((arg, i) => {
-      if (arg.length > 200) {
-        console.log(`  [${i}]: ${arg.substring(0, 200)}...`);
-      } else {
-        console.log(`  [${i}]: ${arg}`);
-      }
-    });
+    console.log(`[Game Launcher] Total arguments: ${allArgs.length} (JVM: ${jvmArgs.length}, Game: ${gameArgs.length})`);
 
     // Launch process
     const childProcess = spawn(options.javaPath, allArgs, {
@@ -71,11 +87,15 @@ export class GameLauncher {
 
     const gameProcess: GameProcess = {
       process: childProcess,
+      profileId: options.profileId,
       versionId: options.versionId,
       startTime: new Date(),
     };
 
-    this.activeProcesses.set(options.versionId, gameProcess);
+    // Use profileId as key if available, otherwise use versionId
+    const processKey = options.profileId || options.versionId;
+    this.activeProcesses.set(processKey, gameProcess);
+    console.log(`[Game Launcher] Started game: ${processKey} (PID: ${childProcess.pid})`);
 
     // Handle stdout
     childProcess.stdout?.on('data', (data) => {
@@ -106,7 +126,8 @@ export class GameLauncher {
     // Handle exit
     childProcess.on('exit', (code) => {
       console.log(`[Game Launcher] Process exited with code: ${code}`);
-      this.activeProcesses.delete(options.versionId);
+      const processKey = options.profileId || options.versionId;
+      this.activeProcesses.delete(processKey);
       if (onExit) {
         onExit(code);
       }
@@ -115,7 +136,20 @@ export class GameLauncher {
     // Handle error
     childProcess.on('error', (error) => {
       console.error(`[Game Launcher] Process error:`, error);
-      this.activeProcesses.delete(options.versionId);
+      
+      // Send user-friendly error to renderer
+      const { createUserFriendlyError } = require('../utils/error-handler');
+      const userError = createUserFriendlyError(error);
+      
+      if (childProcess.stdout) {
+        childProcess.stdout.emit('data', Buffer.from(`\n❌ ${userError.title}\n${userError.message}\n`));
+        if (userError.solution) {
+          childProcess.stdout.emit('data', Buffer.from(`💡 ${userError.solution}\n`));
+        }
+      }
+      
+      const processKey = options.profileId || options.versionId;
+      this.activeProcesses.delete(processKey);
     });
 
     return gameProcess;
@@ -279,8 +313,6 @@ export class GameLauncher {
     const sharedLibrariesDir = getSharedLibrariesDir();
     const instanceLibrariesDir = path.join(gameDir, 'libraries');
     
-    console.log(`[Game Launcher] Building classpath for ${versionJson.libraries?.length || 0} libraries`);
-    
     for (const library of versionJson.libraries || []) {
       if (!this.shouldUseLibrary(library)) {
         continue;
@@ -321,7 +353,7 @@ export class GameLauncher {
       }
     }
 
-    console.log(`[Game Launcher] Added ${classpathParts.length} libraries to classpath`);
+    console.log(`[Game Launcher] Built classpath with ${classpathParts.length} libraries`);
 
     // Add client JAR (except for NeoForge, which uses its own client JAR)
     // NeoForge installer creates client-X.X.X-srg.jar which is loaded automatically
@@ -420,12 +452,10 @@ export class GameLauncher {
 
     // Check if this version inherits from another (Fabric, Forge, etc.)
     if (versionJson.inheritsFrom) {
-      console.log(`[Game Launcher] Version ${versionId} inherits from ${versionJson.inheritsFrom}`);
+      console.log(`[Game Launcher] Loading ${versionId} → inherits from ${versionJson.inheritsFrom}`);
       
       // Load parent version (pass visited set to prevent cycles)
       const parentJson = await this.loadVersionJson(versionJson.inheritsFrom, gameDir, visited);
-      
-      console.log(`[Game Launcher] Merging ${versionId} (${versionJson.libraries?.length || 0} libs) with parent ${versionJson.inheritsFrom} (${parentJson.libraries?.length || 0} libs)`);
       
       // Merge libraries and remove duplicates (child libraries take precedence)
       const childLibs = versionJson.libraries || [];
@@ -436,8 +466,11 @@ export class GameLauncher {
       const uniqueParentLibs = parentLibs.filter((lib: Library) => !childLibNames.has(lib.name));
       
       const mergedLibraries = [...childLibs, ...uniqueParentLibs];
+      const duplicatesRemoved = parentLibs.length - uniqueParentLibs.length;
       
-      console.log(`[Game Launcher] Removed ${parentLibs.length - uniqueParentLibs.length} duplicate libraries`);
+      if (duplicatesRemoved > 0) {
+        console.log(`[Game Launcher] Removed ${duplicatesRemoved} duplicate libraries`);
+      }
       
       // Merge parent and child
       const merged = {
@@ -460,13 +493,11 @@ export class GameLauncher {
         mainClass: versionJson.mainClass || parentJson.mainClass,
       };
       
-      console.log(`[Game Launcher] Merged version has ${merged.libraries.length} total libraries (after dedup)`);
-      console.log(`[Game Launcher] Using mainClass: ${merged.mainClass}`);
+      console.log(`[Game Launcher] Loaded ${versionId} with ${merged.libraries.length} libraries`);
       
       return merged;
     }
 
-    console.log(`[Game Launcher] Version ${versionId} is standalone (${versionJson.libraries?.length || 0} libraries)`);
     return versionJson;
   }
 
@@ -588,24 +619,41 @@ export class GameLauncher {
   stopGame(versionId: string): boolean {
     const gameProcess = this.activeProcesses.get(versionId);
     if (gameProcess) {
-      gameProcess.process.kill();
+      console.log(`[Game Launcher] Stopping game: ${versionId} (PID: ${gameProcess.process.pid})`);
+      gameProcess.process.kill('SIGTERM');  // Use SIGTERM for graceful shutdown
       this.activeProcesses.delete(versionId);
       return true;
     }
+    console.warn(`[Game Launcher] Cannot stop - process not found: ${versionId}`);
     return false;
   }
 
   /**
-   * Get active processes
+   * Get active processes (verifies each process is actually running)
    */
   getActiveProcesses(): GameProcess[] {
-    return Array.from(this.activeProcesses.values());
+    const activeProcesses: GameProcess[] = [];
+    
+    // Check each process and clean up dead ones
+    for (const [key, gameProcess] of this.activeProcesses.entries()) {
+      try {
+        // Check if process is actually alive
+        process.kill(gameProcess.process.pid!, 0);
+        activeProcesses.push(gameProcess);
+      } catch (error) {
+        // Process is dead, clean up
+        console.log(`[Game Launcher] Cleaning up dead process: ${key} (PID: ${gameProcess.process.pid})`);
+        this.activeProcesses.delete(key);
+      }
+    }
+    
+    return activeProcesses;
   }
 
   /**
-   * Check if game is running
+   * Check if game is running (alias for isProfileRunning)
    */
   isGameRunning(versionId: string): boolean {
-    return this.activeProcesses.has(versionId);
+    return this.isProfileRunning(versionId);
   }
 }

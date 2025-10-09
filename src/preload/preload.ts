@@ -81,6 +81,64 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke(IPC_CHANNELS.LOADER_CHECK_INSTALLED, loaderType, minecraftVersion, loaderVersion),
   },
 
+  // Shell APIs
+  shell: {
+    openPath: (path: string): Promise<string> =>
+      ipcRenderer.invoke('shell:openPath', path),
+    openExternal: (url: string): Promise<void> =>
+      ipcRenderer.invoke('shell:openExternal', url),
+  },
+
+  // System APIs
+  system: {
+    getPath: (name: string): Promise<string> =>
+      ipcRenderer.invoke('system:getPath', name),
+  },
+
+  // Game APIs
+  game: {
+    stop: (versionId: string): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GAME_STOP, versionId),
+    isRunning: (versionId: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GAME_IS_RUNNING, versionId),
+    getActive: (): Promise<Array<{ profileId?: string; versionId: string; startTime: Date; pid: number }>> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GAME_GET_ACTIVE),
+  },
+
+  // Mod APIs
+  mod: {
+    list: (profileId: string): Promise<any[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.MOD_LIST, profileId),
+    toggle: (profileId: string, fileName: string, enabled: boolean): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.MOD_TOGGLE, profileId, fileName, enabled),
+    remove: (profileId: string, fileName: string): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.MOD_REMOVE, profileId, fileName),
+  },
+
+  // Resource Pack APIs
+  resourcepack: {
+    list: (profileId: string): Promise<any[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.RESOURCEPACK_LIST, profileId),
+    enable: (profileId: string, fileName: string): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.RESOURCEPACK_ENABLE, profileId, fileName),
+    disable: (profileId: string, fileName: string): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.RESOURCEPACK_DISABLE, profileId, fileName),
+    delete: (profileId: string, fileName: string): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.RESOURCEPACK_DELETE, profileId, fileName),
+  },
+
+  // Shader Pack APIs
+  shaderpack: {
+    list: (profileId: string): Promise<any[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SHADERPACK_LIST, profileId),
+    enable: (profileId: string, fileName: string, isDirectory: boolean): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SHADERPACK_ENABLE, profileId, fileName, isDirectory),
+    disable: (profileId: string, fileName: string, isDirectory: boolean): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SHADERPACK_DISABLE, profileId, fileName, isDirectory),
+    delete: (profileId: string, fileName: string, isDirectory: boolean): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SHADERPACK_DELETE, profileId, fileName, isDirectory),
+  },
+
   // Event listeners
   on: (channel: string, callback: (...args: any[]) => void) => {
     // Validate channel is in our allowed list
@@ -146,6 +204,35 @@ declare global {
         getRecommended: (loaderType: string, minecraftVersion: string) => Promise<any>;
         install: (loaderType: string, minecraftVersion: string, loaderVersion: string) => Promise<any>;
         checkInstalled: (loaderType: string, minecraftVersion: string, loaderVersion: string) => Promise<any>;
+      };
+      shell: {
+        openPath: (path: string) => Promise<string>;
+        openExternal: (url: string) => Promise<void>;
+      };
+      system: {
+        getPath: (name: string) => Promise<string>;
+      };
+      game: {
+        stop: (versionId: string) => Promise<{ success: boolean }>;
+        isRunning: (versionId: string) => Promise<boolean>;
+        getActive: () => Promise<Array<{ profileId?: string; versionId: string; startTime: Date; pid: number }>>;
+      };
+      mod: {
+        list: (profileId: string) => Promise<any[]>;
+        toggle: (profileId: string, fileName: string, enabled: boolean) => Promise<{ success: boolean }>;
+        remove: (profileId: string, fileName: string) => Promise<{ success: boolean }>;
+      };
+      resourcepack: {
+        list: (profileId: string) => Promise<any[]>;
+        enable: (profileId: string, fileName: string) => Promise<{ success: boolean }>;
+        disable: (profileId: string, fileName: string) => Promise<{ success: boolean }>;
+        delete: (profileId: string, fileName: string) => Promise<{ success: boolean }>;
+      };
+      shaderpack: {
+        list: (profileId: string) => Promise<any[]>;
+        enable: (profileId: string, fileName: string, isDirectory: boolean) => Promise<{ success: boolean }>;
+        disable: (profileId: string, fileName: string, isDirectory: boolean) => Promise<{ success: boolean }>;
+        delete: (profileId: string, fileName: string, isDirectory: boolean) => Promise<{ success: boolean }>;
       };
       on: (channel: string, callback: (...args: any[]) => void) => () => void;
       once: (channel: string, callback: (...args: any[]) => void) => void;

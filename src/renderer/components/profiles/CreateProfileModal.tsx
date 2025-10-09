@@ -245,6 +245,7 @@ export function CreateProfileModal({ onClose, onSuccess }: CreateProfileModalPro
               >
                 <option value="vanilla">바닐라</option>
                 <option value="fabric">Fabric</option>
+                <option value="quilt">Quilt</option>
                 <option value="forge">Forge (권장하지 않음)</option>
                 <option value="neoforge">NeoForge ⭐</option>
               </select>
@@ -268,7 +269,7 @@ export function CreateProfileModal({ onClose, onSuccess }: CreateProfileModalPro
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="text-sm font-semibold text-gray-300">
-                  {formData.loaderType === 'fabric' ? 'Fabric' : formData.loaderType === 'neoforge' ? 'NeoForge' : 'Forge'} 버전
+                  {formData.loaderType === 'fabric' ? 'Fabric' : formData.loaderType === 'quilt' ? 'Quilt' : formData.loaderType === 'neoforge' ? 'NeoForge' : 'Forge'} 버전
                 </label>
                 <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer hover:text-gray-300 transition-colors">
                   <input

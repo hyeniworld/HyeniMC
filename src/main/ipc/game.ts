@@ -147,11 +147,13 @@ export function registerGameHandlers(): void {
     try {
       const launcher = getGameLauncher();
       const activeGames = launcher.getActiveProcesses();
-      return activeGames.map(g => ({
+      const result = activeGames.map(g => ({
+        profileId: g.profileId,  // Use profileId as key
         versionId: g.versionId,
         startTime: g.startTime,
         pid: g.process.pid,
       }));
+      return result;
     } catch (err) {
       console.error('[IPC Game] Failed to get active games:', err);
       return [];

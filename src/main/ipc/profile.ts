@@ -302,6 +302,7 @@ export function registerProfileHandlers(): void {
 
       // Launch game using IPC
       const launchOptions = {
+        profileId: id,  // Pass profile ID for tracking
         versionId: actualVersionId,
         javaPath: java.path,
         gameDir: instanceDir,
@@ -315,16 +316,16 @@ export function registerProfileHandlers(): void {
 
       console.log('[IPC Profile] Launching game...');
       
-      // Import game launcher
-      const { GameLauncher } = await import('../services/game-launcher');
-      const launcher = new GameLauncher();
+      // Use shared game launcher instance from game.ts
+      const { getGameLauncher } = await import('../ipc/game');
+      const launcher = getGameLauncher();
       
       const gameProcess = await launcher.launch(
         launchOptions,
         (log) => {
           if (window) {
             window.webContents.send('game:log', {
-              versionId: profile.gameVersion,
+              versionId: id,  // Use profile ID
               line: log,
             });
           }
@@ -332,7 +333,7 @@ export function registerProfileHandlers(): void {
         (code) => {
           if (window) {
             window.webContents.send('game:stopped', {
-              versionId: profile.gameVersion,
+              versionId: id,  // Use profile ID
               code,
             });
           }
@@ -341,11 +342,11 @@ export function registerProfileHandlers(): void {
 
       if (window) {
         window.webContents.send('game:started', {
-          versionId: profile.gameVersion,
+          versionId: id,  // Use profile ID
         });
       }
 
-      console.log(`[IPC Profile] Game launched successfully!`);
+      console.log(`[IPC Profile] Game launched successfully: ${profile.name}`);
       return { success: true, message: '게임이 시작되었습니다!' };
     } catch (error) {
       console.error('[IPC Profile] Failed to launch:', error);

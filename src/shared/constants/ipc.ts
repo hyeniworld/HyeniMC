@@ -38,6 +38,8 @@ export const IPC_CHANNELS = {
   GAME_GET_ACTIVE: 'game:get-active',
   GAME_IS_RUNNING: 'game:is-running',
   
+  // Mod Management
+  MOD_LIST: 'mod:list',
   MOD_SEARCH: 'mod:search',
   MOD_GET_DETAILS: 'mod:get-details',
   MOD_GET_VERSIONS: 'mod:get-versions',
@@ -49,6 +51,18 @@ export const IPC_CHANNELS = {
   MOD_UPDATE_ALL: 'mod:update-all',
   MOD_CHECK_DEPENDENCIES: 'mod:check-dependencies',
   MOD_INSTALL_DEPENDENCIES: 'mod:install-dependencies',
+  
+  // Resource Pack Management
+  RESOURCEPACK_LIST: 'resourcepack:list',
+  RESOURCEPACK_ENABLE: 'resourcepack:enable',
+  RESOURCEPACK_DISABLE: 'resourcepack:disable',
+  RESOURCEPACK_DELETE: 'resourcepack:delete',
+  
+  // Shader Pack Management
+  SHADERPACK_LIST: 'shaderpack:list',
+  SHADERPACK_ENABLE: 'shaderpack:enable',
+  SHADERPACK_DISABLE: 'shaderpack:disable',
+  SHADERPACK_DELETE: 'shaderpack:delete',
   
   // Modpack
   MODPACK_SEARCH: 'modpack:search',

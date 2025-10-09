@@ -1,5 +1,6 @@
 import { FabricLoaderService } from './fabric-loader';
 import { NeoForgeLoaderService } from './neoforge-loader';
+import { QuiltLoader } from './quilt-loader';
 import { LoaderType } from '../../shared/types/profile';
 
 /**
@@ -17,10 +18,12 @@ export interface LoaderVersionInfo {
 export class LoaderManager {
   private fabricService: FabricLoaderService;
   private neoforgeService: NeoForgeLoaderService;
+  private quiltService: QuiltLoader;
 
   constructor() {
     this.fabricService = new FabricLoaderService();
     this.neoforgeService = new NeoForgeLoaderService();
+    this.quiltService = new QuiltLoader();
   }
 
   /**
@@ -71,6 +74,18 @@ export class LoaderManager {
           }));
         }
 
+        case 'quilt': {
+          if (!minecraftVersion) {
+            throw new Error('Minecraft version is required for Quilt');
+          }
+          const versions = await this.quiltService.getVersions(minecraftVersion);
+          return versions.map(v => ({
+            version: v,
+            stable: true,  // Quilt only returns stable versions
+            recommended: false,
+          }));
+        }
+
         case 'forge':
           // Forge는 지원하지 않음 (명목상만 유지)
           console.warn('[LoaderManager] Forge is deprecated, use NeoForge instead');
@@ -104,6 +119,11 @@ export class LoaderManager {
 
         case 'neoforge':
           return await this.neoforgeService.getRecommendedVersion(minecraftVersion);
+
+        case 'quilt': {
+          const versions = await this.quiltService.getVersions(minecraftVersion);
+          return versions.length > 0 ? versions[0] : null;
+        }
 
         case 'forge':
           console.warn('[LoaderManager] Forge is deprecated, use NeoForge instead');
@@ -151,6 +171,14 @@ export class LoaderManager {
             onProgress
           );
 
+        case 'quilt':
+          return await this.quiltService.install(
+            minecraftVersion,
+            loaderVersion,
+            gameDir,
+            onProgress
+          );
+
         case 'forge':
           throw new Error('Forge is deprecated, please use NeoForge instead');
 
@@ -182,6 +210,11 @@ export class LoaderManager {
 
         case 'neoforge':
           return await this.neoforgeService.isInstalled(loaderVersion, gameDir);
+
+        case 'quilt': {
+          const versionId = `quilt-loader-${loaderVersion}-${minecraftVersion}`;
+          return await this.quiltService.verify(versionId, gameDir);
+        }
 
         case 'forge':
           return false;
@@ -218,6 +251,12 @@ export class LoaderManager {
           throw new Error('NeoForge version is required');
         }
         return `neoforge-${loaderVersion}`;
+
+      case 'quilt':
+        if (!loaderVersion) {
+          throw new Error('Quilt loader version is required');
+        }
+        return `quilt-loader-${loaderVersion}-${minecraftVersion}`;
 
       case 'forge':
         throw new Error('Forge is deprecated, use NeoForge instead');

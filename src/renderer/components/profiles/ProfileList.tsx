@@ -1,14 +1,17 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Play, Settings, Trash2, Plus, FolderOpen, Clock, Loader2 } from 'lucide-react';
 import { CreateProfileModal } from './CreateProfileModal';
 import { DownloadModal } from '../DownloadModal';
 import { useAccount } from '../../App';
 
 export function ProfileList() {
+  const navigate = useNavigate();
   const { selectedAccountId } = useAccount();
   const [profiles, setProfiles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [runningProfiles, setRunningProfiles] = useState<Set<string>>(new Set());
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [downloadState, setDownloadState] = useState<{
     isOpen: boolean;
@@ -24,6 +27,47 @@ export function ProfileList() {
 
   useEffect(() => {
     loadProfiles();
+    
+    // Poll for active games every 2 seconds
+    const pollActiveGames = async () => {
+      try {
+        const activeGames = await window.electronAPI.game.getActive();
+        // Use profileId if available, otherwise use versionId for backward compatibility
+        const activeIds = new Set<string>(activeGames.map(g => g.profileId || g.versionId));
+        setRunningProfiles(activeIds);
+      } catch (error) {
+        console.error('Failed to poll active games:', error);
+      }
+    };
+    
+    const interval = setInterval(pollActiveGames, 2000);
+    pollActiveGames(); // Initial poll
+    
+    // Listen for game started event
+    const cleanupStarted = window.electronAPI.on('game:started', (data: any) => {
+      console.log('[ProfileList] Game started:', data);
+      if (data.versionId) {
+        setRunningProfiles(prev => new Set(prev).add(data.versionId));
+      }
+    });
+
+    // Listen for game stopped event
+    const cleanupStopped = window.electronAPI.on('game:stopped', (data: any) => {
+      console.log('[ProfileList] Game stopped:', data);
+      if (data.versionId) {
+        setRunningProfiles(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(data.versionId);
+          return newSet;
+        });
+      }
+    });
+
+    return () => {
+      clearInterval(interval);
+      cleanupStarted();
+      cleanupStopped();
+    };
   }, []);
 
   const loadProfiles = async () => {
@@ -46,6 +90,12 @@ export function ProfileList() {
     try {
       const profile = profiles.find(p => p.id === profileId);
       if (!profile) return;
+
+      // Check if already running
+      if (runningProfiles.has(profileId)) {
+        alert('이 프로필은 이미 실행 중입니다!');
+        return;
+      }
 
       // Show download modal
       setDownloadState({
@@ -104,6 +154,25 @@ export function ProfileList() {
       }
     } catch (err) {
       console.error('Failed to launch profile:', err);
+      // Close modal on error
+      setDownloadState({
+        isOpen: false,
+        versionId: '',
+        status: 'downloading',
+      });
+    }
+  };
+
+  const handleStop = async (profileId: string) => {
+    if (!confirm('정말로 게임을 중단하시겠습니까?')) {
+      return;
+    }
+
+    try {
+      await window.electronAPI.game.stop(profileId);
+    } catch (err) {
+      console.error('Failed to stop game:', err);
+      alert(err instanceof Error ? err.message : '게임 중단에 실패했습니다.');
     }
   };
 
@@ -192,7 +261,8 @@ export function ProfileList() {
           {profiles.map((profile) => (
             <div 
               key={profile.id} 
-              className="card hover:border-purple-500 hover:shadow-lg hover:shadow-purple-500/10 transition-all duration-200 group"
+              onClick={() => navigate(`/profile/${profile.id}`)}
+              className="card hover:border-purple-500 hover:shadow-lg hover:shadow-purple-500/10 transition-all duration-200 group cursor-pointer"
             >
               {/* Profile Icon & Name */}
               <div className="flex items-start gap-4 mb-4">
@@ -236,21 +306,44 @@ export function ProfileList() {
 
               {/* Actions */}
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => handleLaunch(profile.id)}
-                  className="flex-1 btn-primary flex items-center justify-center gap-2 py-3 font-semibold shadow-md shadow-purple-500/20 hover:shadow-purple-500/40"
-                >
-                  <Play className="w-4 h-4 fill-current" />
-                  플레이
-                </button>
+                {runningProfiles.has(profile.id) ? (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleStop(profile.id);
+                    }}
+                    className="flex-1 flex items-center justify-center gap-2 py-3 font-semibold bg-red-600 hover:bg-red-700 text-white rounded-lg shadow-md transition-all"
+                  >
+                    <Loader2 className="w-4 h-4" />
+                    중단하기
+                  </button>
+                ) : (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleLaunch(profile.id);
+                    }}
+                    className="flex-1 btn-primary flex items-center justify-center gap-2 py-3 font-semibold shadow-md shadow-purple-500/20 hover:shadow-purple-500/40"
+                  >
+                    <Play className="w-4 h-4 fill-current" />
+                    플레이
+                  </button>
+                )}
                 <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate(`/profile/${profile.id}`);
+                  }}
                   className="btn-secondary p-3 hover:bg-gray-700"
                   title="설정"
                 >
                   <Settings className="w-5 h-5" />
                 </button>
                 <button
-                  onClick={() => handleDelete(profile.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDelete(profile.id);
+                  }}
                   className="btn-secondary p-3 hover:bg-red-900 hover:text-red-200 hover:border-red-800"
                   title="삭제"
                 >
