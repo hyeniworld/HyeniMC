@@ -3,19 +3,34 @@
  */
 
 export const IPC_CHANNELS = {
-  // Profile
+  // Profile channels
   PROFILE_CREATE: 'profile:create',
-  PROFILE_LIST: 'profile:list',
-  PROFILE_GET: 'profile:get',
   PROFILE_UPDATE: 'profile:update',
   PROFILE_DELETE: 'profile:delete',
-  PROFILE_DUPLICATE: 'profile:duplicate',
+  PROFILE_GET: 'profile:get',
+  PROFILE_LIST: 'profile:list',
   PROFILE_LAUNCH: 'profile:launch',
-  PROFILE_STOP: 'profile:stop',
-  PROFILE_EXPORT: 'profile:export',
-  PROFILE_IMPORT: 'profile:import',
   
-  // Mod
+  // Version channels
+  VERSION_LIST: 'version:list',
+  VERSION_LATEST: 'version:latest',
+  
+  // Java channels
+  JAVA_DETECT: 'java:detect',
+  JAVA_GET_RECOMMENDED: 'java:get-recommended',
+  JAVA_CHECK_COMPATIBILITY: 'java:check-compatibility',
+  
+  // Game download channels
+  GAME_DOWNLOAD_VERSION: 'game:download-version',
+  GAME_GET_VERSION_DETAILS: 'game:get-version-details',
+  GAME_CHECK_INSTALLED: 'game:check-installed',
+  
+  // Game launch channels
+  GAME_LAUNCH: 'game:launch',
+  GAME_STOP: 'game:stop',
+  GAME_GET_ACTIVE: 'game:get-active',
+  GAME_IS_RUNNING: 'game:is-running',
+  
   MOD_SEARCH: 'mod:search',
   MOD_GET_DETAILS: 'mod:get-details',
   MOD_GET_VERSIONS: 'mod:get-versions',
@@ -68,12 +83,14 @@ export const IPC_EVENTS = {
   DOWNLOAD_PROGRESS: 'download:progress',
   DOWNLOAD_COMPLETE: 'download:complete',
   DOWNLOAD_ERROR: 'download:error',
+  DOWNLOAD_FILE_PROGRESS: 'download:file-progress',
   
   // Game Events
   GAME_LOG: 'game:log',
   GAME_STARTED: 'game:started',
   GAME_STOPPED: 'game:stopped',
   GAME_CRASHED: 'game:crashed',
+  GAME_DOWNLOAD_PROGRESS: 'game:download-progress',
   
   // Mod Events
   MOD_UPDATES_AVAILABLE: 'mod:updates-available',

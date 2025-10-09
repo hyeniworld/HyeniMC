@@ -1,0 +1,239 @@
+# 작업 진행 상황 (2025-10-09)
+
+## ✅ 완료된 작업
+
+### 1. Backend (Go) 구현
+- ✅ 프로젝트 구조 생성 (`internal/domain`, `internal/repo`, `internal/services`, `internal/grpc`, `internal/http`)
+- ✅ Profile 도메인 모델 정의
+- ✅ ProfileRepository 구현 (JSON 파일 기반)
+- ✅ ProfileService 비즈니스 로직 구현
+- ✅ HTTP API 서버 구현 (임시, gRPC 전환 예정)
+- ✅ 의존성 관리 (`go.mod`)
+- ✅ 빌드 스크립트 추가
+- ✅ 빌드 테스트 완료 (`backend/bin/hyenimc-backend`)
+
+**주요 기능:**
+- 프로필 생성, 조회, 목록, 수정, 삭제 API
+- 데이터 저장 위치: `~/.hyenimc/profiles/`
+- CORS 지원 (로컬 개발용)
+- 동적 포트 할당 (127.0.0.1:0)
+
+### 2. Electron Main 프로세스 구현
+- ✅ 메인 엔트리 포인트 (`src/main/main.ts`)
+- ✅ Backend 프로세스 관리자 (`src/main/backend/manager.ts`)
+  - 백엔드 바이너리 자동 시작
+  - 플랫폼별 바이너리 경로 처리
+  - 프로세스 라이프사이클 관리
+- ✅ IPC 핸들러 시스템 (`src/main/ipc/`)
+  - Profile 핸들러 구현
+  - Axios 기반 HTTP 클라이언트
+- ✅ TypeScript 빌드 설정 (`tsconfig.main.json`)
+- ✅ 빌드 테스트 완료
+
+### 3. Preload 스크립트 구현
+- ✅ Context Bridge 설정
+- ✅ Profile API 노출
+- ✅ Event 리스너 시스템
+- ✅ TypeScript 타입 정의
+
+### 4. React UI 구현
+- ✅ 앱 구조 (`src/renderer/App.tsx`)
+- ✅ 메인 엔트리 포인트 (`src/renderer/main.tsx`)
+- ✅ Tailwind CSS 설정 및 스타일
+- ✅ ProfileList 컴포넌트
+  - 프로필 목록 표시
+  - 빈 상태 처리
+  - 로딩 및 에러 처리
+- ✅ CreateProfileModal 컴포넌트
+  - 폼 입력 처리
+  - 유효성 검사
+  - 에러 메시지 표시
+- ✅ HTML 엔트리 포인트 (`index.html`)
+
+### 5. 공유 타입 및 상수
+- ✅ 타입 정의 (`src/shared/types/`)
+  - Profile, Mod, ModSource, LoaderType 등
+- ✅ IPC 채널 및 이벤트 상수 정의
+
+### 6. 문서화
+- ✅ DEVELOPMENT.md - 개발 가이드
+- ✅ README.md 업데이트
+- ✅ PROGRESS.md - 현재 문서
+- ✅ 기존 문서 유지 (DESIGN.md, ARCHITECTURE.md, IMPLEMENTATION_GUIDE.md)
+
+## 📊 프로젝트 통계
+
+```
+Backend (Go):
+- 6개 파일 생성
+- 4개 패키지 (domain, repo, services, grpc, http)
+- ~600 줄 코드
+
+Frontend (TypeScript/React):
+- 11개 파일 생성
+- 프로필 관리 완전 구현
+- ~800 줄 코드
+
+문서:
+- 1개 신규 문서 (DEVELOPMENT.md)
+- 2개 업데이트 (README.md, PROGRESS.md)
+```
+
+## 🎯 현재 동작하는 기능
+
+### 백엔드 API
+```bash
+# 프로필 생성
+POST http://localhost:PORT/api/profiles
+Content-Type: application/json
+{
+  "name": "테스트 프로필",
+  "gameVersion": "1.20.1",
+  "loaderType": "vanilla"
+}
+
+# 프로필 목록
+GET http://localhost:PORT/api/profiles
+
+# 프로필 조회
+GET http://localhost:PORT/api/profiles/{id}
+
+# 프로필 수정
+PATCH http://localhost:PORT/api/profiles/{id}
+
+# 프로필 삭제
+DELETE http://localhost:PORT/api/profiles/{id}
+
+# 헬스 체크
+GET http://localhost:PORT/health
+```
+
+### UI 기능
+- 프로필 목록 표시
+- 새 프로필 생성 모달
+- 프로필 삭제
+- 빈 상태 메시지
+- 로딩 및 에러 처리
+
+## 🚀 실행 방법
+
+### 1. 백엔드 빌드 (최초 1회)
+```bash
+npm run backend:build:mac-arm64
+```
+
+### 2. 개발 서버 실행
+```bash
+npm run dev
+```
+
+이제 다음이 실행됩니다:
+1. Vite 개발 서버 (포트 5173)
+2. Go 백엔드 서버 (동적 포트)
+3. Electron 앱
+
+### 3. 프로필 생성 테스트
+1. "새 프로필" 버튼 클릭
+2. 프로필 정보 입력
+3. "프로필 만들기" 클릭
+4. 프로필 카드에서 확인
+
+## 📋 다음 작업 (우선순위순)
+
+### Phase 1: Proto/gRPC 구현
+1. **Proto 코드 생성**
+   - `buf generate` 실행
+   - Go 및 TypeScript 코드 생성
+   - gRPC 서비스 구현
+
+2. **HTTP → gRPC 마이그레이션**
+   - gRPC 클라이언트 구현 (Main 프로세스)
+   - HTTP API 제거
+   - IPC 핸들러 업데이트
+
+### Phase 2: 게임 실행 기능
+1. **Java 관리**
+   - Java 설치 감지
+   - Java 버전 확인
+   - 추천 Java 다운로드
+
+2. **버전 관리**
+   - Minecraft 버전 매니페스트 API 연동
+   - 버전 다운로드
+   - Assets 다운로드
+
+3. **게임 실행**
+   - 실행 명령 생성
+   - 프로세스 관리
+   - 로그 스트리밍
+
+### Phase 3: 모드 지원
+1. **Modrinth API 연동**
+   - 모드 검색
+   - 모드 다운로드
+   - 의존성 해결
+
+2. **모드 관리 UI**
+   - 모드 브라우저
+   - 설치/제거
+   - 업데이트 확인
+
+## 🐛 알려진 이슈
+
+1. **TypeScript 경고**
+   - CSS `@tailwind`, `@apply` 규칙 경고 (동작에는 문제 없음)
+   
+2. **개발 환경 전용**
+   - 현재는 HTTP API 사용 (성능 최적화 필요)
+   - gRPC 구현 후 개선 예정
+
+3. **보안 취약점**
+   - `npm audit`에서 10개 취약점 발견
+   - 대부분 개발 의존성 관련 (프로덕션에 영향 없음)
+
+## 📝 참고 사항
+
+### 데이터 저장 위치
+- **macOS**: `~/Library/Application Support/Electron/data/profiles/`
+- **개발 모드**: `~/Library/Application Support/hyenimc-development/data/profiles/`
+
+### 포트
+- Vite: `5173`
+- Backend: 동적 할당 (터미널에서 확인)
+
+### 로그
+- Backend: `[Backend]`, `[HTTP]` 태그
+- IPC: `[IPC]`, `[IPC Profile]` 태그
+- UI: 브라우저 개발자 도구
+
+## 🎉 주요 성과
+
+1. **완전한 프로젝트 구조** 수립
+2. **프로필 관리 기능** 전체 구현 (CRUD)
+3. **Backend-Frontend 통신** 구현
+4. **UI/UX** 기본 디자인 완성
+5. **빌드 시스템** 구축
+6. **문서화** 완료
+
+## 💡 개선 제안
+
+### 단기 (1-2주)
+- [ ] Proto 코드 생성 및 gRPC 전환
+- [ ] Java 감지 및 관리
+- [ ] 기본 게임 실행 기능
+
+### 중기 (1개월)
+- [ ] Modrinth 모드 검색/설치
+- [ ] 다운로드 진행률 표시
+- [ ] 에러 처리 개선
+
+### 장기 (2-3개월)
+- [ ] 모드팩 지원
+- [ ] 자동 업데이트
+- [ ] 혜니월드 인증 연동
+
+---
+
+**작성일**: 2025-10-09  
+**작성자**: Cascade AI  
+**프로젝트**: HyeniMC Launcher

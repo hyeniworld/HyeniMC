@@ -1,0 +1,24 @@
+syntax = "proto3";
+package launcher;
+option go_package = "hyenimc/backend/gen/launcher;launcher";
+
+service DownloadService {
+  // 다운로드 진행 상황을 구독 (프로필 기준 또는 전체)
+  rpc StreamProgress(ProgressRequest) returns (stream ProgressEvent);
+}
+
+message ProgressRequest {
+  // 특정 프로필 ID에 대한 진행률만 구독하려면 지정 (옵션)
+  string profile_id = 1;
+}
+
+message ProgressEvent {
+  string task_id = 1;
+  string type = 2; // mod|modpack|minecraft|loader|java|asset
+  string name = 3;
+  int32 progress = 4; // 0-100
+  int64 downloaded = 5;
+  int64 total = 6;
+  string status = 7; // pending|downloading|completed|failed|cancelled
+  string error = 8;  // 실패 시 메시지
+}

@@ -1,0 +1,53 @@
+syntax = "proto3";
+package launcher;
+option go_package = "hyenimc/backend/gen/launcher;launcher";
+
+service ProfileService {
+  rpc CreateProfile(CreateProfileRequest) returns (Profile);
+  rpc GetProfile(GetProfileRequest) returns (Profile);
+  rpc ListProfiles(ListProfilesRequest) returns (ListProfilesResponse);
+  rpc UpdateProfile(UpdateProfileRequest) returns (Profile);
+  rpc DeleteProfile(DeleteProfileRequest) returns (DeleteProfileResponse);
+}
+
+message Profile {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  string icon = 4;
+  string game_version = 5;
+  string loader_type = 6; // vanilla|fabric|forge|neoforge
+  string loader_version = 7;
+  string game_directory = 8;
+  repeated string jvm_args = 9;
+  int32 memory_min = 10;
+  int32 memory_max = 11;
+  repeated string game_args = 12;
+  string modpack_id = 13;
+  string modpack_source = 14; // modrinth|curseforge
+  int64 created_at = 15;
+  int64 updated_at = 16;
+  int64 last_played = 17;
+  int64 total_play_time = 18;
+}
+
+message CreateProfileRequest {
+  string name = 1;
+  string description = 2;
+  string icon = 3;
+  string game_version = 4;
+  string loader_type = 5;
+  string loader_version = 6;
+}
+
+message GetProfileRequest { string id = 1; }
+message ListProfilesRequest {}
+message ListProfilesResponse { repeated Profile profiles = 1; }
+
+message UpdateProfileRequest {
+  string id = 1;
+  Profile patch = 2;
+}
+
+message DeleteProfileRequest { string id = 1; }
+message DeleteProfileResponse { bool success = 1; }

@@ -1,0 +1,27 @@
+syntax = "proto3";
+package launcher;
+option go_package = "hyenimc/backend/gen/launcher;launcher";
+
+service VersionService {
+  rpc ListMinecraftVersions(ListMinecraftVersionsRequest) returns (ListMinecraftVersionsResponse);
+  rpc ListLoaderVersions(ListLoaderVersionsRequest) returns (ListLoaderVersionsResponse);
+  rpc CheckCompatibility(CheckCompatibilityRequest) returns (CheckCompatibilityResponse);
+}
+
+message MinecraftVersion {
+  string id = 1;
+  string type = 2; // release|snapshot|old_beta|old_alpha
+  string url = 3;
+  int64 release_time = 4;
+}
+
+message LoaderVersion { string version = 1; bool stable = 2; int64 release_time = 3; }
+
+message ListMinecraftVersionsRequest { string type = 1; /* release|snapshot|all */ }
+message ListMinecraftVersionsResponse { repeated MinecraftVersion versions = 1; }
+
+message ListLoaderVersionsRequest { string loader_type = 1; string game_version = 2; }
+message ListLoaderVersionsResponse { repeated LoaderVersion versions = 1; }
+
+message CheckCompatibilityRequest { string game_version = 1; string loader_type = 2; string loader_version = 3; }
+message CheckCompatibilityResponse { bool compatible = 1; string reason = 2; }

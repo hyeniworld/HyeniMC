@@ -2,14 +2,14 @@
   "name": "hyenimc",
   "version": "0.1.0",
   "description": "혜니월드 전용 마인크래프트 런처",
-  "main": "dist/main/main.js",
+  "main": "main/main.js",
   "author": "HyeniWorld",
   "license": "MIT",
   "private": true,
   "scripts": {
-    "dev": "concurrently \"npm run dev:vite\" \"npm run dev:electron\"",
+    "dev": "npm run build:main && concurrently \"npm run dev:vite\" \"npm run dev:electron\"",
     "dev:vite": "vite",
-    "dev:electron": "tsc -p tsconfig.main.json && electron .",
+    "dev:electron": "NODE_ENV=development electron ./dist/main/main.js",
     "build": "npm run build:renderer && npm run build:main",
     "build:renderer": "vite build",
     "build:main": "tsc -p tsconfig.main.json",
@@ -19,47 +19,125 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "lint": "eslint src --ext .ts,.tsx",
-    "format": "prettier --write \"src/**/*.{ts,tsx,json,md}\""
+    "format": "prettier --write \"src/**/*.{ts,tsx,json,md}\"",
+    "proto:gen": "cd proto && buf generate",
+    "backend:build:mac-arm64": "cd backend && GOOS=darwin GOARCH=arm64 go build -o bin/hyenimc-backend ./cmd/hyenimc",
+    "backend:build:mac-x64": "cd backend && GOOS=darwin GOARCH=amd64 go build -o bin/hyenimc-backend-x64 ./cmd/hyenimc",
+    "backend:build:win-x64": "cd backend && GOOS=windows GOARCH=amd64 go build -o bin/hyenimc-backend.exe ./cmd/hyenimc",
+    "backend:build:all": "npm run backend:build:mac-arm64 && npm run backend:build:mac-x64 && npm run backend:build:win-x64"
   },
   "dependencies": {
+    "@hookform/resolvers": "^3.3.3",
+    "adm-zip": "^0.5.10",
     "axios": "^1.6.0",
+    "clsx": "^2.0.0",
     "fs-extra": "^11.2.0",
+    "lucide-react": "^0.294.0",
     "minecraft-launcher-core": "^3.18.1",
     "node-stream-zip": "^1.15.0",
-    "adm-zip": "^0.5.10",
-    "semver": "^7.5.4",
-    "uuid": "^9.0.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "zustand": "^4.4.7",
     "react-hook-form": "^7.49.2",
+    "semver": "^7.5.4",
+    "tailwind-merge": "^2.1.0",
+    "uuid": "^9.0.1",
     "zod": "^3.22.4",
-    "@hookform/resolvers": "^3.3.3",
-    "lucide-react": "^0.294.0",
-    "clsx": "^2.0.0",
-    "tailwind-merge": "^2.1.0"
+    "zustand": "^4.4.7"
   },
   "devDependencies": {
+    "@types/adm-zip": "^0.5.7",
+    "@types/fs-extra": "^11.0.4",
     "@types/node": "^20.10.5",
     "@types/react": "^18.2.45",
     "@types/react-dom": "^18.2.18",
-    "@types/fs-extra": "^11.0.4",
     "@types/semver": "^7.5.6",
     "@types/uuid": "^9.0.7",
-    "@vitejs/plugin-react": "^4.2.1",
-    "electron": "^28.0.0",
-    "electron-builder": "^24.9.1",
-    "typescript": "^5.3.3",
-    "vite": "^5.0.8",
-    "vitest": "^1.0.4",
-    "@vitest/ui": "^1.0.4",
-    "eslint": "^8.56.0",
     "@typescript-eslint/eslint-plugin": "^6.15.0",
     "@typescript-eslint/parser": "^6.15.0",
-    "prettier": "^3.1.1",
+    "@vitejs/plugin-react": "^4.2.1",
+    "@vitest/ui": "^1.0.4",
+    "autoprefixer": "^10.4.16",
     "concurrently": "^8.2.2",
-    "tailwindcss": "^3.4.0",
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1",
+    "eslint": "^8.56.0",
     "postcss": "^8.4.32",
-    "autoprefixer": "^10.4.16"
+    "prettier": "^3.1.1",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.8",
+    "vitest": "^1.0.4"
+  },
+  "build": {
+    "appId": "com.hyeniworld.hyenimc",
+    "productName": "HyeniMC",
+    "files": [
+      {
+        "from": "dist/main",
+        "to": "main",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "dist/preload",
+        "to": "preload",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "dist/renderer",
+        "to": "renderer",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "dist/shared",
+        "to": "shared",
+        "filter": [
+          "**/*"
+        ]
+      },
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "backend/bin",
+        "to": "backend",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.games",
+      "icon": "build/icon.icns",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ]
+    },
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    }
   }
 }

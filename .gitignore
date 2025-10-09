@@ -40,3 +40,8 @@ coverage/
 # Temporary files
 *.tmp
 temp/
+
+# Generated (proto / go)
+backend/gen/
+backend/bin/
+src/main/gen/

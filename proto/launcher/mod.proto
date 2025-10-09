@@ -1,0 +1,56 @@
+syntax = "proto3";
+package launcher;
+option go_package = "hyenimc/backend/gen/launcher;launcher";
+
+service ModService {
+  rpc SearchMods(SearchModsRequest) returns (SearchModsResponse);
+  rpc GetMod(GetModRequest) returns (Mod);
+  rpc GetModVersions(GetModVersionsRequest) returns (GetModVersionsResponse);
+  rpc InstallMod(InstallModRequest) returns (InstallModResponse);
+  rpc RemoveMod(RemoveModRequest) returns (RemoveModResponse);
+  rpc CheckUpdates(CheckUpdatesRequest) returns (CheckUpdatesResponse);
+  rpc UpdateMod(UpdateModRequest) returns (UpdateModResponse);
+}
+
+message Mod {
+  string id = 1;
+  string name = 2;
+  string version = 3;
+  string file_name = 4;
+  string source = 5; // modrinth|curseforge|custom|url
+  string source_id = 6;
+  string project_slug = 7;
+  string file_id = 8;
+  repeated string dependencies = 9;
+  bool enabled = 10;
+  bool required = 11;
+  repeated string game_versions = 12;
+  repeated string loaders = 13;
+  bool update_available = 14;
+  string latest_version = 15;
+  int64 file_size = 16;
+  string sha1 = 17;
+  string sha512 = 18;
+}
+
+message SearchModsRequest { string query = 1; string game_version = 2; string loader_type = 3; int32 limit = 4; int32 offset = 5; }
+message SearchModsResponse { repeated Mod results = 1; }
+
+message GetModRequest { string source = 1; string id = 2; }
+
+message GetModVersionsRequest { string source = 1; string id = 2; string game_version = 3; string loader_type = 4; }
+message GetModVersionsResponse { repeated string versions = 1; }
+
+message InstallModRequest { string profile_id = 1; string source = 2; string project_id = 3; string version_id = 4; bool required = 5; }
+message InstallModResponse { Mod mod = 1; }
+
+message RemoveModRequest { string profile_id = 1; string mod_id = 2; }
+message RemoveModResponse { bool success = 1; }
+
+message CheckUpdatesRequest { string profile_id = 1; }
+message CheckUpdatesResponse { repeated ModUpdate updates = 1; }
+
+message ModUpdate { string mod_id = 1; string current_version = 2; string latest_version = 3; string version_id = 4; bool required = 5; }
+
+message UpdateModRequest { string profile_id = 1; string mod_id = 2; string version_id = 3; }
+message UpdateModResponse { Mod mod = 1; }
