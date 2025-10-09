@@ -1468,62 +1468,79 @@ ipcRenderer.on('mod:updates-available', (event, data: {
 ## 개발 로드맵
 
 ### Phase 1: 프로젝트 초기화 및 기본 구조 (1-2주)
-- [ ] Electron + React + TypeScript 프로젝트 설정
-- [ ] 기본 UI 레이아웃 구현
-- [ ] IPC 통신 구조 설정
-- [ ] 파일 시스템 구조 설정
-- [ ] 설정 관리 시스템
+- [x] Electron + React + TypeScript 프로젝트 설정
+- [x] 기본 UI 레이아웃 구현
+- [x] IPC 통신 구조 설정
+- [x] 파일 시스템 구조 설정
+- [x] 설정 관리 시스템
+- [x] Go 백엔드 설정 (HTTP REST API)
 
 ### Phase 2: 프로필 관리 (2-3주)
-- [ ] ProfileManager 구현
-- [ ] 프로필 CRUD 기능
-- [ ] 프로필 UI (목록, 생성, 편집)
-- [ ] 프로필 데이터 영속성
+- [x] ProfileManager 구현
+- [x] 프로필 CRUD 기능
+- [x] 프로필 UI (목록, 생성, 편집)
+- [x] 프로필 상세 페이지 (탭 네비게이션)
+- [x] 프로필 데이터 영속성
+- [ ] 프로필 복제 기능
+- [ ] 프로필 내보내기 기능
 
 ### Phase 3: 버전 관리 및 Java (2주)
-- [ ] VersionManager 구현
-- [ ] MinecraftService 구현
-- [ ] JavaManager 구현
-- [ ] Java 자동 감지
-- [ ] 버전 선택 UI
+- [x] VersionManager 구현
+- [x] MinecraftService 구현
+- [x] JavaManager 구현
+- [x] Java 자동 감지
+- [x] 버전 선택 UI
 
 ### Phase 4: 기본 게임 실행 (2-3주)
-- [ ] InstanceManager 구현
-- [ ] 바닐라 마인크래프트 실행
-- [ ] 게임 로그 수집
-- [ ] 게임 콘솔 UI
-- [ ] 프로세스 관리
+- [x] GameLauncher 구현
+- [x] 바닐라 마인크래프트 실행
+- [x] 게임 로그 수집
+- [x] 게임 콘솔 UI
+- [x] 프로세스 관리
 
 ### Phase 5: 모드 로더 지원 (2-3주)
-- [ ] Fabric 로더 설치 및 실행
+- [x] Fabric 로더 설치 및 실행
 - [ ] Forge 로더 설치 및 실행
-- [ ] NeoForge 로더 설치 및 실행
-- [ ] 로더별 프로필 생성
+- [x] NeoForge 로더 설치 및 실행
+- [x] Quilt 로더 설치 및 실행
+- [x] 로더별 프로필 생성
 
 ### Phase 6: 다운로드 시스템 (1-2주)
-- [ ] DownloadManager 구현
-- [ ] 병렬 다운로드
-- [ ] 진행률 추적
-- [ ] 체크섬 검증
-- [ ] 재시도 로직
+- [x] DownloadManager 구현
+- [x] 병렬 다운로드
+- [x] 진행률 추적
+- [x] 체크섬 검증
+- [x] 재시도 로직
 
 ### Phase 7: 모드 관리 (3-4주)
-- [ ] ModManager 구현
-- [ ] ModrinthService 구현
+- [x] ModManager 구현
+- [x] 모드 메타데이터 파싱 (Fabric, NeoForge/Forge, Quilt)
+- [x] TOML 파서 구현 (NeoForge용)
+- [x] ModrinthService 구현
 - [ ] CurseForgeService 구현
 - [ ] 모드 검색 UI
-- [ ] 모드 설치/제거
-- [ ] 모드 활성화/비활성화
+- [x] 모드 설치/제거
+- [x] 모드 활성화/비활성화
+- [x] 모드 목록 UI
+- [x] ResourcePackManager 구현
+- [x] ShaderPackManager 구현
 - [ ] 의존성 해결
 
-### Phase 8: 모드 업데이트 (2주)
+### Phase 8: 계정 관리 시스템 (1-2주)
+- [ ] Microsoft OAuth 2.0 구현 (심사 대기 중)
+- [x] AccountManager 구현
+- [x] 다중 계정 지원
+- [x] 오프라인 계정 지원
+- [x] 계정 UI (선택, 추가, 삭제)
+
+### Phase 9: 모드 업데이트 (2주)
 - [ ] 모드 업데이트 확인
 - [ ] 강제 업데이트 시스템
 - [ ] 선택적 업데이트
 - [ ] 업데이트 UI
 - [ ] 자동 업데이트 설정
 
-### Phase 9: 모드팩 지원 (3-4주)
+### Phase 10: 모드팩 지원 (3-4주)
 - [ ] ModpackManager 구현
 - [ ] 모드팩 검색
 - [ ] 모드팩 설치
@@ -1531,21 +1548,21 @@ ipcRenderer.on('mod:updates-available', (event, data: {
 - [ ] 모드팩 업데이트
 - [ ] 모드팩 UI
 
-### Phase 10: 외부 런처 가져오기 (2주)
+### Phase 11: 외부 런처 가져오기 (2주)
 - [ ] MultiMC 프로필 파싱
 - [ ] Prism Launcher 프로필 파싱
 - [ ] ATLauncher 프로필 파싱
 - [ ] 프로필 변환
 - [ ] 가져오기 UI
 
-### Phase 11: 고급 기능 (2-3주)
+### Phase 12: 고급 기능 (2-3주)
 - [ ] 프로필 내보내기/공유
 - [ ] 프로필 복제
 - [ ] 커스텀 모드 추가
-- [ ] 리소스팩/셰이더팩 관리
+- [x] 리소스팩/셰이더팩 관리
 - [ ] 스크린샷 관리
 
-### Phase 12: 최적화 및 테스트 (2-3주)
+### Phase 13: 최적화 및 테스트 (2-3주)
 - [ ] 성능 최적화
 - [ ] 메모리 관리
 - [ ] 에러 처리
@@ -1553,14 +1570,17 @@ ipcRenderer.on('mod:updates-available', (event, data: {
 - [ ] 통합 테스트
 - [ ] E2E 테스트
 
-### Phase 13: 빌드 및 배포 (1-2주)
-- [ ] Windows 빌드 설정
-- [ ] macOS 빌드 설정 (Intel + Apple Silicon)
+### Phase 14: 빌드 및 배포 (1-2주)
+- [x] electron-builder 설정
+- [x] Windows 빌드 설정 (x64)
+- [x] macOS 빌드 설정 (Intel + Apple Silicon)
+- [x] Go 백엔드 빌드 스크립트 (크로스 컴파일)
 - [ ] 코드 서명
-- [ ] 자동 업데이트 시스템
-- [ ] 배포 파이프라인
+- [ ] 자동 업데이트 시스템 (electron-updater)
+- [ ] CI/CD 파이프라인
+- [ ] 배포 자동화
 
-### Phase 14: 혜니월드 통합 (추후)
+### Phase 15: 혜니월드 통합 (추후)
 - [ ] 혜니월드 인증 API 연동
 - [ ] 디스코드 OAuth 연동
 - [ ] 토큰 관리
