@@ -28,7 +28,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^3.3.3",
-    "adm-zip": "^0.5.10",
+    "adm-zip": "^0.5.16",
     "axios": "^1.6.0",
     "clsx": "^2.0.0",
     "fs-extra": "^11.2.0",

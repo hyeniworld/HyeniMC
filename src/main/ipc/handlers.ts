@@ -8,6 +8,7 @@ import { registerAccountHandlers } from './account';
 import { registerLoaderHandlers } from './loader';
 import { registerShellHandlers } from './shell';
 import { registerModHandlers } from './mod';
+import { registerModpackHandlers } from './modpack';
 import { registerResourcePackHandlers } from './resourcepack';
 import { registerShaderPackHandlers } from './shaderpack';
 
@@ -26,14 +27,9 @@ export function registerIpcHandlers(): void {
   registerLoaderHandlers();
   registerShellHandlers();
   registerModHandlers();
+  registerModpackHandlers();
   registerResourcePackHandlers();
   registerShaderPackHandlers();
-  
-  // TODO: Register other handlers
-  // registerModHandlers();
-  // registerModpackHandlers();
-  // registerSettingsHandlers();
-  // registerInstanceHandlers();
 
   console.log('[IPC] IPC handlers registered');
 }

@@ -109,6 +109,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
   mod: {
     list: (profileId: string): Promise<any[]> =>
       ipcRenderer.invoke(IPC_CHANNELS.MOD_LIST, profileId),
+    search: (query: string, filters?: any): Promise<{ hits: any[]; total: number }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.MOD_SEARCH, query, filters),
+    getDetails: (modId: string): Promise<any> =>
+      ipcRenderer.invoke(IPC_CHANNELS.MOD_GET_DETAILS, modId),
+    getVersions: (modId: string, gameVersion?: string, loaderType?: string): Promise<any[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.MOD_GET_VERSIONS, modId, gameVersion, loaderType),
+    install: (profileId: string, modId: string, versionId: string): Promise<{ success: boolean; fileName: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.MOD_INSTALL, profileId, modId, versionId),
+    checkDependencies: (profileId: string, versionId: string, gameVersion: string, loaderType: string): Promise<any> =>
+      ipcRenderer.invoke(IPC_CHANNELS.MOD_CHECK_DEPENDENCIES, profileId, versionId, gameVersion, loaderType),
+    installDependencies: (profileId: string, dependencies: any[]): Promise<any> =>
+      ipcRenderer.invoke(IPC_CHANNELS.MOD_INSTALL_DEPENDENCIES, profileId, dependencies),
+    checkUpdates: (profileId: string, gameVersion: string, loaderType: string): Promise<any[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.MOD_CHECK_UPDATES, profileId, gameVersion, loaderType),
+    update: (profileId: string, update: any): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.MOD_UPDATE, profileId, update),
+    updateAll: (profileId: string, updates: any[]): Promise<any> =>
+      ipcRenderer.invoke(IPC_CHANNELS.MOD_UPDATE_ALL, profileId, updates),
     toggle: (profileId: string, fileName: string, enabled: boolean): Promise<{ success: boolean }> =>
       ipcRenderer.invoke(IPC_CHANNELS.MOD_TOGGLE, profileId, fileName, enabled),
     remove: (profileId: string, fileName: string): Promise<{ success: boolean }> =>
@@ -137,6 +155,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke(IPC_CHANNELS.SHADERPACK_DISABLE, profileId, fileName, isDirectory),
     delete: (profileId: string, fileName: string, isDirectory: boolean): Promise<{ success: boolean }> =>
       ipcRenderer.invoke(IPC_CHANNELS.SHADERPACK_DELETE, profileId, fileName, isDirectory),
+  },
+
+  // Modpack APIs
+  modpack: {
+    search: (query: string, gameVersion?: string): Promise<any[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.MODPACK_SEARCH, query, gameVersion),
+    getVersions: (modpackId: string, gameVersion?: string): Promise<any[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.MODPACK_GET_VERSIONS, modpackId, gameVersion),
+    install: (profileId: string, versionId: string): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.MODPACK_INSTALL, profileId, versionId),
   },
 
   // Event listeners
@@ -219,6 +247,15 @@ declare global {
       };
       mod: {
         list: (profileId: string) => Promise<any[]>;
+        search: (query: string, filters?: any) => Promise<{ hits: any[]; total: number }>;
+        getDetails: (modId: string) => Promise<any>;
+        getVersions: (modId: string, gameVersion?: string, loaderType?: string) => Promise<any[]>;
+        install: (profileId: string, modId: string, versionId: string) => Promise<{ success: boolean; fileName: string }>;
+        checkDependencies: (profileId: string, versionId: string, gameVersion: string, loaderType: string) => Promise<any>;
+        installDependencies: (profileId: string, dependencies: any[]) => Promise<any>;
+        checkUpdates: (profileId: string, gameVersion: string, loaderType: string) => Promise<any[]>;
+        update: (profileId: string, update: any) => Promise<{ success: boolean }>;
+        updateAll: (profileId: string, updates: any[]) => Promise<any>;
         toggle: (profileId: string, fileName: string, enabled: boolean) => Promise<{ success: boolean }>;
         remove: (profileId: string, fileName: string) => Promise<{ success: boolean }>;
       };
@@ -233,6 +270,11 @@ declare global {
         enable: (profileId: string, fileName: string, isDirectory: boolean) => Promise<{ success: boolean }>;
         disable: (profileId: string, fileName: string, isDirectory: boolean) => Promise<{ success: boolean }>;
         delete: (profileId: string, fileName: string, isDirectory: boolean) => Promise<{ success: boolean }>;
+      };
+      modpack: {
+        search: (query: string, gameVersion?: string) => Promise<any[]>;
+        getVersions: (modpackId: string, gameVersion?: string) => Promise<any[]>;
+        install: (profileId: string, versionId: string) => Promise<{ success: boolean }>;
       };
       on: (channel: string, callback: (...args: any[]) => void) => () => void;
       once: (channel: string, callback: (...args: any[]) => void) => void;

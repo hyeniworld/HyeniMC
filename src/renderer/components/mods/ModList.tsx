@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { Plus, RefreshCw } from 'lucide-react';
+import { ModSearchModal } from './ModSearchModal';
 
 interface Mod {
   id: string;
@@ -19,10 +21,26 @@ export const ModList: React.FC<ModListProps> = ({ profileId }) => {
   const [mods, setMods] = useState<Mod[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
+  const [showSearchModal, setShowSearchModal] = useState(false);
+  const [profile, setProfile] = useState<any>(null);
+  const [updates, setUpdates] = useState<any[]>([]);
+  const [checkingUpdates, setCheckingUpdates] = useState(false);
+  const [updatingMods, setUpdatingMods] = useState(false);
 
   useEffect(() => {
+    loadProfile();
     loadMods();
   }, [profileId]);
+
+  const loadProfile = async () => {
+    try {
+      const profiles = await window.electronAPI.profile.list();
+      const foundProfile = profiles.find((p: any) => p.id === profileId);
+      setProfile(foundProfile || null);
+    } catch (error) {
+      console.error('Failed to load profile:', error);
+    }
+  };
 
   const loadMods = async () => {
     setLoading(true);
@@ -54,35 +72,71 @@ export const ModList: React.FC<ModListProps> = ({ profileId }) => {
 
     try {
       await window.electronAPI.mod.remove(profileId, fileName);
-      // Update state locally instead of reloading
       setMods(prev => prev.filter(mod => mod.fileName !== fileName));
     } catch (error) {
       console.error('Failed to delete mod:', error);
-      await loadMods(); // Reload on error
+      await loadMods();
     }
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    console.log('File selected:', file.name);
+    alert('모드 파일 업로드 기능은 준비 중입니다.');
+  };
 
-    const formData = new FormData();
-    formData.append('mod', file);
+  const handleCheckUpdates = async () => {
+    if (!profile) return;
 
+    setCheckingUpdates(true);
     try {
-      await fetch(`/api/profiles/${profileId}/mods`, {
-        method: 'POST',
-        body: formData,
-      });
+      const foundUpdates = await window.electronAPI.mod.checkUpdates(
+        profileId,
+        profile.gameVersion,
+        profile.loaderType
+      );
+      setUpdates(foundUpdates);
+      
+      if (foundUpdates.length === 0) {
+        alert('모든 모드가 최신 버전입니다!');
+      } else {
+        alert(`${foundUpdates.length}개의 업데이트를 찾았습니다!`);
+      }
+    } catch (error) {
+      console.error('Failed to check updates:', error);
+      alert('업데이트 확인에 실패했습니다.');
+    } finally {
+      setCheckingUpdates(false);
+    }
+  };
+
+  const handleUpdateAll = async () => {
+    if (updates.length === 0) return;
+
+    if (!confirm(`${updates.length}개의 모드를 업데이트하시겠습니까?`)) {
+      return;
+    }
+
+    setUpdatingMods(true);
+    try {
+      const result = await window.electronAPI.mod.updateAll(profileId, updates);
+      
+      const message = `성공: ${result.success.length}개\n실패: ${result.failed.length}개`;
+      alert(`모드 업데이트 완료!\n\n${message}`);
+      
+      setUpdates([]);
       await loadMods();
     } catch (error) {
-      console.error('Failed to install mod:', error);
+      console.error('Failed to update mods:', error);
+      alert('모드 업데이트에 실패했습니다.');
+    } finally {
+      setUpdatingMods(false);
     }
   };
 
   const filteredMods = mods.filter(mod =>
     mod.name?.toLowerCase().includes(filter.toLowerCase()) ||
-    mod.id?.toLowerCase().includes(filter.toLowerCase()) ||
     mod.fileName?.toLowerCase().includes(filter.toLowerCase())
   );
 
@@ -98,18 +152,51 @@ export const ModList: React.FC<ModListProps> = ({ profileId }) => {
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-        <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200">
-          모드 ({filteredMods.length})
-        </h2>
-        <label className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer transition-colors">
-          모드 추가
-          <input
-            type="file"
-            accept=".jar"
-            onChange={handleFileUpload}
-            className="hidden"
-          />
-        </label>
+        <div className="flex items-center gap-4">
+          <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200">
+            모드 ({filteredMods.length})
+          </h2>
+          {updates.length > 0 && (
+            <span className="px-3 py-1 bg-green-500/20 text-green-600 dark:text-green-400 rounded-full text-sm font-medium">
+              {updates.length}개 업데이트 가능
+            </span>
+          )}
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={handleCheckUpdates}
+            disabled={checkingUpdates || !profile}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <RefreshCw className={`w-4 h-4 ${checkingUpdates ? 'animate-spin' : ''}`} />
+            업데이트 확인
+          </button>
+          {updates.length > 0 && (
+            <button
+              onClick={handleUpdateAll}
+              disabled={updatingMods}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {updatingMods ? '업데이트 중...' : `${updates.length}개 업데이트`}
+            </button>
+          )}
+          <button
+            onClick={() => setShowSearchModal(true)}
+            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2 font-medium"
+          >
+            <Plus className="w-4 h-4" />
+            모드 검색
+          </button>
+          <label className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 cursor-pointer transition-colors">
+            파일 업로드
+            <input
+              type="file"
+              accept=".jar"
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+          </label>
+        </div>
       </div>
 
       {/* Search */}
@@ -187,6 +274,21 @@ export const ModList: React.FC<ModListProps> = ({ profileId }) => {
           ))
         )}
       </div>
+
+      {/* Mod Search Modal */}
+      {profile && (
+        <ModSearchModal
+          isOpen={showSearchModal}
+          profileId={profileId}
+          gameVersion={profile.gameVersion}
+          loaderType={profile.loaderType}
+          onClose={() => setShowSearchModal(false)}
+          onInstallSuccess={() => {
+            loadMods();
+            setShowSearchModal(false);
+          }}
+        />
+      )}
     </div>
   );
 };

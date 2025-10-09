@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { X, Loader2 } from 'lucide-react';
+import { X, Loader2, Package, Settings } from 'lucide-react';
+import { ModpackSearchModal } from '../modpack/ModpackSearchModal';
 
 interface CreateProfileModalProps {
   onClose: () => void;
@@ -15,6 +16,9 @@ interface JavaInstallation {
 }
 
 export function CreateProfileModal({ onClose, onSuccess }: CreateProfileModalProps) {
+  const [tab, setTab] = useState<'custom' | 'modpack'>('custom');
+  const [showModpackSearch, setShowModpackSearch] = useState(false);
+  
   const [versions, setVersions] = useState<string[]>([]);
   const [loadingVersions, setLoadingVersions] = useState(true);
   const [javaInstallations, setJavaInstallations] = useState<JavaInstallation[]>([]);
@@ -158,25 +162,83 @@ export function CreateProfileModal({ onClose, onSuccess }: CreateProfileModalPro
     setFormData((prev: any) => ({ ...prev, [field]: value }));
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-      <div className="card max-w-lg w-full shadow-2xl animate-in zoom-in-95 duration-200">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-            새 프로필 만들기
-          </h2>
-          <button
-            onClick={onClose}
-            disabled={loading}
-            className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-gray-800 rounded-lg"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+  const handleModpackSelect = async (modpackId: string, versionId: string, gameVersion: string, loaderType: string) => {
+    try {
+      setLoading(true);
+      setError(null);
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-5">
+      // Create profile for modpack
+      const profileData = {
+        name: `모드팩 프로필`,
+        description: '모드팩에서 생성됨',
+        gameVersion,
+        loaderType,
+        loaderVersion: '', // Will be installed by modpack
+      };
+
+      const profile = await window.electronAPI.profile.create(profileData);
+      
+      // Install modpack
+      await window.electronAPI.modpack.install(profile.id, versionId);
+      
+      alert('모드팩이 성공적으로 설치되었습니다!');
+      onSuccess();
+    } catch (err) {
+      console.error('Failed to install modpack:', err);
+      setError(err instanceof Error ? err.message : '모드팩 설치에 실패했습니다.');
+      setLoading(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+        <div className="card max-w-lg w-full shadow-2xl animate-in zoom-in-95 duration-200">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+              새 프로필 만들기
+            </h2>
+            <button
+              onClick={onClose}
+              disabled={loading}
+              className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-gray-800 rounded-lg"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Tabs */}
+          <div className="flex gap-2 mb-6 bg-gray-800 p-1 rounded-lg">
+            <button
+              type="button"
+              onClick={() => setTab('custom')}
+              className={`flex-1 py-2 px-4 rounded-md font-medium transition-all flex items-center justify-center gap-2 ${
+                tab === 'custom'
+                  ? 'bg-purple-600 text-white shadow-lg'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700'
+              }`}
+            >
+              <Settings className="w-4 h-4" />
+              커스텀 프로필
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab('modpack')}
+              className={`flex-1 py-2 px-4 rounded-md font-medium transition-all flex items-center justify-center gap-2 ${
+                tab === 'modpack'
+                  ? 'bg-purple-600 text-white shadow-lg'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700'
+              }`}
+            >
+              <Package className="w-4 h-4" />
+              모드팩
+            </button>
+          </div>
+
+          {/* Custom Profile Tab */}
+          {tab === 'custom' && (
+            <form onSubmit={handleSubmit} className="space-y-5">
           {/* Name */}
           <div>
             <label className="block text-sm font-semibold mb-2 text-gray-300">
@@ -432,7 +494,56 @@ export function CreateProfileModal({ onClose, onSuccess }: CreateProfileModalPro
             </button>
           </div>
         </form>
+          )}
+
+          {/* Modpack Tab */}
+          {tab === 'modpack' && (
+            <div className="space-y-4">
+              <div className="bg-gradient-to-br from-purple-900/30 to-pink-900/30 border border-purple-800/50 rounded-lg p-6 text-center">
+                <Package className="w-16 h-16 mx-auto mb-4 text-purple-400" />
+                <h3 className="text-xl font-bold text-white mb-2">
+                  모드팩에서 프로필 생성
+                </h3>
+                <p className="text-gray-300 mb-6">
+                  Modrinth에서 모드팩을 검색하고 자동으로 프로필을 생성합니다
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowModpackSearch(true)}
+                  disabled={loading}
+                  className="btn-primary px-6 py-3 font-semibold flex items-center gap-2 mx-auto disabled:opacity-50"
+                >
+                  <Package className="w-5 h-5" />
+                  모드팩 검색
+                </button>
+              </div>
+
+              {error && (
+                <div className="text-sm text-red-300 bg-red-900/30 border border-red-800 rounded-lg px-4 py-3 flex items-start gap-2">
+                  <span className="text-red-400 font-bold">⚠</span>
+                  <span>{error}</span>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={loading}
+                className="w-full btn-secondary py-3 text-base font-semibold"
+              >
+                취소
+              </button>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+
+      {/* Modpack Search Modal */}
+      <ModpackSearchModal
+        isOpen={showModpackSearch}
+        onClose={() => setShowModpackSearch(false)}
+        onSelect={handleModpackSelect}
+      />
+    </>
   );
 }

@@ -1517,14 +1517,14 @@ ipcRenderer.on('mod:updates-available', (event, data: {
 - [x] 모드 메타데이터 파싱 (Fabric, NeoForge/Forge, Quilt)
 - [x] TOML 파서 구현 (NeoForge용)
 - [x] ModrinthService 구현
-- [ ] CurseForgeService 구현
-- [ ] 모드 검색 UI
+- [x] CurseForgeService 구현
+- [x] 모드 검색 UI
 - [x] 모드 설치/제거
 - [x] 모드 활성화/비활성화
 - [x] 모드 목록 UI
 - [x] ResourcePackManager 구현
 - [x] ShaderPackManager 구현
-- [ ] 의존성 해결
+- [x] 의존성 해결
 
 ### Phase 8: 계정 관리 시스템 (1-2주)
 - [ ] Microsoft OAuth 2.0 구현 (심사 대기 중)
@@ -1534,19 +1534,19 @@ ipcRenderer.on('mod:updates-available', (event, data: {
 - [x] 계정 UI (선택, 추가, 삭제)
 
 ### Phase 9: 모드 업데이트 (2주)
-- [ ] 모드 업데이트 확인
+- [x] 모드 업데이트 확인
 - [ ] 강제 업데이트 시스템
-- [ ] 선택적 업데이트
-- [ ] 업데이트 UI
+- [x] 선택적 업데이트
+- [x] 업데이트 UI
 - [ ] 자동 업데이트 설정
 
 ### Phase 10: 모드팩 지원 (3-4주)
-- [ ] ModpackManager 구현
-- [ ] 모드팩 검색
-- [ ] 모드팩 설치
-- [ ] 모드팩 파싱 (Modrinth, CurseForge)
+- [x] ModpackManager 구현
+- [x] 모드팩 검색
+- [x] 모드팩 설치
+- [x] 모드팩 파싱 (Modrinth)
 - [ ] 모드팩 업데이트
-- [ ] 모드팩 UI
+- [x] 모드팩 UI
 
 ### Phase 11: 외부 런처 가져오기 (2주)
 - [ ] MultiMC 프로필 파싱
