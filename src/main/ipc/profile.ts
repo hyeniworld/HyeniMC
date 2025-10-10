@@ -336,12 +336,16 @@ export function registerProfileHandlers(): void {
         uuid,
         accessToken,
         userType,
+        resolution: profile.resolution,
+        fullscreen: profile.fullscreen,
       };
 
       console.log('[IPC Profile] Launching game with options:');
       console.log(`  - Version: ${actualVersionId}`);
       console.log(`  - Java Path: ${javaPathToUse}`);
       console.log(`  - Memory: ${minMemory}MB - ${maxMemory}MB`);
+      console.log(`  - Resolution: ${profile.resolution?.width || 854}x${profile.resolution?.height || 480}`);
+      console.log(`  - Fullscreen: ${profile.fullscreen || false}`);
       console.log(`  - Username: ${username}`);
       console.log(`  - UUID: ${uuid}`);
       console.log(`  - User Type: ${userType}`);

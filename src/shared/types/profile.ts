@@ -32,6 +32,7 @@ export interface Profile {
     width: number;
     height: number;
   };
+  fullscreen?: boolean;
   
   // 모드 관리
   mods: Mod[];

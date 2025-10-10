@@ -89,11 +89,13 @@ async function detectMacOSJava(): Promise<JavaInstallation[]> {
             await fs.access(javaPath);
             const version = await getJavaVersion(javaPath);
             if (version && !installations.find(j => j.path === javaPath)) {
+              // Detect architecture from path or binary
+              const arch = await detectJavaArchitecture(javaPath, dir);
               installations.push({
                 path: javaPath,
                 version: version.version,
                 majorVersion: version.majorVersion,
-                architecture: process.arch,
+                architecture: arch,
               });
             }
           } catch {
@@ -253,6 +255,40 @@ async function detectLinuxJava(): Promise<JavaInstallation[]> {
   }
 
   return installations;
+}
+
+/**
+ * Detect Java architecture from path or binary
+ */
+async function detectJavaArchitecture(javaPath: string, dirName: string): Promise<string> {
+  // First, try to detect from directory name
+  if (dirName.includes('_x64') || dirName.includes('-x64') || dirName.toLowerCase().includes('x86_64')) {
+    return 'x64';
+  }
+  if (dirName.includes('_arm64') || dirName.includes('-arm64') || dirName.includes('aarch64')) {
+    return 'arm64';
+  }
+  if (dirName.includes('_x86') || dirName.includes('-x86') || dirName.includes('i386')) {
+    return 'x86';
+  }
+
+  // Try to detect using 'file' command on macOS/Linux
+  if (process.platform !== 'win32') {
+    try {
+      const { stdout } = await execAsync(`file -b "${javaPath}"`);
+      if (stdout.includes('x86_64') || stdout.includes('x86-64')) {
+        return 'x64';
+      }
+      if (stdout.includes('arm64') || stdout.includes('aarch64')) {
+        return 'arm64';
+      }
+    } catch {
+      // file command failed, continue
+    }
+  }
+
+  // Fallback to process architecture
+  return process.arch;
 }
 
 /**

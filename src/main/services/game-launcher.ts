@@ -15,6 +15,11 @@ export interface LaunchOptions {
   uuid?: string;
   accessToken?: string;
   userType?: string;
+  resolution?: {
+    width: number;
+    height: number;
+  };
+  fullscreen?: boolean;
 }
 
 export interface GameProcess {
@@ -265,8 +270,8 @@ export class GameLauncher {
       '${user_properties}': '{}',
       '${clientid}': uuid,
       '${auth_xuid}': uuid,
-      '${resolution_width}': '854',
-      '${resolution_height}': '480',
+      '${resolution_width}': String(options.resolution?.width || 854),
+      '${resolution_height}': String(options.resolution?.height || 480),
     };
 
     // Check which format to use
@@ -305,6 +310,11 @@ export class GameLauncher {
         }
         args.push(replaced);
       }
+    }
+
+    // Add fullscreen if enabled (resolution placeholders are already replaced above)
+    if (options.fullscreen) {
+      args.push('--fullscreen');
     }
 
     return args;

@@ -4,6 +4,7 @@ import { useAccount } from '../App';
 import { ModList } from '../components/mods/ModList';
 import { ResourcePackList } from '../components/resourcepacks/ResourcePackList';
 import { ShaderPackList } from '../components/shaderpacks/ShaderPackList';
+import { ProfileSettingsTab } from '../components/profiles/ProfileSettingsTab';
 
 type TabType = 'overview' | 'mods' | 'resourcepacks' | 'shaderpacks' | 'settings';
 
@@ -201,12 +202,12 @@ export const ProfileDetailPage: React.FC = () => {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-auto">
         {activeTab === 'overview' && <OverviewTab profile={profile} />}
         {activeTab === 'mods' && profileId && <ModList profileId={profileId} />}
         {activeTab === 'resourcepacks' && profileId && <ResourcePackList profileId={profileId} />}
         {activeTab === 'shaderpacks' && profileId && <ShaderPackList profileId={profileId} />}
-        {activeTab === 'settings' && <SettingsTab profile={profile} onUpdate={loadProfile} />}
+        {activeTab === 'settings' && <ProfileSettingsTab profile={profile} onUpdate={loadProfile} />}
       </div>
     </div>
   );
@@ -314,141 +315,3 @@ const OverviewTab: React.FC<{ profile: any }> = ({ profile }) => {
   );
 };
 
-// Settings Tab
-const SettingsTab: React.FC<{ profile: any; onUpdate: () => void }> = ({ profile, onUpdate }) => {
-  const [minMemory, setMinMemory] = React.useState(profile?.memory?.min || 512);
-  const [maxMemory, setMaxMemory] = React.useState(profile?.memory?.max || 4096);
-  const [javaPath, setJavaPath] = React.useState<string>('');
-  const [customJavaPath, setCustomJavaPath] = React.useState(profile?.javaPath || '');
-  const [saving, setSaving] = React.useState(false);
-
-  // Update state when profile changes
-  React.useEffect(() => {
-    if (profile) {
-      setMinMemory(profile.memory?.min || 512);
-      setMaxMemory(profile.memory?.max || 4096);
-      setCustomJavaPath(profile.javaPath || '');
-    }
-  }, [profile]);
-
-  React.useEffect(() => {
-    detectJava();
-  }, []);
-
-  const detectJava = async () => {
-    try {
-      const result = await window.electronAPI.java.detect();
-      if (result && result.length > 0) {
-        setJavaPath(result[0].path);
-      }
-    } catch (error) {
-      console.error('Failed to detect Java:', error);
-    }
-  };
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      console.log('[Settings] Saving profile settings:', {
-        minMemory,
-        maxMemory,
-        javaPath: customJavaPath,
-      });
-      
-      const updated = await window.electronAPI.profile.update(profile.id, {
-        minMemory,
-        maxMemory,
-        javaPath: customJavaPath,
-      });
-      
-      console.log('[Settings] Profile updated:', updated);
-      
-      alert('설정이 저장되었습니다.');
-      onUpdate();
-    } catch (error) {
-      console.error('Failed to save settings:', error);
-      alert('설정 저장에 실패했습니다: ' + (error instanceof Error ? error.message : String(error)));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="p-6 space-y-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow">
-        <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200 mb-4">
-          메모리 설정
-        </h2>
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              최소 메모리 (MB)
-            </label>
-            <input
-              type="number"
-              value={minMemory}
-              onChange={(e) => setMinMemory(Number(e.target.value))}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
-            />
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              현재 값: {minMemory} MB
-            </p>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              최대 메모리 (MB)
-            </label>
-            <input
-              type="number"
-              value={maxMemory}
-              onChange={(e) => setMaxMemory(Number(e.target.value))}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
-            />
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              현재 값: {maxMemory} MB
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow">
-        <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200 mb-4">
-          Java 설정
-        </h2>
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              감지된 Java 경로
-            </label>
-            <input
-              type="text"
-              value={javaPath || '감지 중...'}
-              readOnly
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-600 text-gray-600 dark:text-gray-300"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              사용자 지정 Java 경로 (선택사항)
-            </label>
-            <input
-              type="text"
-              value={customJavaPath}
-              onChange={(e) => setCustomJavaPath(e.target.value)}
-              placeholder="비워두면 자동 감지된 경로 사용"
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
-            />
-          </div>
-        </div>
-      </div>
-
-      <button
-        onClick={handleSave}
-        disabled={saving}
-        className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed font-semibold"
-      >
-        {saving ? '저장 중...' : '설정 저장'}
-      </button>
-    </div>
-  );
-};

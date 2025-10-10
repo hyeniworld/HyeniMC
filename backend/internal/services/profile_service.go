@@ -118,6 +118,46 @@ func (s *ProfileService) UpdateProfile(ctx context.Context, id string, updates m
 	if serverAddr, ok := updates["serverAddress"].(string); ok {
 		profile.ServerAddress = serverAddr
 	}
+	if gameDir, ok := updates["gameDirectory"].(string); ok {
+		profile.GameDirectory = gameDir
+	}
+	
+	// Handle JVM arguments
+	if jvmArgs, ok := updates["jvmArgs"].([]interface{}); ok {
+		args := make([]string, 0, len(jvmArgs))
+		for _, arg := range jvmArgs {
+			if str, ok := arg.(string); ok {
+				args = append(args, str)
+			}
+		}
+		profile.JvmArgs = args
+	}
+	
+	// Handle game arguments
+	if gameArgs, ok := updates["gameArgs"].([]interface{}); ok {
+		args := make([]string, 0, len(gameArgs))
+		for _, arg := range gameArgs {
+			if str, ok := arg.(string); ok {
+				args = append(args, str)
+			}
+		}
+		profile.GameArgs = args
+	}
+	
+	// Handle resolution settings
+	if resolution, ok := updates["resolution"].(map[string]interface{}); ok {
+		if width, ok := resolution["width"].(float64); ok {
+			profile.Resolution.Width = int32(width)
+		}
+		if height, ok := resolution["height"].(float64); ok {
+			profile.Resolution.Height = int32(height)
+		}
+	}
+	
+	// Handle fullscreen setting
+	if fullscreen, ok := updates["fullscreen"].(bool); ok {
+		profile.Fullscreen = fullscreen
+	}
 	
 	// Handle memory settings (support both minMemory/maxMemory and memory.min/memory.max formats)
 	if minMemory, ok := updates["minMemory"].(float64); ok {
