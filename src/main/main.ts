@@ -3,6 +3,9 @@ import * as path from 'path';
 import { registerIpcHandlers } from './ipc/handlers';
 import { startBackend, stopBackend } from './backend/manager';
 
+// Set app name
+app.setName('HyeniMC');
+
 // Disable certificate verification for Microsoft auth (macOS SSL issue workaround)
 app.commandLine.appendSwitch('ignore-certificate-errors');
 
