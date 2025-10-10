@@ -33,9 +33,29 @@ export interface ModpackVersion {
 }
 
 export interface ModpackInstallProgress {
-  stage: 'downloading' | 'extracting' | 'installing_mods' | 'applying_overrides' | 'complete';
+  stage: 'validating' | 'downloading' | 'extracting' | 'installing_loader' | 'installing_mods' | 'applying_overrides' | 'complete';
   progress: number;
   message: string;
+}
+
+export interface ModpackFileInfo {
+  valid: boolean;
+  format: ModpackFormat;
+  fileSize: number;
+  errors?: string[];
+}
+
+export type ModpackFormat = 'modrinth' | 'curseforge' | 'multimc' | 'prism' | 'atlauncher' | 'unknown';
+
+export interface ModpackMetadata {
+  name: string;
+  version?: string;
+  author?: string;
+  gameVersion: string;
+  loaderType: 'vanilla' | 'fabric' | 'forge' | 'neoforge' | 'quilt';
+  loaderVersion?: string;
+  modCount?: number;
+  fileSize: number;
 }
 
 export class ModpackManager {
@@ -286,6 +306,550 @@ export class ModpackManager {
     } catch (error) {
       console.error('[ModpackManager] Failed to fetch version:', error);
       return null;
+    }
+  }
+
+  /**
+   * 모드팩 파일 검증
+   */
+  async validateModpackFile(filePath: string): Promise<ModpackFileInfo> {
+    try {
+      // 1. 파일 존재 및 크기 확인
+      const stats = await fs.stat(filePath);
+      if (stats.size === 0) {
+        return {
+          valid: false,
+          format: 'unknown',
+          fileSize: 0,
+          errors: ['파일이 비어있습니다'],
+        };
+      }
+
+      // 2. ZIP 파일 여부 확인
+      let zip: AdmZip;
+      try {
+        zip = new AdmZip(filePath);
+      } catch (error) {
+        return {
+          valid: false,
+          format: 'unknown',
+          fileSize: stats.size,
+          errors: ['유효한 ZIP 파일이 아닙니다'],
+        };
+      }
+
+      // 3. 모드팩 형식 감지
+      const format = await this.detectModpackFormat(filePath);
+      
+      if (format === 'unknown') {
+        return {
+          valid: false,
+          format: 'unknown',
+          fileSize: stats.size,
+          errors: ['지원하지 않는 모드팩 형식입니다'],
+        };
+      }
+
+      return {
+        valid: true,
+        format,
+        fileSize: stats.size,
+      };
+    } catch (error) {
+      console.error('[ModpackManager] Failed to validate file:', error);
+      return {
+        valid: false,
+        format: 'unknown',
+        fileSize: 0,
+        errors: [error instanceof Error ? error.message : '알 수 없는 오류'],
+      };
+    }
+  }
+
+  /**
+   * 모드팩 형식 감지
+   */
+  async detectModpackFormat(filePath: string): Promise<ModpackFormat> {
+    try {
+      const zip = new AdmZip(filePath);
+      const entries = zip.getEntries();
+      const fileNames = entries.map((e) => e.entryName);
+
+      // Modrinth 형식 (.mrpack)
+      if (filePath.endsWith('.mrpack') || fileNames.includes('modrinth.index.json')) {
+        return 'modrinth';
+      }
+
+      // CurseForge 형식
+      if (fileNames.includes('manifest.json')) {
+        const manifestEntry = zip.getEntry('manifest.json');
+        if (manifestEntry) {
+          const manifest = JSON.parse(manifestEntry.getData().toString('utf-8'));
+          if (manifest.manifestType === 'minecraftModpack') {
+            return 'curseforge';
+          }
+        }
+      }
+
+      // MultiMC/Prism 형식
+      if (fileNames.includes('instance.cfg') || fileNames.includes('mmc-pack.json')) {
+        return fileNames.includes('mmc-pack.json') ? 'prism' : 'multimc';
+      }
+
+      // ATLauncher 형식
+      if (fileNames.includes('instance.json')) {
+        const instanceEntry = zip.getEntry('instance.json');
+        if (instanceEntry) {
+          const instance = JSON.parse(instanceEntry.getData().toString('utf-8'));
+          if (instance.launcher?.name === 'ATLauncher') {
+            return 'atlauncher';
+          }
+        }
+      }
+
+      return 'unknown';
+    } catch (error) {
+      console.error('[ModpackManager] Failed to detect format:', error);
+      return 'unknown';
+    }
+  }
+
+  /**
+   * 모드팩 메타데이터 추출
+   */
+  async extractModpackMetadata(filePath: string): Promise<ModpackMetadata> {
+    const format = await this.detectModpackFormat(filePath);
+    const stats = await fs.stat(filePath);
+    const zip = new AdmZip(filePath);
+
+    try {
+      switch (format) {
+        case 'modrinth':
+          return await this.extractModrinthMetadata(zip, stats.size);
+        case 'curseforge':
+          return await this.extractCurseForgeMetadata(zip, stats.size);
+        case 'multimc':
+        case 'prism':
+          return await this.extractMultiMCMetadata(zip, stats.size, format);
+        case 'atlauncher':
+          return await this.extractATLauncherMetadata(zip, stats.size);
+        default:
+          throw new Error('지원하지 않는 형식입니다');
+      }
+    } catch (error) {
+      console.error('[ModpackManager] Failed to extract metadata:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Modrinth 메타데이터 추출
+   */
+  private async extractModrinthMetadata(zip: AdmZip, fileSize: number): Promise<ModpackMetadata> {
+    const indexEntry = zip.getEntry('modrinth.index.json');
+    if (!indexEntry) {
+      throw new Error('modrinth.index.json을 찾을 수 없습니다');
+    }
+
+    const manifest = JSON.parse(indexEntry.getData().toString('utf-8'));
+    const dependencies = manifest.dependencies || {};
+
+    // 로더 타입 추출
+    let loaderType: ModpackMetadata['loaderType'] = 'vanilla';
+    let loaderVersion: string | undefined;
+
+    if (dependencies['fabric-loader']) {
+      loaderType = 'fabric';
+      loaderVersion = dependencies['fabric-loader'];
+    } else if (dependencies['quilt-loader']) {
+      loaderType = 'quilt';
+      loaderVersion = dependencies['quilt-loader'];
+    } else if (dependencies['forge']) {
+      loaderType = 'forge';
+      loaderVersion = dependencies['forge'];
+    } else if (dependencies['neoforge']) {
+      loaderType = 'neoforge';
+      loaderVersion = dependencies['neoforge'];
+    }
+
+    return {
+      name: manifest.name || 'Unknown Modpack',
+      version: manifest.versionId,
+      author: manifest.summary || undefined,
+      gameVersion: dependencies.minecraft || 'unknown',
+      loaderType,
+      loaderVersion,
+      modCount: manifest.files?.length || 0,
+      fileSize,
+    };
+  }
+
+  /**
+   * CurseForge 메타데이터 추출
+   */
+  private async extractCurseForgeMetadata(zip: AdmZip, fileSize: number): Promise<ModpackMetadata> {
+    const manifestEntry = zip.getEntry('manifest.json');
+    if (!manifestEntry) {
+      throw new Error('manifest.json을 찾을 수 없습니다');
+    }
+
+    const manifest = JSON.parse(manifestEntry.getData().toString('utf-8'));
+    const minecraft = manifest.minecraft || {};
+    const modLoaders = minecraft.modLoaders || [];
+    const primaryLoader = modLoaders.find((l: any) => l.primary) || modLoaders[0];
+
+    // 로더 정보 파싱
+    let loaderType: ModpackMetadata['loaderType'] = 'vanilla';
+    let loaderVersion: string | undefined;
+
+    if (primaryLoader?.id) {
+      const loaderInfo = primaryLoader.id.split('-');
+      if (loaderInfo[0] === 'forge') {
+        loaderType = 'forge';
+        loaderVersion = loaderInfo[1];
+      } else if (loaderInfo[0] === 'neoforge') {
+        loaderType = 'neoforge';
+        loaderVersion = loaderInfo[1];
+      } else if (loaderInfo[0] === 'fabric') {
+        loaderType = 'fabric';
+        loaderVersion = loaderInfo[1];
+      }
+    }
+
+    return {
+      name: manifest.name || 'Unknown Modpack',
+      version: manifest.version,
+      author: manifest.author,
+      gameVersion: minecraft.version || 'unknown',
+      loaderType,
+      loaderVersion,
+      modCount: manifest.files?.length || 0,
+      fileSize,
+    };
+  }
+
+  /**
+   * MultiMC/Prism 메타데이터 추출
+   */
+  private async extractMultiMCMetadata(
+    zip: AdmZip,
+    fileSize: number,
+    format: 'multimc' | 'prism'
+  ): Promise<ModpackMetadata> {
+    let gameVersion = 'unknown';
+    let loaderType: ModpackMetadata['loaderType'] = 'vanilla';
+    let loaderVersion: string | undefined;
+    let name = 'Unknown Instance';
+
+    // mmc-pack.json 확인 (Prism)
+    if (format === 'prism') {
+      const packEntry = zip.getEntry('mmc-pack.json');
+      if (packEntry) {
+        const pack = JSON.parse(packEntry.getData().toString('utf-8'));
+        const components = pack.components || [];
+
+        for (const component of components) {
+          if (component.uid === 'net.minecraft') {
+            gameVersion = component.version;
+          } else if (component.uid === 'net.fabricmc.fabric-loader') {
+            loaderType = 'fabric';
+            loaderVersion = component.version;
+          } else if (component.uid.includes('forge')) {
+            loaderType = 'forge';
+            loaderVersion = component.version;
+          }
+        }
+      }
+    }
+
+    // instance.cfg 확인
+    const cfgEntry = zip.getEntry('instance.cfg');
+    if (cfgEntry) {
+      const cfg = cfgEntry.getData().toString('utf-8');
+      const lines = cfg.split('\n');
+      for (const line of lines) {
+        if (line.startsWith('IntendedVersion=')) {
+          gameVersion = line.split('=')[1].trim();
+        } else if (line.startsWith('name=')) {
+          name = line.split('=')[1].trim();
+        }
+      }
+    }
+
+    // 모드 개수 추정
+    const entries = zip.getEntries();
+    const modFiles = entries.filter((e) => e.entryName.includes('minecraft/mods/') && e.entryName.endsWith('.jar'));
+
+    return {
+      name,
+      gameVersion,
+      loaderType,
+      loaderVersion,
+      modCount: modFiles.length,
+      fileSize,
+    };
+  }
+
+  /**
+   * ATLauncher 메타데이터 추출
+   */
+  private async extractATLauncherMetadata(zip: AdmZip, fileSize: number): Promise<ModpackMetadata> {
+    const instanceEntry = zip.getEntry('instance.json');
+    if (!instanceEntry) {
+      throw new Error('instance.json을 찾을 수 없습니다');
+    }
+
+    const instance = JSON.parse(instanceEntry.getData().toString('utf-8'));
+
+    // 로더 정보는 instance.json에서 추출하기 어려울 수 있음
+    let loaderType: ModpackMetadata['loaderType'] = 'vanilla';
+    if (instance.loaderVersion) {
+      loaderType = 'forge'; // ATLauncher는 주로 Forge 사용
+    }
+
+    return {
+      name: instance.name || 'Unknown Pack',
+      gameVersion: instance.minecraft || 'unknown',
+      loaderType,
+      loaderVersion: instance.loaderVersion,
+      modCount: instance.mods?.length || 0,
+      fileSize,
+    };
+  }
+
+  /**
+   * 로컬 파일에서 모드팩 설치
+   */
+  async importModpackFromFile(
+    filePath: string,
+    profileName: string,
+    instanceDir: string,
+    onProgress?: (progress: ModpackInstallProgress) => void
+  ): Promise<void> {
+    const tempDir = path.join(instanceDir, '.temp_modpack_import');
+
+    try {
+      // 1. 파일 검증
+      onProgress?.({
+        stage: 'validating',
+        progress: 0,
+        message: '모드팩 파일 검증 중...',
+      });
+
+      const fileInfo = await this.validateModpackFile(filePath);
+      if (!fileInfo.valid) {
+        throw new Error(fileInfo.errors?.join(', ') || '유효하지 않은 파일입니다');
+      }
+
+      console.log(`[ModpackManager] Importing ${fileInfo.format} modpack from file`);
+
+      // 2. 메타데이터 추출
+      const metadata = await this.extractModpackMetadata(filePath);
+      console.log(`[ModpackManager] Modpack: ${metadata.name} (${metadata.gameVersion})`);
+
+      // 3. 압축 해제
+      onProgress?.({
+        stage: 'extracting',
+        progress: 10,
+        message: '모드팩 압축 해제 중...',
+      });
+
+      await fs.mkdir(tempDir, { recursive: true });
+      const zip = new AdmZip(filePath);
+      zip.extractAllTo(tempDir, true);
+
+      // 4. 형식별 처리
+      switch (fileInfo.format) {
+        case 'modrinth':
+          await this.installModrinthPack(tempDir, instanceDir, onProgress);
+          break;
+        case 'curseforge':
+          await this.installCurseForgePack(tempDir, instanceDir, onProgress);
+          break;
+        case 'multimc':
+        case 'prism':
+          await this.installMultiMCPack(tempDir, instanceDir, onProgress);
+          break;
+        case 'atlauncher':
+          await this.installATLauncherPack(tempDir, instanceDir, onProgress);
+          break;
+        default:
+          throw new Error('지원하지 않는 형식입니다');
+      }
+
+      onProgress?.({
+        stage: 'complete',
+        progress: 100,
+        message: '모드팩 설치 완료!',
+      });
+
+      console.log('[ModpackManager] Modpack import complete');
+    } catch (error) {
+      console.error('[ModpackManager] Failed to import modpack:', error);
+      throw error;
+    } finally {
+      // Cleanup temp directory
+      try {
+        await fs.rm(tempDir, { recursive: true, force: true });
+      } catch (error) {
+        console.error('[ModpackManager] Failed to cleanup temp directory:', error);
+      }
+    }
+  }
+
+  /**
+   * Modrinth 모드팩 설치
+   */
+  private async installModrinthPack(
+    tempDir: string,
+    instanceDir: string,
+    onProgress?: (progress: ModpackInstallProgress) => void
+  ): Promise<void> {
+    // modrinth.index.json 읽기
+    const indexPath = path.join(tempDir, 'modrinth.index.json');
+    const manifest = JSON.parse(await fs.readFile(indexPath, 'utf-8'));
+
+    // 모드 다운로드
+    onProgress?.({
+      stage: 'installing_mods',
+      progress: 30,
+      message: '모드 다운로드 중...',
+    });
+
+    const modsDir = path.join(instanceDir, 'mods');
+    await fs.mkdir(modsDir, { recursive: true });
+
+    const files = manifest.files || [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const progress = 30 + Math.floor(((i + 1) / files.length) * 50);
+
+      onProgress?.({
+        stage: 'installing_mods',
+        progress,
+        message: `모드 다운로드 중... (${i + 1}/${files.length})`,
+      });
+
+      const fileName = path.basename(file.path);
+      const filePath = path.join(modsDir, fileName);
+
+      try {
+        const response = await axios.get(file.downloads[0], {
+          responseType: 'arraybuffer',
+        });
+        await fs.writeFile(filePath, response.data);
+      } catch (error) {
+        console.error(`[ModpackManager] Failed to download ${fileName}:`, error);
+      }
+    }
+
+    // Overrides 적용
+    onProgress?.({
+      stage: 'applying_overrides',
+      progress: 85,
+      message: 'Overrides 적용 중...',
+    });
+
+    const overridesDir = path.join(tempDir, 'overrides');
+    try {
+      const overridesStat = await fs.stat(overridesDir);
+      if (overridesStat.isDirectory()) {
+        await this.copyDirectory(overridesDir, instanceDir);
+      }
+    } catch (error) {
+      console.log('[ModpackManager] No overrides directory found');
+    }
+  }
+
+  /**
+   * CurseForge 모드팩 설치 (간단한 버전 - API 키 필요 없이 overrides만 복사)
+   */
+  private async installCurseForgePack(
+    tempDir: string,
+    instanceDir: string,
+    onProgress?: (progress: ModpackInstallProgress) => void
+  ): Promise<void> {
+    // manifest.json 읽기
+    const manifestPath = path.join(tempDir, 'manifest.json');
+    const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf-8'));
+
+    console.log(`[ModpackManager] CurseForge modpack has ${manifest.files?.length || 0} mods`);
+    console.log('[ModpackManager] Note: CurseForge mods require API key - only overrides will be copied');
+
+    // Overrides 적용
+    onProgress?.({
+      stage: 'applying_overrides',
+      progress: 50,
+      message: 'Overrides 적용 중...',
+    });
+
+    const overridesDir = path.join(tempDir, manifest.overrides || 'overrides');
+    try {
+      const overridesStat = await fs.stat(overridesDir);
+      if (overridesStat.isDirectory()) {
+        await this.copyDirectory(overridesDir, instanceDir);
+      }
+    } catch (error) {
+      console.log('[ModpackManager] No overrides directory found');
+    }
+
+    // TODO: CurseForge API를 사용한 모드 다운로드는 추후 구현
+    console.log('[ModpackManager] CurseForge mod downloads not implemented yet');
+  }
+
+  /**
+   * MultiMC/Prism 모드팩 설치
+   */
+  private async installMultiMCPack(
+    tempDir: string,
+    instanceDir: string,
+    onProgress?: (progress: ModpackInstallProgress) => void
+  ): Promise<void> {
+    onProgress?.({
+      stage: 'applying_overrides',
+      progress: 50,
+      message: '인스턴스 파일 복사 중...',
+    });
+
+    // minecraft 폴더 복사
+    const minecraftDir = path.join(tempDir, 'minecraft');
+    try {
+      const minecraftStat = await fs.stat(minecraftDir);
+      if (minecraftStat.isDirectory()) {
+        await this.copyDirectory(minecraftDir, instanceDir);
+      }
+    } catch (error) {
+      console.log('[ModpackManager] No minecraft directory found');
+    }
+  }
+
+  /**
+   * ATLauncher 모드팩 설치
+   */
+  private async installATLauncherPack(
+    tempDir: string,
+    instanceDir: string,
+    onProgress?: (progress: ModpackInstallProgress) => void
+  ): Promise<void> {
+    onProgress?.({
+      stage: 'applying_overrides',
+      progress: 50,
+      message: '인스턴스 파일 복사 중...',
+    });
+
+    // 모든 파일 복사 (instance.json 제외)
+    const entries = await fs.readdir(tempDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.name === 'instance.json') continue;
+
+      const srcPath = path.join(tempDir, entry.name);
+      const destPath = path.join(instanceDir, entry.name);
+
+      if (entry.isDirectory()) {
+        await this.copyDirectory(srcPath, destPath);
+      } else {
+        await fs.copyFile(srcPath, destPath);
+      }
     }
   }
 

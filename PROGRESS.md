@@ -187,28 +187,58 @@ npm run dev
     - `modpack:validate-file` - 모드팩 파일 검증
     - `modpack:extract-metadata` - 메타데이터 추출
     - `modpack:import-file` - 로컬 파일로 설치
+    - `modpack:select-file` - 파일 다이얼로그 열기
   - UI 설계에 "파일 선택" 방식 추가
+
+### 모드팩 로컬 파일 설치 구현 완료 ✅
+- ✅ **ModpackManager 확장** (src/main/services/modpack-manager.ts)
+  - `validateModpackFile()` - 파일 유효성 검증 및 형식 감지
+  - `detectModpackFormat()` - 4가지 형식 자동 감지 (modrinth/curseforge/multimc/prism/atlauncher)
+  - `extractModpackMetadata()` - 메타데이터 추출 (이름, 버전, 게임 버전, 로더 등)
+  - `importModpackFromFile()` - 로컬 파일에서 모드팩 설치
+  - 형식별 설치 메서드:
+    - `installModrinthPack()` - Modrinth 모드팩 (.mrpack) 설치
+    - `installCurseForgePack()` - CurseForge overrides 적용
+    - `installMultiMCPack()` - MultiMC/Prism 인스턴스 복사
+    - `installATLauncherPack()` - ATLauncher 인스턴스 복사
+  - 형식별 메타데이터 추출:
+    - `extractModrinthMetadata()` - modrinth.index.json 파싱
+    - `extractCurseForgeMetadata()` - manifest.json 파싱
+    - `extractMultiMCMetadata()` - instance.cfg/mmc-pack.json 파싱
+    - `extractATLauncherMetadata()` - instance.json 파싱
+
+- ✅ **IPC 핸들러 추가** (src/main/ipc/modpack.ts)
+  - `modpack:validate-file` - 파일 검증
+  - `modpack:extract-metadata` - 메타데이터 추출
+  - `modpack:import-file` - 로컬 파일 임포트
+  - `modpack:select-file` - 파일 선택 다이얼로그
+  - `modpack:import-progress` 이벤트 스트리밍
+
+- ✅ **IPC 상수 추가** (src/shared/constants/ipc.ts)
+  - `MODPACK_VALIDATE_FILE` 채널
+  - `MODPACK_EXTRACT_METADATA` 채널
+  - `MODPACK_SELECT_FILE` 채널
+  - `MODPACK_IMPORT_PROGRESS` 이벤트
+
+- ✅ **Preload API 추가** (src/preload/preload.ts)
+  - `window.electronAPI.modpack.validateFile()` 노출
+  - `window.electronAPI.modpack.extractMetadata()` 노출
+  - `window.electronAPI.modpack.importFile()` 노출
+  - `window.electronAPI.modpack.selectFile()` 노출
+  - TypeScript 타입 정의 완료
 
 ## 📋 다음 작업 (우선순위순)
 
-### Phase 1: 모드팩 로컬 파일 설치 구현 ⭐ (NEW!)
-1. **ModpackManager 확장**
-   - `validateModpackFile()` 구현
-   - `detectModpackFormat()` 구현
-   - `extractModpackMetadata()` 구현
-   - `importModpackFromFile()` 구현
-   - 각 형식별 파서 작성
-
-2. **IPC 핸들러 추가**
-   - `modpack:validate-file` 핸들러
-   - `modpack:extract-metadata` 핸들러
-   - `modpack:import-file` 핸들러
-
-3. **UI 구현**
-   - 파일 선택 버튼 및 드래그&드롭
-   - 메타데이터 미리보기 카드
-   - 진행률 표시
-   - 에러 처리 및 안내 메시지
+### Phase 1: 모드팩 로컬 파일 설치 ✅ 완료!
+- ✅ **백엔드 구현 완료** (ModpackManager + IPC)
+- ✅ **UI 구현 완료** (ImportModpackTab + CreateProfileModal 통합)
+  - ✅ 프로필 생성 모달에 "파일" 탭 추가 (3개 탭: 커스텀/온라인/파일)
+  - ✅ 파일 선택 버튼 및 드래그&드롭 지원
+  - ✅ 메타데이터 미리보기 카드 (이름, 버전, 게임 버전, 로더, 모드 수, 파일 크기)
+  - ✅ 프로필 이름 입력 (기본값: 모드팩 이름)
+  - ✅ 실시간 진행률 표시 (validating → extracting → installing_mods → complete)
+  - ✅ 에러 처리 및 사용자 안내
+  - ✅ 프로필 자동 생성 후 모드팩 설치
 
 ### Phase 2: 모드 관리 UI 개선
 1. **모드 브라우저 페이지**

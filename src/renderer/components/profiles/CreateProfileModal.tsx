@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { X, Loader2, Package, Settings } from 'lucide-react';
+import { X, Loader2, Package, Settings, FileArchive } from 'lucide-react';
 import { ModpackSearchModal } from '../modpack/ModpackSearchModal';
+import { ImportModpackTab } from './ImportModpackTab';
 
 interface CreateProfileModalProps {
   onClose: () => void;
@@ -16,7 +17,7 @@ interface JavaInstallation {
 }
 
 export function CreateProfileModal({ onClose, onSuccess }: CreateProfileModalProps) {
-  const [tab, setTab] = useState<'custom' | 'modpack'>('custom');
+  const [tab, setTab] = useState<'custom' | 'modpack' | 'import'>('custom');
   const [showModpackSearch, setShowModpackSearch] = useState(false);
   
   const [versions, setVersions] = useState<string[]>([]);
@@ -213,26 +214,38 @@ export function CreateProfileModal({ onClose, onSuccess }: CreateProfileModalPro
             <button
               type="button"
               onClick={() => setTab('custom')}
-              className={`flex-1 py-2 px-4 rounded-md font-medium transition-all flex items-center justify-center gap-2 ${
+              className={`flex-1 py-2 px-3 rounded-md font-medium transition-all flex items-center justify-center gap-2 text-sm ${
                 tab === 'custom'
                   ? 'bg-purple-600 text-white shadow-lg'
                   : 'text-gray-400 hover:text-white hover:bg-gray-700'
               }`}
             >
               <Settings className="w-4 h-4" />
-              커스텀 프로필
+              커스텀
             </button>
             <button
               type="button"
               onClick={() => setTab('modpack')}
-              className={`flex-1 py-2 px-4 rounded-md font-medium transition-all flex items-center justify-center gap-2 ${
+              className={`flex-1 py-2 px-3 rounded-md font-medium transition-all flex items-center justify-center gap-2 text-sm ${
                 tab === 'modpack'
                   ? 'bg-purple-600 text-white shadow-lg'
                   : 'text-gray-400 hover:text-white hover:bg-gray-700'
               }`}
             >
               <Package className="w-4 h-4" />
-              모드팩
+              온라인
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab('import')}
+              className={`flex-1 py-2 px-3 rounded-md font-medium transition-all flex items-center justify-center gap-2 text-sm ${
+                tab === 'import'
+                  ? 'bg-purple-600 text-white shadow-lg'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700'
+              }`}
+            >
+              <FileArchive className="w-4 h-4" />
+              파일
             </button>
           </div>
 
@@ -502,7 +515,7 @@ export function CreateProfileModal({ onClose, onSuccess }: CreateProfileModalPro
               <div className="bg-gradient-to-br from-purple-900/30 to-pink-900/30 border border-purple-800/50 rounded-lg p-6 text-center">
                 <Package className="w-16 h-16 mx-auto mb-4 text-purple-400" />
                 <h3 className="text-xl font-bold text-white mb-2">
-                  모드팩에서 프로필 생성
+                  온라인 모드팩 검색
                 </h3>
                 <p className="text-gray-300 mb-6">
                   Modrinth에서 모드팩을 검색하고 자동으로 프로필을 생성합니다
@@ -534,6 +547,11 @@ export function CreateProfileModal({ onClose, onSuccess }: CreateProfileModalPro
                 취소
               </button>
             </div>
+          )}
+
+          {/* Import Tab */}
+          {tab === 'import' && (
+            <ImportModpackTab onSuccess={onSuccess} />
           )}
         </div>
       </div>

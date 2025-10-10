@@ -71,8 +71,11 @@ export const IPC_CHANNELS = {
   MODPACK_INSTALL: 'modpack:install',
   MODPACK_CHECK_UPDATE: 'modpack:check-update',
   MODPACK_UPDATE: 'modpack:update',
+  MODPACK_VALIDATE_FILE: 'modpack:validate-file',
+  MODPACK_EXTRACT_METADATA: 'modpack:extract-metadata',
   MODPACK_IMPORT_FILE: 'modpack:import-file',
   MODPACK_IMPORT_URL: 'modpack:import-url',
+  MODPACK_SELECT_FILE: 'modpack:select-file',
   
   // Version
   VERSION_MINECRAFT_LIST: 'version:minecraft-list',
@@ -124,6 +127,7 @@ export const IPC_EVENTS = {
   
   // Modpack Events
   MODPACK_INSTALL_PROGRESS: 'modpack:install-progress',
+  MODPACK_IMPORT_PROGRESS: 'modpack:import-progress',
   
   // System Events
   SYSTEM_ERROR: 'system:error',

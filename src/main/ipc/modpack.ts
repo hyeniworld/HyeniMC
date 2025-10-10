@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { ipcMain, dialog } from 'electron';
 import { IPC_CHANNELS } from '../../shared/constants';
 import { ModpackManager } from '../services/modpack-manager';
 import { getProfileInstanceDir } from '../utils/paths';
@@ -53,6 +53,78 @@ export function registerModpackHandlers(): void {
       return { success: true };
     } catch (error) {
       console.error('[IPC Modpack] Failed to install modpack:', error);
+      throw error;
+    }
+  });
+
+  // Validate modpack file
+  ipcMain.handle(IPC_CHANNELS.MODPACK_VALIDATE_FILE, async (_event, filePath: string) => {
+    try {
+      console.log(`[IPC Modpack] Validating file: ${filePath}`);
+      const fileInfo = await modpackManager.validateModpackFile(filePath);
+      return fileInfo;
+    } catch (error) {
+      console.error('[IPC Modpack] Failed to validate file:', error);
+      throw error;
+    }
+  });
+
+  // Extract modpack metadata
+  ipcMain.handle(IPC_CHANNELS.MODPACK_EXTRACT_METADATA, async (_event, filePath: string) => {
+    try {
+      console.log(`[IPC Modpack] Extracting metadata from: ${filePath}`);
+      const metadata = await modpackManager.extractModpackMetadata(filePath);
+      return metadata;
+    } catch (error) {
+      console.error('[IPC Modpack] Failed to extract metadata:', error);
+      throw error;
+    }
+  });
+
+  // Import modpack from file
+  ipcMain.handle(
+    IPC_CHANNELS.MODPACK_IMPORT_FILE,
+    async (event, filePath: string, profileName: string, instanceDir: string) => {
+      try {
+        console.log(`[IPC Modpack] Importing modpack from file: ${filePath}`);
+        console.log(`[IPC Modpack] Profile: ${profileName}, Instance: ${instanceDir}`);
+
+        await modpackManager.importModpackFromFile(filePath, profileName, instanceDir, (progress) => {
+          // Send progress updates to renderer
+          event.sender.send('modpack:import-progress', progress);
+        });
+
+        console.log('[IPC Modpack] Modpack import complete');
+        return { success: true };
+      } catch (error) {
+        console.error('[IPC Modpack] Failed to import modpack:', error);
+        throw error;
+      }
+    }
+  );
+
+  // Open file dialog for modpack selection
+  ipcMain.handle(IPC_CHANNELS.MODPACK_SELECT_FILE, async () => {
+    try {
+      const result = await dialog.showOpenDialog({
+        title: '모드팩 파일 선택',
+        filters: [
+          {
+            name: 'Modpack Files',
+            extensions: ['zip', 'mrpack'],
+          },
+          { name: 'All Files', extensions: ['*'] },
+        ],
+        properties: ['openFile'],
+      });
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return null;
+      }
+
+      return result.filePaths[0];
+    } catch (error) {
+      console.error('[IPC Modpack] Failed to open file dialog:', error);
       throw error;
     }
   });
