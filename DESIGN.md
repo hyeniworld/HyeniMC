@@ -19,13 +19,28 @@
 혜니월드 전용 마인크래프트 런처로, 프로필 기반 인스턴스 관리와 모드팩 지원을 제공하는 크로스 플랫폼 애플리케이션
 
 ### 주요 기능
-- ✅ 프로필 기반 마인크래프트 인스턴스 관리
-- ✅ Modrinth 기반 모드팩 지원
-- ✅ 모드 자동 업데이트 (강제/선택적)
-- ✅ 멀티플랫폼 지원 (Windows, macOS including Apple Silicon)
-- ✅ 다양한 프로필 생성 방법 (수동, 모드팩, 외부 런처 가져오기)
-- 🔜 혜니월드 인증 연동 (추후 구현)
-- 🔜 SPA(Single Packet Authorization) 연동 (추후 구현)
+- ✅ **프로필 기반 마인크래프트 인스턴스 관리**
+  - 프로필 CRUD, 고급 설정 (메모리, Java, 해상도, JVM 인자)
+  - 게임 실행 설정 적용, 연타 방지
+- ✅ **모드팩 지원**
+  - Modrinth 온라인 모드팩 설치
+  - **로컬 파일 설치** (드래그 & 드롭, .mrpack/.zip)
+  - 5가지 형식 지원: Modrinth, CurseForge, MultiMC, Prism, ATLauncher
+  - 자동 메타데이터 추출 및 검증
+- ✅ **모드 관리**
+  - Modrinth/CurseForge 모드 검색 & 설치
+  - 모드 업데이트 확인 (의존성 자동 해결)
+  - 리소스팩/셰이더팩 관리
+- ✅ **멀티플랫폼 지원**
+  - Windows x64, macOS (Intel + Apple Silicon)
+  - Java 자동 감지 (아키텍처 정확한 감지)
+- ✅ **모드 로더 지원**
+  - Vanilla, Fabric, NeoForge, Quilt
+- ✅ **계정 관리**
+  - Microsoft OAuth (승인 대기), 오프라인 계정
+- 🔜 **혜니월드 통합** (추후)
+  - 혜니월드 인증 연동
+  - SPA(Single Packet Authorization) 연동
 
 ---
 
@@ -2125,6 +2140,31 @@ CREATE INDEX idx_source ON cache(source);
 
 ---
 
+## 최근 주요 업데이트 (2025-01-10)
+
+### ✅ 모드팩 로컬 파일 설치 기능 완성
+- **파일 형식 지원**: Modrinth (.mrpack), CurseForge (.zip), MultiMC, Prism, ATLauncher
+- **파일 검증**: ZIP 유효성, 형식 자동 감지
+- **메타데이터 추출**: 이름, 버전, 게임 버전, 로더, 모드 수, 파일 크기
+- **UI**: 드래그 & 드롭, 파일 선택 버튼, 메타데이터 미리보기, 진행률 표시
+- **통합**: 프로필 생성 모달의 "파일" 탭으로 통합 (커스텀/온라인/파일 3개 탭)
+
+### ✅ 프로필 설정 페이지 대폭 개선
+- **메모리 설정**: 슬라이더 UI, 시각화 바, 시스템 메모리 정보, MB/GB 자동 변환
+- **Java 설정**: 모든 감지된 Java 표시, 아키텍처 정확한 감지 (x64/arm64), 재감지 버튼
+- **JVM 인자**: Textarea 편집기, 실시간 적용
+- **창 설정**: 전체화면 토글, 해상도 프리셋 (480p~4K), 커스텀 해상도
+- **게임 실행 적용**: 설정이 실제 게임 실행 시 적용됨 (--width, --height, --fullscreen)
+- **아이콘 선택**: 15개 이모지 프리셋
+
+### ✅ 버그 수정 및 개선
+- **게임 실행 연타 방지**: "시작 중..." 상태 추가로 중복 실행 차단
+- **Java 아키텍처 정확한 감지**: 디렉토리 이름 분석 + `file` 명령어로 바이너리 분석
+- **해상도 설정 저장/적용**: Go 백엔드 Resolution 필드 추가, 게임 실행 시 적용
+- **필드명 일치**: TypeScript/Go 간 필드명 통일 (memory.min/max, resolution.width/height)
+
+---
+
 ## 개발 로드맵
 
 ### Phase 1: 프로젝트 초기화 및 기본 구조 (1-2주)
@@ -2141,6 +2181,7 @@ CREATE INDEX idx_source ON cache(source);
 - [x] 프로필 UI (목록, 생성, 편집)
 - [x] 프로필 상세 페이지 (탭 네비게이션)
 - [x] 프로필 데이터 영속성
+- [x] **프로필 설정 고급 기능** (메모리, Java, JVM 인자, 해상도, 전체화면)
 - [ ] 프로필 복제 기능
 - [ ] 프로필 내보내기 기능
 
@@ -2148,7 +2189,7 @@ CREATE INDEX idx_source ON cache(source);
 - [x] VersionManager 구현
 - [x] MinecraftService 구현
 - [x] JavaManager 구현
-- [x] Java 자동 감지
+- [x] Java 자동 감지 (아키텍처 정확한 감지: x64/arm64)
 - [x] 버전 선택 UI
 
 ### Phase 4: 기본 게임 실행 (2-3주)
@@ -2157,6 +2198,8 @@ CREATE INDEX idx_source ON cache(source);
 - [x] 게임 로그 수집
 - [x] 게임 콘솔 UI
 - [x] 프로세스 관리
+- [x] **게임 실행 설정 적용** (해상도, 전체화면, JVM 인자)
+- [x] **게임 실행 버튼 연타 방지**
 
 ### Phase 5: 모드 로더 지원 (2-3주)
 - [x] Fabric 로더 설치 및 실행
@@ -2187,7 +2230,7 @@ CREATE INDEX idx_source ON cache(source);
 - [x] 의존성 해결
 
 ### Phase 8: 계정 관리 시스템 (1-2주)
-- [ ] Microsoft OAuth 2.0 구현 (심사 대기 중)
+- [x] Microsoft OAuth 2.0 구현
 - [x] AccountManager 구현
 - [x] 다중 계정 지원
 - [x] 오프라인 계정 지원
@@ -2203,17 +2246,25 @@ CREATE INDEX idx_source ON cache(source);
 ### Phase 10: 모드팩 지원 (3-4주)
 - [x] ModpackManager 구현
 - [x] 모드팩 검색
-- [x] 모드팩 설치
+- [x] 모드팩 설치 (온라인)
+- [x] **모드팩 로컬 파일 설치** (드래그 & 드롭, 파일 선택)
 - [x] 모드팩 파싱 (Modrinth)
+- [x] **모드팩 파일 검증 및 메타데이터 추출**
 - [ ] 모드팩 업데이트
 - [x] 모드팩 UI
 
 ### Phase 11: 외부 런처 가져오기 (2주)
-- [ ] MultiMC 프로필 파싱
-- [ ] Prism Launcher 프로필 파싱
-- [ ] ATLauncher 프로필 파싱
-- [ ] 프로필 변환
-- [ ] 가져오기 UI
+- [x] **ZIP 파일 형식 지원** (모드팩 임포트 기능의 일부)
+  - [x] MultiMC ZIP 파일 파싱
+  - [x] Prism Launcher ZIP 파일 파싱
+  - [x] ATLauncher ZIP 파일 파싱
+  - [x] CurseForge 모드팩 파싱 (overrides)
+  - [x] 프로필 변환 및 가져오기 UI
+- [ ] **설치된 런처 직접 가져오기** (미구현)
+  - [ ] MultiMC/Prism 설치 경로 자동 탐지
+  - [ ] 설치된 인스턴스 목록 스캔
+  - [ ] 인스턴스 선택 UI
+  - [ ] ZIP 없이 직접 복사
 
 ### Phase 12: 캐싱 시스템 및 고급 기능 (2-3주)
 - [ ] **캐싱 시스템 (Phase 1 - 핵심)**
@@ -2267,6 +2318,150 @@ CREATE INDEX idx_source ON cache(source);
 - [ ] 토큰 관리
 - [ ] SPA 패킷 생성
 - [ ] 서버 직접 접속
+
+### Phase 16: 테마 시스템 ⭐ (2-3주)
+
+#### 기본 테마 시스템
+- [ ] **테마 인프라**
+  - [ ] ThemeProvider 컨텍스트 구현
+  - [ ] CSS 변수 기반 색상 시스템
+  - [ ] 테마 설정 파일 구조 (JSON/YAML)
+  - [ ] 테마 전환 애니메이션
+  - [ ] 다크/라이트 모드 지원
+
+#### 커스터마이징 옵션
+- [ ] **색상 커스터마이징**
+  - [ ] 주요 색상 (Primary, Secondary, Accent)
+  - [ ] 배경색 (Background, Surface, Card)
+  - [ ] 텍스트 색상 (Primary, Secondary, Disabled)
+  - [ ] 강조색 (Success, Warning, Error, Info)
+
+- [ ] **배경 이미지 & 오버레이**
+  - [ ] 전체 배경 이미지 설정
+  - [ ] 반투명 오버레이 (블러, 어두움)
+  - [ ] 섹션별 배경 이미지
+  - [ ] 애니메이션 배경 (입자, 그래디언트)
+
+- [ ] **커스텀 요소 배치**
+  - [ ] 헤더/푸터 커스텀 이미지
+  - [ ] 사이드바 데코레이션
+  - [ ] 프로필 카드 배경
+  - [ ] 로딩 화면 커스터마이징
+
+#### 강혜니 전용 테마 ("Hyeni Theme")
+- [ ] **공식 테마 제작**
+  - [ ] 메인 색상: 보라/핑크 그래디언트
+  - [ ] 캐릭터 일러스트 배치
+    - 메인 화면 좌/우측 데코레이션
+    - 프로필 생성 모달 배경
+    - 게임 실행 중 로딩 화면
+  - [ ] 커스텀 로고 & 아이콘
+  - [ ] 전용 폰트 (선택적)
+  - [ ] 사운드 이펙트 (버튼 클릭 등)
+
+- [ ] **인터랙티브 요소**
+  - [ ] 마우스 호버 이펙트
+  - [ ] 클릭 시 반짝임/파티클
+  - [ ] 스크롤 패럴랙스 효과
+  - [ ] 페이지 전환 애니메이션
+
+#### 고급 커스터마이징
+- [ ] **프레임 시스템** (선택적)
+  - [ ] 레이아웃 프리셋 (Grid, Flex)
+  - [ ] 드래그 앤 드롭 요소 배치
+  - [ ] 커스텀 위젯 추가
+    - 시계
+    - 트위치 라이브 상태
+    - 디스코드 상태
+  - [ ] 위젯 크기/위치 조절
+
+- [ ] **테마 편집기 UI**
+  - [ ] 실시간 미리보기
+  - [ ] 색상 피커
+  - [ ] 이미지 업로드
+  - [ ] 요소 위치 조정 (드래그)
+  - [ ] 테마 내보내기/가져오기 (.json)
+
+#### 커뮤니티 기능
+- [ ] **테마 공유** (추후)
+  - [ ] 테마 갤러리
+  - [ ] 커뮤니티 테마 다운로드
+  - [ ] 평점 시스템
+  - [ ] 테마 작가 크레딧
+
+#### 기술 구현
+```typescript
+// 테마 설정 예시
+interface Theme {
+  id: string;
+  name: string;
+  author: string;
+  version: string;
+  
+  // 색상
+  colors: {
+    primary: string;
+    secondary: string;
+    accent: string;
+    background: string;
+    surface: string;
+    text: {
+      primary: string;
+      secondary: string;
+    };
+  };
+  
+  // 이미지
+  images: {
+    background?: string;      // 전체 배경
+    logo?: string;            // 로고
+    profileCard?: string;     // 프로필 카드 배경
+    decorations?: {           // 데코레이션
+      position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+      image: string;
+      width: number;
+      height: number;
+      opacity?: number;
+      animation?: 'float' | 'pulse' | 'none';
+    }[];
+  };
+  
+  // 레이아웃
+  layout?: {
+    profilesGrid: 'comfortable' | 'compact' | 'detailed';
+    sidebarWidth: number;
+    headerHeight: number;
+  };
+  
+  // 효과
+  effects?: {
+    backgroundBlur?: number;
+    cardShadow?: boolean;
+    animations?: boolean;
+    particles?: boolean;
+  };
+}
+```
+
+#### 파일 구조
+```
+src/
+  themes/
+    default.json          # 기본 테마
+    hyeni-official.json   # 강혜니 공식 테마
+    dark.json            # 다크 테마
+    light.json           # 라이트 테마
+  
+  contexts/
+    ThemeContext.tsx     # 테마 Provider
+  
+  components/
+    ThemeEditor/         # 테마 편집기
+      ColorPicker.tsx
+      ImageUploader.tsx
+      LayoutEditor.tsx
+      PreviewPanel.tsx
+```
 
 ---
 
