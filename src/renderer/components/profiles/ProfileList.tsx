@@ -12,6 +12,7 @@ export function ProfileList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [runningProfiles, setRunningProfiles] = useState<Set<string>>(new Set());
+  const [launchingProfiles, setLaunchingProfiles] = useState<Set<string>>(new Set());
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [downloadState, setDownloadState] = useState<{
     isOpen: boolean;
@@ -48,6 +49,12 @@ export function ProfileList() {
       console.log('[ProfileList] Game started:', data);
       if (data.versionId) {
         setRunningProfiles(prev => new Set(prev).add(data.versionId));
+        // Remove from launching when started
+        setLaunchingProfiles(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(data.versionId);
+          return newSet;
+        });
       }
     });
 
@@ -97,6 +104,15 @@ export function ProfileList() {
         return;
       }
 
+      // Check if already launching
+      if (launchingProfiles.has(profileId)) {
+        console.log('[ProfileList] Profile is already launching:', profileId);
+        return;
+      }
+
+      // Mark as launching
+      setLaunchingProfiles(prev => new Set(prev).add(profileId));
+
       // Show download modal
       setDownloadState({
         isOpen: true,
@@ -140,6 +156,13 @@ export function ProfileList() {
           error: err instanceof Error ? err.message : '알 수 없는 오류',
         }));
         
+        // Remove from launching on error
+        setLaunchingProfiles(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(profileId);
+          return newSet;
+        });
+        
         // Auto close after 5 seconds on error
         setTimeout(() => {
           setDownloadState({
@@ -154,6 +177,12 @@ export function ProfileList() {
       }
     } catch (err) {
       console.error('Failed to launch profile:', err);
+      // Remove from launching on error
+      setLaunchingProfiles(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(profileId);
+        return newSet;
+      });
       // Close modal on error
       setDownloadState({
         isOpen: false,
@@ -306,7 +335,15 @@ export function ProfileList() {
 
               {/* Actions */}
               <div className="flex items-center gap-2">
-                {runningProfiles.has(profile.id) ? (
+                {launchingProfiles.has(profile.id) ? (
+                  <button
+                    disabled
+                    className="flex-1 flex items-center justify-center gap-2 py-3 font-semibold bg-gray-700 text-gray-400 rounded-lg shadow-md cursor-not-allowed"
+                  >
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    시작 중...
+                  </button>
+                ) : runningProfiles.has(profile.id) ? (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();

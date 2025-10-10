@@ -16,6 +16,7 @@ export const ProfileDetailPage: React.FC = () => {
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isRunning, setIsRunning] = useState(false);
+  const [isLaunching, setIsLaunching] = useState(false);
 
   useEffect(() => {
     if (profileId) {
@@ -37,6 +38,7 @@ export const ProfileDetailPage: React.FC = () => {
       console.log('[ProfileDetail] Game started:', data);
       if (data.versionId === profileId) {
         setIsRunning(true);
+        setIsLaunching(false);
       }
     });
 
@@ -85,12 +87,20 @@ export const ProfileDetailPage: React.FC = () => {
       return;
     }
 
+    if (isLaunching) {
+      console.log('[ProfileDetail] Already launching');
+      return;
+    }
+
+    setIsLaunching(true);
+
     try {
       await window.electronAPI.profile.launch(profileId, selectedAccountId);
       // State will be updated by event listener
     } catch (error) {
       console.error('Failed to launch:', error);
       setIsRunning(false);
+      setIsLaunching(false);
       alert(error instanceof Error ? error.message : '게임 실행에 실패했습니다.');
     }
   };
@@ -165,7 +175,18 @@ export const ProfileDetailPage: React.FC = () => {
             </div>
           </div>
 
-          {isRunning ? (
+          {isLaunching ? (
+            <button
+              disabled
+              className="px-6 py-3 rounded-lg font-semibold bg-gray-600 text-gray-300 cursor-not-allowed flex items-center gap-2"
+            >
+              <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              시작 중...
+            </button>
+          ) : isRunning ? (
             <button
               onClick={handleStop}
               className="px-6 py-3 rounded-lg font-semibold transition-colors bg-red-600 hover:bg-red-700 text-white"
