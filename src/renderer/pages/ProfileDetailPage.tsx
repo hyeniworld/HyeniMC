@@ -316,11 +316,20 @@ const OverviewTab: React.FC<{ profile: any }> = ({ profile }) => {
 
 // Settings Tab
 const SettingsTab: React.FC<{ profile: any; onUpdate: () => void }> = ({ profile, onUpdate }) => {
-  const [minMemory, setMinMemory] = React.useState(profile?.minMemory || 512);
-  const [maxMemory, setMaxMemory] = React.useState(profile?.maxMemory || 4096);
+  const [minMemory, setMinMemory] = React.useState(profile?.memory?.min || 512);
+  const [maxMemory, setMaxMemory] = React.useState(profile?.memory?.max || 4096);
   const [javaPath, setJavaPath] = React.useState<string>('');
   const [customJavaPath, setCustomJavaPath] = React.useState(profile?.javaPath || '');
   const [saving, setSaving] = React.useState(false);
+
+  // Update state when profile changes
+  React.useEffect(() => {
+    if (profile) {
+      setMinMemory(profile.memory?.min || 512);
+      setMaxMemory(profile.memory?.max || 4096);
+      setCustomJavaPath(profile.javaPath || '');
+    }
+  }, [profile]);
 
   React.useEffect(() => {
     detectJava();
@@ -340,16 +349,25 @@ const SettingsTab: React.FC<{ profile: any; onUpdate: () => void }> = ({ profile
   const handleSave = async () => {
     setSaving(true);
     try {
-      await window.electronAPI.profile.update(profile.id, {
+      console.log('[Settings] Saving profile settings:', {
         minMemory,
         maxMemory,
         javaPath: customJavaPath,
       });
+      
+      const updated = await window.electronAPI.profile.update(profile.id, {
+        minMemory,
+        maxMemory,
+        javaPath: customJavaPath,
+      });
+      
+      console.log('[Settings] Profile updated:', updated);
+      
       alert('설정이 저장되었습니다.');
       onUpdate();
     } catch (error) {
       console.error('Failed to save settings:', error);
-      alert('설정 저장에 실패했습니다.');
+      alert('설정 저장에 실패했습니다: ' + (error instanceof Error ? error.message : String(error)));
     } finally {
       setSaving(false);
     }

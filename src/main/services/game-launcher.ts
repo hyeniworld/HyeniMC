@@ -169,6 +169,9 @@ export class GameLauncher {
     // Memory settings
     const minMemory = options.minMemory || 512;
     const maxMemory = options.maxMemory || 2048;
+    
+    console.log(`[Game Launcher] Memory settings: -Xms${minMemory}M -Xmx${maxMemory}M`);
+    
     args.push(`-Xms${minMemory}M`);
     args.push(`-Xmx${maxMemory}M`);
 

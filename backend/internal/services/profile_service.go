@@ -90,6 +90,9 @@ func (s *ProfileService) UpdateProfile(ctx context.Context, id string, updates m
 		return nil, err
 	}
 
+	fmt.Printf("[ProfileService] Updating profile %s with updates: %+v\n", id, updates)
+	fmt.Printf("[ProfileService] Current memory: min=%d, max=%d\n", profile.Memory.Min, profile.Memory.Max)
+
 	// Apply updates
 	if name, ok := updates["name"].(string); ok && name != "" {
 		profile.Name = name
@@ -115,6 +118,29 @@ func (s *ProfileService) UpdateProfile(ctx context.Context, id string, updates m
 	if serverAddr, ok := updates["serverAddress"].(string); ok {
 		profile.ServerAddress = serverAddr
 	}
+	
+	// Handle memory settings (support both minMemory/maxMemory and memory.min/memory.max formats)
+	if minMemory, ok := updates["minMemory"].(float64); ok {
+		fmt.Printf("[ProfileService] Setting min memory from minMemory: %f -> %d\n", minMemory, int32(minMemory))
+		profile.Memory.Min = int32(minMemory)
+	}
+	if maxMemory, ok := updates["maxMemory"].(float64); ok {
+		fmt.Printf("[ProfileService] Setting max memory from maxMemory: %f -> %d\n", maxMemory, int32(maxMemory))
+		profile.Memory.Max = int32(maxMemory)
+	}
+	// Also check nested memory object
+	if memory, ok := updates["memory"].(map[string]interface{}); ok {
+		if min, ok := memory["min"].(float64); ok {
+			fmt.Printf("[ProfileService] Setting min memory from memory.min: %f -> %d\n", min, int32(min))
+			profile.Memory.Min = int32(min)
+		}
+		if max, ok := memory["max"].(float64); ok {
+			fmt.Printf("[ProfileService] Setting max memory from memory.max: %f -> %d\n", max, int32(max))
+			profile.Memory.Max = int32(max)
+		}
+	}
+
+	fmt.Printf("[ProfileService] After updates, memory: min=%d, max=%d\n", profile.Memory.Min, profile.Memory.Max)
 
 	profile.UpdatedAt = time.Now()
 

@@ -64,6 +64,8 @@ export function registerProfileHandlers(): void {
   // Update profile
   ipcMain.handle(IPC_CHANNELS.PROFILE_UPDATE, async (event, id: string, data: Partial<Profile>) => {
     try {
+      console.log(`[IPC Profile] Updating profile ${id} with data:`, data);
+      
       const addr = getBackendAddress();
       if (!addr) {
         throw new Error('Backend server is not running');
@@ -71,6 +73,9 @@ export function registerProfileHandlers(): void {
 
       // TODO: Replace with gRPC client
       const response = await axios.patch(`http://${addr}/api/profiles/${id}`, data);
+      
+      console.log(`[IPC Profile] Profile updated successfully:`, response.data);
+      
       return response.data as Profile;
     } catch (error) {
       console.error('[IPC Profile] Update failed:', error);
@@ -312,14 +317,21 @@ export function registerProfileHandlers(): void {
         }
       }
 
+      // Get memory settings from profile (with defaults)
+      const minMemory = profile.memory?.min || 512;
+      const maxMemory = profile.memory?.max || 4096;
+      
+      // Use custom Java path if set, otherwise use detected Java
+      const javaPathToUse = profile.javaPath || java.path;
+
       // Launch game using IPC
       const launchOptions = {
         profileId: id,  // Pass profile ID for tracking
         versionId: actualVersionId,
-        javaPath: java.path,
+        javaPath: javaPathToUse,
         gameDir: instanceDir,
-        minMemory: 512,
-        maxMemory: 4096,
+        minMemory,
+        maxMemory,
         username,
         uuid,
         accessToken,
@@ -328,6 +340,8 @@ export function registerProfileHandlers(): void {
 
       console.log('[IPC Profile] Launching game with options:');
       console.log(`  - Version: ${actualVersionId}`);
+      console.log(`  - Java Path: ${javaPathToUse}`);
+      console.log(`  - Memory: ${minMemory}MB - ${maxMemory}MB`);
       console.log(`  - Username: ${username}`);
       console.log(`  - UUID: ${uuid}`);
       console.log(`  - User Type: ${userType}`);
