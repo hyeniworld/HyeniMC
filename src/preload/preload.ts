@@ -77,8 +77,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     install: (loaderType: string, minecraftVersion: string, loaderVersion: string): Promise<any> =>
       ipcRenderer.invoke(IPC_CHANNELS.LOADER_INSTALL, loaderType, minecraftVersion, loaderVersion),
     
-    checkInstalled: (loaderType: string, minecraftVersion: string, loaderVersion: string): Promise<any> =>
-      ipcRenderer.invoke(IPC_CHANNELS.LOADER_CHECK_INSTALLED, loaderType, minecraftVersion, loaderVersion),
+    checkInstalled: (loaderType: string, minecraftVersion: string, loaderVersion: string, profileId?: string): Promise<any> =>
+      ipcRenderer.invoke(IPC_CHANNELS.LOADER_CHECK_INSTALLED, loaderType, minecraftVersion, loaderVersion, profileId),
   },
 
   // Shell APIs

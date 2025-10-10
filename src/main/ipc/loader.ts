@@ -3,6 +3,7 @@ import { IPC_CHANNELS } from '../../shared/constants';
 import { LoaderManager } from '../services/loader-manager';
 import { LoaderType } from '../../shared/types/profile';
 import { app } from 'electron';
+import { getProfileInstanceDir } from '../utils/paths';
 import * as path from 'path';
 
 let loaderManager: LoaderManager | null = null;
@@ -94,27 +95,30 @@ export function registerLoaderHandlers(): void {
     }
   );
 
-  // 로더 설치 여부 확인
+  // 로더 설치 여부 확인 (프로필 기준 지원)
   ipcMain.handle(
     IPC_CHANNELS.LOADER_CHECK_INSTALLED,
     async (
       event,
       loaderType: LoaderType,
       minecraftVersion: string,
-      loaderVersion: string
+      loaderVersion: string,
+      profileId?: string
     ) => {
       try {
-        console.log(`[IPC Loader] Checking if ${loaderType} ${loaderVersion} is installed`);
+        console.log(`[IPC Loader] Checking if ${loaderType} ${loaderVersion} is installed` + (profileId ? ` for profile ${profileId}` : ''));
         const manager = getLoaderManager();
-        const gameDir = path.join(app.getPath('userData'), 'game');
-        
+        const gameDir = profileId
+          ? getProfileInstanceDir(profileId)
+          : path.join(app.getPath('userData'), 'game');
+
         const installed = await manager.isLoaderInstalled(
           loaderType,
           minecraftVersion,
           loaderVersion,
           gameDir
         );
-        
+
         return { success: true, installed };
       } catch (err) {
         console.error('[IPC Loader] Failed to check installation:', err);
