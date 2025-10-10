@@ -243,13 +243,13 @@ interface ModDependency {
 
 ```typescript
 interface Modpack {
-  id: string;                          // Modrinth/CurseForge ID
+  id: string;                          // Modrinth/CurseForge ID (로컬 파일의 경우 파일명 기반 UUID)
   slug: string;
   name: string;
   description: string;
   author: string;
   
-  source: 'modrinth' | 'curseforge';
+  source: 'modrinth' | 'curseforge' | 'local';
   
   iconUrl?: string;
   bannerUrl?: string;
@@ -779,7 +779,7 @@ class ModpackManager {
   async getModpack(id: string, source: 'modrinth' | 'curseforge'): Promise<Modpack>;
   async getModpackVersions(id: string, source: 'modrinth' | 'curseforge'): Promise<ModpackVersion[]>;
   
-  // 모드팩 설치
+  // 모드팩 설치 (온라인)
   async installModpack(
     modpackId: string,
     versionId: string,
@@ -788,8 +788,14 @@ class ModpackManager {
     onProgress?: ModpackInstallProgress
   ): Promise<Profile>;
   
-  async importModpackFromFile(filePath: string, profileName: string, onProgress?: ModpackInstallProgress): Promise<Profile>;
+  // 모드팩 설치 (로컬 파일)
+  async importModpackFromFile(filePath: string, profileName?: string, onProgress?: ModpackInstallProgress): Promise<Profile>;
   async importModpackFromUrl(url: string, profileName: string, onProgress?: ModpackInstallProgress): Promise<Profile>;
+  
+  // 로컬 파일 검증 및 분석
+  async validateModpackFile(filePath: string): Promise<ModpackFileInfo>;
+  async detectModpackFormat(filePath: string): Promise<ModpackFormat>;
+  async extractModpackMetadata(filePath: string): Promise<ModpackMetadata>;
   
   // 모드팩 업데이트
   async checkModpackUpdate(profileId: string): Promise<ModpackUpdate | null>;
@@ -813,10 +819,30 @@ interface ModpackSearchFilters {
 }
 
 interface ModpackInstallProgress {
-  stage: 'downloading' | 'extracting' | 'installing-loader' | 'installing-mods' | 'finalizing';
+  stage: 'validating' | 'downloading' | 'extracting' | 'installing-loader' | 'installing-mods' | 'finalizing';
   progress: number;
   currentFile?: string;
   totalFiles?: number;
+}
+
+interface ModpackFileInfo {
+  valid: boolean;
+  format: ModpackFormat;
+  fileSize: number;
+  errors?: string[];
+}
+
+type ModpackFormat = 'modrinth' | 'curseforge' | 'multimc' | 'prism' | 'atlauncher' | 'unknown';
+
+interface ModpackMetadata {
+  name: string;
+  version?: string;
+  author?: string;
+  gameVersion: string;
+  loaderType: LoaderType;
+  loaderVersion?: string;
+  modCount?: number;
+  fileSize: number;
 }
 
 interface ModpackUpdate {
@@ -1035,12 +1061,24 @@ ipcRenderer.invoke('modpack:search', query: string, filters: ModpackSearchFilter
 // 모드팩 상세
 ipcRenderer.invoke('modpack:get', modpackId: string, source: 'modrinth' | 'curseforge'): Promise<Modpack>
 
-// 모드팩 설치
+// 모드팩 설치 (온라인)
 ipcRenderer.invoke('modpack:install', {
   modpackId: string,
   versionId: string,
   source: 'modrinth' | 'curseforge',
   profileName: string
+}): Promise<Profile>
+
+// 모드팩 파일 검증
+ipcRenderer.invoke('modpack:validate-file', filePath: string): Promise<ModpackFileInfo>
+
+// 모드팩 메타데이터 추출
+ipcRenderer.invoke('modpack:extract-metadata', filePath: string): Promise<ModpackMetadata>
+
+// 모드팩 설치 (로컬 파일)
+ipcRenderer.invoke('modpack:import-file', {
+  filePath: string,
+  profileName?: string
 }): Promise<Profile>
 
 // 모드팩 업데이트 확인
@@ -1182,11 +1220,29 @@ ipcRenderer.on('mod:updates-available', (event, data: {
 - 고급 설정 (메모리, JVM 인자 등)
 
 **탭 2: 모드팩 설치**
+
+**방법 1: 온라인 검색**
 - 검색바
 - 모드팩 카드 그리드
 - 필터 (버전, 로더, 카테고리)
 - 모드팩 상세 정보
 - 버전 선택
+- 설치 버튼
+
+**방법 2: 로컬 파일**
+- "파일 선택" 버튼
+- 지원 형식 안내
+  - Modrinth 모드팩 (.mrpack)
+  - CurseForge 모드팩 (.zip)
+  - MultiMC/Prism 인스턴스 (.zip)
+  - ATLauncher 인스턴스 (.zip)
+- 파일 선택 후 메타데이터 표시
+  - 모드팩 이름
+  - 마인크래프트 버전
+  - 로더 타입 및 버전
+  - 포함된 모드 수
+  - 파일 크기
+- 프로필 이름 입력 (선택적, 기본값: 모드팩 이름)
 - 설치 버튼
 
 **탭 3: 가져오기**
@@ -1371,7 +1427,12 @@ ipcRenderer.on('mod:updates-available', (event, data: {
 │   │   ├── forge.json
 │   │   └── neoforge.json
 │   ├── mods/                        # 모드 메타데이터 캐시
-│   └── modpacks/                    # 모드팩 캐시
+│   └── modpacks/                    # 모드팩 메타데이터 캐시
+├── temp/                            # 임시 파일
+│   ├── modpack-import/              # 모드팩 임포트 임시 디렉토리
+│   │   ├── extracted/               # 압축 해제된 모드팩 파일
+│   │   └── downloads/               # 모드팩 모드 다운로드 중
+│   └── file-validation/             # 파일 검증 임시 디렉토리
 ├── runtime/                         # 런타임 파일
 │   ├── java/                        # 다운로드된 Java
 │   │   ├── java-17-x64/
@@ -1462,6 +1523,315 @@ ipcRenderer.on('mod:updates-available', (event, data: {
   "serverAddress": null
 }
 ```
+
+### 모드팩 파일 형식
+
+로컬 파일에서 모드팩을 설치할 때 지원하는 형식과 처리 방법
+
+#### 1. Modrinth 모드팩 (.mrpack)
+
+**파일 구조**:
+```
+modpack.mrpack (ZIP 압축)
+├── modrinth.index.json          # 모드팩 매니페스트
+├── overrides/                   # 커스텀 파일
+│   ├── config/
+│   ├── mods/                    # 외부 모드 (Modrinth에 없는 모드)
+│   ├── resourcepacks/
+│   └── ...
+└── client-overrides/            # 클라이언트 전용 (선택적)
+```
+
+**modrinth.index.json 구조**:
+```json
+{
+  "formatVersion": 1,
+  "game": "minecraft",
+  "versionId": "abc123",
+  "name": "Example Modpack",
+  "summary": "A cool modpack",
+  "files": [
+    {
+      "path": "mods/fabric-api.jar",
+      "hashes": {
+        "sha1": "...",
+        "sha512": "..."
+      },
+      "env": {
+        "client": "required",
+        "server": "required"
+      },
+      "downloads": [
+        "https://cdn.modrinth.com/data/.../fabric-api.jar"
+      ],
+      "fileSize": 2048576
+    }
+  ],
+  "dependencies": {
+    "minecraft": "1.20.1",
+    "fabric-loader": "0.15.0"
+  }
+}
+```
+
+**처리 순서**:
+1. `.mrpack` 파일 압축 해제
+2. `modrinth.index.json` 파싱
+3. `dependencies`에서 게임 버전 및 로더 정보 추출
+4. `files` 배열에서 모드 목록 확인
+5. 각 모드 다운로드 (병렬 처리)
+6. `overrides` 폴더 내용을 게임 디렉토리에 복사
+7. 프로필 생성 및 메타데이터 저장
+
+#### 2. CurseForge 모드팩 (.zip)
+
+**파일 구조**:
+```
+modpack.zip
+├── manifest.json                # 모드팩 매니페스트
+├── modlist.html                 # 모드 목록 (선택적)
+└── overrides/                   # 커스텀 파일
+    ├── config/
+    ├── mods/                    # 외부 모드
+    ├── scripts/
+    └── ...
+```
+
+**manifest.json 구조**:
+```json
+{
+  "minecraft": {
+    "version": "1.20.1",
+    "modLoaders": [
+      {
+        "id": "forge-47.1.0",
+        "primary": true
+      }
+    ]
+  },
+  "manifestType": "minecraftModpack",
+  "manifestVersion": 1,
+  "name": "Example Modpack",
+  "version": "1.0.0",
+  "author": "Author Name",
+  "files": [
+    {
+      "projectID": 12345,
+      "fileID": 67890,
+      "required": true
+    }
+  ],
+  "overrides": "overrides"
+}
+```
+
+**처리 순서**:
+1. `.zip` 파일 압축 해제
+2. `manifest.json` 파싱 및 검증
+3. `minecraft.version` 및 `modLoaders`에서 버전 정보 추출
+4. `files` 배열의 각 항목에 대해:
+   - CurseForge API로 프로젝트 정보 조회
+   - 파일 다운로드 URL 획득
+   - 모드 다운로드
+5. `overrides` 폴더 내용을 게임 디렉토리에 복사
+6. 프로필 생성
+
+**주의사항**:
+- CurseForge API 키 필요 (사용자 설정에서 입력)
+- projectID와 fileID가 유효한지 확인
+- 일부 모드는 다운로드 제한이 있을 수 있음
+
+#### 3. MultiMC/Prism 인스턴스 (.zip)
+
+**파일 구조**:
+```
+instance.zip
+├── instance.cfg                 # 인스턴스 설정
+├── mmc-pack.json               # 메타데이터 (선택적)
+├── minecraft/
+│   ├── config/
+│   ├── mods/
+│   ├── resourcepacks/
+│   └── ...
+└── patches/                     # 버전 패치 (선택적)
+    ├── net.minecraft.json
+    └── net.fabricmc.fabric-loader.json
+```
+
+**instance.cfg 구조**:
+```ini
+InstanceType=OneSix
+IntendedVersion=1.20.1
+name=Example Instance
+iconKey=default
+notes=
+lastLaunchTime=0
+totalTimePlayed=0
+OverrideCommands=false
+OverrideConsole=false
+OverrideJavaArgs=false
+OverrideJavaLocation=false
+OverrideMemory=false
+```
+
+**mmc-pack.json 구조** (있는 경우):
+```json
+{
+  "components": [
+    {
+      "uid": "net.minecraft",
+      "version": "1.20.1"
+    },
+    {
+      "uid": "net.fabricmc.fabric-loader",
+      "version": "0.15.0"
+    }
+  ],
+  "formatVersion": 1
+}
+```
+
+**처리 순서**:
+1. `.zip` 파일 압축 해제
+2. `instance.cfg` 또는 `mmc-pack.json` 파싱
+3. 버전 정보 추출
+4. `minecraft` 폴더의 내용을 새 프로필 디렉토리로 복사
+5. `mods` 폴더의 JAR 파일들을 분석하여 Mod 메타데이터 생성
+6. 프로필 생성
+
+#### 4. ATLauncher 인스턴스 (.zip)
+
+**파일 구조**:
+```
+instance.zip
+├── instance.json               # 인스턴스 정보
+├── config/
+├── mods/
+├── resourcepacks/
+└── ...
+```
+
+**instance.json 구조**:
+```json
+{
+  "launcher": {
+    "name": "ATLauncher",
+    "version": "3.4.0.0"
+  },
+  "minecraft": "1.20.1",
+  "id": "ExamplePack1",
+  "name": "Example Pack",
+  "mainClass": "net.minecraft.launchwrapper.Launch",
+  "libraries": [...],
+  "mods": [
+    {
+      "name": "Fabric API",
+      "version": "0.92.0",
+      "file": "fabric-api-0.92.0.jar",
+      "type": "mods"
+    }
+  ]
+}
+```
+
+**처리 순서**:
+1. `.zip` 파일 압축 해제
+2. `instance.json` 파싱
+3. `minecraft` 및 로더 버전 정보 추출
+4. 모든 파일을 새 프로필 디렉토리로 복사
+5. `mods` 배열에서 모드 메타데이터 생성
+6. 프로필 생성
+
+#### 파일 검증 로직
+
+```typescript
+async function validateModpackFile(filePath: string): Promise<ModpackFileInfo> {
+  // 1. 파일 존재 및 크기 확인
+  const stats = await fs.stat(filePath);
+  if (stats.size === 0) {
+    return { valid: false, format: 'unknown', fileSize: 0, errors: ['파일이 비어있습니다'] };
+  }
+  
+  // 2. ZIP 파일 여부 확인
+  let zip;
+  try {
+    zip = new AdmZip(filePath);
+  } catch (error) {
+    return { valid: false, format: 'unknown', fileSize: stats.size, errors: ['유효한 ZIP 파일이 아닙니다'] };
+  }
+  
+  // 3. 모드팩 형식 감지
+  const entries = zip.getEntries();
+  const fileNames = entries.map(e => e.entryName);
+  
+  // Modrinth 형식 (.mrpack)
+  if (filePath.endsWith('.mrpack') || fileNames.includes('modrinth.index.json')) {
+    const manifest = zip.readAsText('modrinth.index.json');
+    const data = JSON.parse(manifest);
+    return {
+      valid: true,
+      format: 'modrinth',
+      fileSize: stats.size,
+    };
+  }
+  
+  // CurseForge 형식
+  if (fileNames.includes('manifest.json')) {
+    const manifest = zip.readAsText('manifest.json');
+    const data = JSON.parse(manifest);
+    if (data.manifestType === 'minecraftModpack') {
+      return {
+        valid: true,
+        format: 'curseforge',
+        fileSize: stats.size,
+      };
+    }
+  }
+  
+  // MultiMC/Prism 형식
+  if (fileNames.includes('instance.cfg') || fileNames.includes('mmc-pack.json')) {
+    return {
+      valid: true,
+      format: fileNames.includes('mmc-pack.json') ? 'prism' : 'multimc',
+      fileSize: stats.size,
+    };
+  }
+  
+  // ATLauncher 형식
+  if (fileNames.includes('instance.json')) {
+    const manifest = zip.readAsText('instance.json');
+    const data = JSON.parse(manifest);
+    if (data.launcher?.name === 'ATLauncher') {
+      return {
+        valid: true,
+        format: 'atlauncher',
+        fileSize: stats.size,
+      };
+    }
+  }
+  
+  return {
+    valid: false,
+    format: 'unknown',
+    fileSize: stats.size,
+    errors: ['지원하지 않는 모드팩 형식입니다']
+  };
+}
+```
+
+#### 메타데이터 추출
+
+각 형식에서 공통적으로 추출해야 하는 정보:
+- **name**: 모드팩 이름
+- **version**: 모드팩 버전 (선택적)
+- **author**: 제작자 (선택적)
+- **gameVersion**: 마인크래프트 버전
+- **loaderType**: 로더 타입 (vanilla/fabric/forge/neoforge/quilt)
+- **loaderVersion**: 로더 버전 (선택적)
+- **modCount**: 포함된 모드 수 (대략)
+- **fileSize**: 파일 크기
+
+이 정보를 사용자에게 표시하여 설치 전 확인할 수 있도록 함.
 
 ---
 

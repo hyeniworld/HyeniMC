@@ -174,9 +174,43 @@ npm run dev
   - 업데이트 확인
   - 카테고리 목록
 
+## 🎯 최근 업데이트 (2025-10-10)
+
+### 설계 문서 개선
+- ✅ **모드팩 로컬 파일 설치 기능 설계 추가**
+  - Modrinth 모드팩 (.mrpack) 형식 지원
+  - CurseForge 모드팩 (.zip) 형식 지원
+  - MultiMC/Prism 인스턴스 임포트 지원
+  - ATLauncher 인스턴스 임포트 지원
+  - 파일 검증 및 메타데이터 추출 로직 설계
+  - 새로운 IPC API 정의:
+    - `modpack:validate-file` - 모드팩 파일 검증
+    - `modpack:extract-metadata` - 메타데이터 추출
+    - `modpack:import-file` - 로컬 파일로 설치
+  - UI 설계에 "파일 선택" 방식 추가
+
 ## 📋 다음 작업 (우선순위순)
 
-### Phase 1: 모드 관리 UI 구현 ⭐
+### Phase 1: 모드팩 로컬 파일 설치 구현 ⭐ (NEW!)
+1. **ModpackManager 확장**
+   - `validateModpackFile()` 구현
+   - `detectModpackFormat()` 구현
+   - `extractModpackMetadata()` 구현
+   - `importModpackFromFile()` 구현
+   - 각 형식별 파서 작성
+
+2. **IPC 핸들러 추가**
+   - `modpack:validate-file` 핸들러
+   - `modpack:extract-metadata` 핸들러
+   - `modpack:import-file` 핸들러
+
+3. **UI 구현**
+   - 파일 선택 버튼 및 드래그&드롭
+   - 메타데이터 미리보기 카드
+   - 진행률 표시
+   - 에러 처리 및 안내 메시지
+
+### Phase 2: 모드 관리 UI 개선
 1. **모드 브라우저 페이지**
    - 모드 검색 UI
    - 필터 (카테고리, 버전, 로더)
@@ -195,22 +229,17 @@ npm run dev
    - 모드 업데이트 확인
    - 의존성 자동 해결
 
-4. **IPC 핸들러**
-   - 모드 검색
-   - 모드 설치/제거
-   - 모드 업데이트
-
-### Phase 2: 모드팩 지원
+### Phase 3: 온라인 모드팩 지원 강화
 1. **Modrinth 모드팩**
-   - 모드팩 검색
-   - 모드팩 설치
-   - 프로필 자동 생성
+   - 모드팩 검색 UI 개선
+   - 모드팩 상세 페이지
+   - 버전 선택 UI
 
-2. **CurseForge 모드팩** (선택)
-   - API 키 설정
-   - 모드팩 임포트
+2. **CurseForge 모드팩**
+   - API 키 설정 UI
+   - 검색 및 설치
 
-### Phase 3: 고급 기능
+### Phase 4: 고급 기능
 1. **설정 페이지**
    - 전역 Java 설정
    - 메모리 기본값
