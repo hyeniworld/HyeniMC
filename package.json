@@ -14,17 +14,18 @@
     "build:renderer": "vite build",
     "build:main": "tsc -p tsconfig.main.json",
     "package": "npm run build && electron-builder",
-    "package:mac": "npm run build && electron-builder --mac",
+    "package:mac": "npm run backend:build:mac-arm64 && npm run backend:build:mac-x64 && npm run build && electron-builder --mac",
     "package:win": "npm run build && electron-builder --win",
     "test": "vitest",
     "test:ui": "vitest --ui",
     "lint": "eslint src --ext .ts,.tsx",
     "format": "prettier --write \"src/**/*.{ts,tsx,json,md}\"",
     "proto:gen": "cd proto && buf generate",
-    "backend:build:mac-arm64": "cd backend && GOOS=darwin GOARCH=arm64 go build -o bin/hyenimc-backend ./cmd/hyenimc",
+    "backend:build:mac-arm64": "cd backend && GOOS=darwin GOARCH=arm64 go build -o bin/hyenimc-backend-arm64 ./cmd/hyenimc",
     "backend:build:mac-x64": "cd backend && GOOS=darwin GOARCH=amd64 go build -o bin/hyenimc-backend-x64 ./cmd/hyenimc",
+    "backend:build:mac-universal": "npm run backend:build:mac-arm64 && npm run backend:build:mac-x64 && lipo -create -output backend/bin/hyenimc-backend backend/bin/hyenimc-backend-arm64 backend/bin/hyenimc-backend-x64",
     "backend:build:win-x64": "cd backend && GOOS=windows GOARCH=amd64 go build -o bin/hyenimc-backend.exe ./cmd/hyenimc",
-    "backend:build:all": "npm run backend:build:mac-arm64 && npm run backend:build:mac-x64 && npm run backend:build:win-x64"
+    "backend:build:all": "npm run backend:build:mac-universal && npm run backend:build:win-x64"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.3.3",
@@ -105,11 +106,8 @@
     ],
     "extraResources": [
       {
-        "from": "backend/bin",
-        "to": "backend",
-        "filter": [
-          "**/*"
-        ]
+        "from": "backend/bin/hyenimc-backend-${arch}",
+        "to": "backend/hyenimc-backend"
       }
     ],
     "mac": {
@@ -118,10 +116,7 @@
       "target": [
         {
           "target": "dmg",
-          "arch": [
-            "arm64",
-            "x64"
-          ]
+          "arch": "universal"
         }
       ]
     },

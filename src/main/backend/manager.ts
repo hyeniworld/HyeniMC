@@ -25,12 +25,18 @@ export async function startBackend(): Promise<string> {
       const projectRoot = path.join(app.getAppPath(), '..', '..');
       
       if (platform === 'darwin') {
-        binaryPath = path.join(
+        // Try universal binary first, fallback to architecture-specific
+        const universalPath = path.join(projectRoot, 'backend', 'bin', 'hyenimc-backend');
+        const archSpecificPath = path.join(
           projectRoot,
           'backend',
           'bin',
-          arch === 'arm64' ? 'hyenimc-backend' : 'hyenimc-backend-x64'
+          arch === 'arm64' ? 'hyenimc-backend-arm64' : 'hyenimc-backend-x64'
         );
+        
+        // Check if universal binary exists
+        const fs = require('fs');
+        binaryPath = fs.existsSync(universalPath) ? universalPath : archSpecificPath;
       } else if (platform === 'win32') {
         binaryPath = path.join(
           projectRoot,
@@ -44,8 +50,9 @@ export async function startBackend(): Promise<string> {
       }
     } else {
       // In production, binary is in extraResources
+      // electron-builder packages architecture-specific binaries as 'hyenimc-backend'
       const binaryName = platform === 'darwin' 
-        ? (arch === 'arm64' ? 'hyenimc-backend' : 'hyenimc-backend-x64')
+        ? 'hyenimc-backend'
         : `hyenimc-backend${ext}`;
       
       binaryPath = path.join(
