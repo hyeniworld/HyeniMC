@@ -3,6 +3,7 @@ import { IPC_CHANNELS } from '../../shared/constants';
 import { Profile, CreateProfileData } from '../../shared/types';
 import axios from 'axios';
 import { getBackendAddress } from '../backend/manager';
+import { getAccountManager } from './account';
 
 /**
  * Register profile-related IPC handlers
@@ -243,9 +244,10 @@ export function registerProfileHandlers(): void {
       // Check if accountId is passed (for backward compatibility)
       const accountIdToUse = (profile as any).accountId;
       
+      console.log(`[IPC Profile] Account ID to use: ${accountIdToUse || '(none - using default Player)'}`);
+      
       if (accountIdToUse) {
         try {
-          const { getAccountManager } = await import('./account');
           const { MicrosoftAuthService } = await import('../services/microsoft-auth');
           const accountManager = getAccountManager();
           const account = accountManager.getAccount(accountIdToUse);
@@ -257,6 +259,10 @@ export function registerProfileHandlers(): void {
             uuid = account.uuid;
             accessToken = 'null';
             userType = 'legacy';
+            
+            console.log(`[IPC Profile] Using offline account:`);
+            console.log(`  - Username: ${username}`);
+            console.log(`  - UUID: ${uuid}`);
           } else {
             // Microsoft account - get and refresh tokens if needed
             let tokens = await accountManager.getAccountTokens(accountIdToUse);
@@ -289,6 +295,12 @@ export function registerProfileHandlers(): void {
               accessToken = tokens.accessToken;
               userType = 'msa';
               
+              console.log(`[IPC Profile] Account details:`);
+              console.log(`  - Username: ${username}`);
+              console.log(`  - UUID: ${uuid}`);
+              console.log(`  - Access Token: ${accessToken.substring(0, 20)}...`);
+              console.log(`  - User Type: ${userType}`);
+              
               // Update last used
               await accountManager.updateLastUsed(accountIdToUse);
             }
@@ -314,7 +326,12 @@ export function registerProfileHandlers(): void {
         userType,
       };
 
-      console.log('[IPC Profile] Launching game...');
+      console.log('[IPC Profile] Launching game with options:');
+      console.log(`  - Version: ${actualVersionId}`);
+      console.log(`  - Username: ${username}`);
+      console.log(`  - UUID: ${uuid}`);
+      console.log(`  - User Type: ${userType}`);
+      console.log(`  - Access Token: ${accessToken.substring(0, 20)}...`);
       
       // Use shared game launcher instance from game.ts
       const { getGameLauncher } = await import('../ipc/game');

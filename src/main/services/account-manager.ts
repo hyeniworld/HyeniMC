@@ -33,6 +33,22 @@ export class AccountManager {
   }
 
   /**
+   * Format UUID to include hyphens if missing
+   */
+  private formatUUID(uuid: string): string {
+    // Remove any existing hyphens
+    const clean = uuid.replace(/-/g, '');
+    
+    // If it's 32 characters (no hyphens), add them
+    if (clean.length === 32) {
+      return `${clean.slice(0, 8)}-${clean.slice(8, 12)}-${clean.slice(12, 16)}-${clean.slice(16, 20)}-${clean.slice(20)}`;
+    }
+    
+    // Otherwise return as-is
+    return uuid;
+  }
+
+  /**
    * Initialize and load accounts
    */
   async initialize(): Promise<void> {
@@ -57,7 +73,8 @@ export class AccountManager {
    * Save Microsoft account
    */
   async saveMicrosoftAccount(profile: MinecraftProfile): Promise<string> {
-    const accountId = profile.uuid;
+    const formattedUuid = this.formatUUID(profile.uuid);
+    const accountId = formattedUuid;
     
     // Encrypt sensitive data
     const sensitiveData = JSON.stringify({
@@ -71,7 +88,7 @@ export class AccountManager {
     const account: StoredAccount = {
       id: accountId,
       name: profile.name,
-      uuid: profile.uuid,
+      uuid: formattedUuid,
       type: 'microsoft',
       encryptedData: encrypted,
       iv,
@@ -83,7 +100,7 @@ export class AccountManager {
     this.accounts.set(accountId, account);
     await this.saveAccounts();
     
-    console.log(`[Account Manager] Saved Microsoft account: ${profile.name}`);
+    console.log(`[Account Manager] Saved Microsoft account: ${profile.name} (UUID: ${formattedUuid})`);
     return accountId;
   }
 
@@ -112,14 +129,29 @@ export class AccountManager {
    * Get account by ID
    */
   getAccount(accountId: string): StoredAccount | undefined {
-    return this.accounts.get(accountId);
+    const account = this.accounts.get(accountId);
+    
+    if (account) {
+      // Format UUID if it doesn't have hyphens
+      return {
+        ...account,
+        uuid: this.formatUUID(account.uuid),
+      };
+    }
+    
+    return undefined;
   }
 
   /**
    * Get all accounts
    */
   getAllAccounts(): StoredAccount[] {
-    return Array.from(this.accounts.values()).sort((a, b) => b.lastUsed - a.lastUsed);
+    return Array.from(this.accounts.values())
+      .map(account => ({
+        ...account,
+        uuid: this.formatUUID(account.uuid),
+      }))
+      .sort((a, b) => b.lastUsed - a.lastUsed);
   }
 
   /**

@@ -236,6 +236,12 @@ export class GameLauncher {
     const uuid = options.uuid || '00000000-0000-0000-0000-000000000000';
     const accessToken = options.accessToken || 'null';
     const userType = options.userType || 'legacy';
+    
+    console.log('[Game Launcher] Building game arguments:');
+    console.log(`  - Username: ${username}`);
+    console.log(`  - UUID: ${uuid}`);
+    console.log(`  - User Type: ${userType}`);
+    console.log(`  - Access Token: ${accessToken === 'null' ? 'null (offline)' : accessToken.substring(0, 20) + '...' }`);
     const versionName = options.versionId;
     const gameDirectory = options.gameDir;
     // Use shared assets directory
@@ -600,6 +606,7 @@ export class GameLauncher {
    */
   private checkRules(rules: any[]): boolean {
     for (const rule of rules) {
+      // Check OS rules
       if (rule.os) {
         const matches = this.matchesOS(rule.os);
         if (rule.action === 'allow' && !matches) {
@@ -609,8 +616,49 @@ export class GameLauncher {
           return false;
         }
       }
+      
+      // Check feature rules (e.g., is_demo_user, has_custom_resolution)
+      if (rule.features) {
+        const matches = this.checkFeatures(rule.features);
+        if (rule.action === 'allow' && !matches) {
+          return false;
+        }
+        if (rule.action === 'disallow' && matches) {
+          return false;
+        }
+      }
     }
     return true;
+  }
+  
+  /**
+   * Check if features match
+   */
+  private checkFeatures(features: Record<string, boolean>): boolean {
+    // is_demo_user: true if the user doesn't own the game (should be false for authenticated users)
+    if ('is_demo_user' in features) {
+      return features.is_demo_user === false; // We never want demo mode for authenticated users
+    }
+    
+    // has_custom_resolution: true if custom resolution is set
+    if ('has_custom_resolution' in features) {
+      return features.has_custom_resolution === true; // We support custom resolution
+    }
+    
+    // has_quick_plays_support: for quick play feature
+    if ('has_quick_plays_support' in features) {
+      return features.has_quick_plays_support === false; // We don't support quick play
+    }
+    
+    // is_quick_play_singleplayer/multiplayer/realms
+    if ('is_quick_play_singleplayer' in features || 
+        'is_quick_play_multiplayer' in features ||
+        'is_quick_play_realms' in features) {
+      return false; // We don't use quick play features
+    }
+    
+    // Default: assume feature is not present
+    return false;
   }
 
   /**

@@ -143,17 +143,25 @@ export function AccountSelector({ selectedAccountId, onSelect }: AccountSelector
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                {account.skin ? (
+                {account.uuid ? (
                   <img
-                    src={account.skin}
+                    src={`https://crafatar.com/avatars/${account.uuid}?size=32&overlay`}
                     alt={account.name}
                     className="w-8 h-8 rounded"
+                    onError={(e) => {
+                      // Fallback to first letter if image fails to load
+                      e.currentTarget.style.display = 'none';
+                      const fallback = e.currentTarget.nextElementSibling as HTMLElement;
+                      if (fallback) fallback.style.display = 'flex';
+                    }}
                   />
-                ) : (
-                  <div className="w-8 h-8 bg-gray-700 rounded flex items-center justify-center">
-                    <User className="w-5 h-5 text-gray-400" />
-                  </div>
-                )}
+                ) : null}
+                <div 
+                  className="w-8 h-8 rounded bg-gray-700 flex items-center justify-center text-white text-sm font-bold"
+                  style={{ display: account.uuid ? 'none' : 'flex' }}
+                >
+                  {account.name[0]?.toUpperCase() || '?'}
+                </div>
                 <div>
                   <div className="font-medium text-sm">{account.name}</div>
                   <div className="text-xs text-gray-400">

@@ -509,19 +509,37 @@ export class MicrosoftAuthService {
 
     const data = response.data;
     const skin = data.skins?.find((s: any) => s.state === 'ACTIVE')?.url;
+    
+    // UUID from Minecraft API is without hyphens, but we need to add them
+    const rawUuid = data.id;
+    const formattedUuid = rawUuid.length === 32 
+      ? `${rawUuid.slice(0, 8)}-${rawUuid.slice(8, 12)}-${rawUuid.slice(12, 16)}-${rawUuid.slice(16, 20)}-${rawUuid.slice(20)}`
+      : rawUuid;
+    
+    console.log(`[Microsoft Auth] Raw UUID: ${rawUuid}`);
+    console.log(`[Microsoft Auth] Formatted UUID: ${formattedUuid}`);
+    console.log(`[Microsoft Auth] Player name: ${data.name}`);
+    console.log(`[Microsoft Auth] Has skin: ${!!skin}`);
 
     return {
-      uuid: data.id,
+      uuid: formattedUuid,
       name: data.name,
       skin,
     };
   }
 
   /**
-   * Refresh access token
+   * Refresh access token - This refreshes the full auth chain to get a new Minecraft token
    */
-  async refreshToken(refreshToken: string): Promise<AuthTokens> {
-    const response = await axios.post(
+  async refreshToken(refreshToken: string): Promise<{ 
+    accessToken: string; 
+    refreshToken: string; 
+    expiresIn: number;
+  }> {
+    console.log('[Auth] Refreshing Microsoft token...');
+    
+    // Step 1: Refresh Microsoft token
+    const msTokenResponse = await axios.post(
       'https://login.microsoftonline.com/consumers/oauth2/v2.0/token',
       new URLSearchParams({
         client_id: AZURE_CLIENT_ID,
@@ -535,10 +553,23 @@ export class MicrosoftAuthService {
       }
     );
 
+    const msAccessToken = msTokenResponse.data.access_token;
+    const newRefreshToken = msTokenResponse.data.refresh_token;
+    const expiresIn = msTokenResponse.data.expires_in;
+    
+    console.log('[Auth] Microsoft token refreshed, re-authenticating with Xbox Live...');
+    
+    // Step 2-4: Re-authenticate through Xbox Live and Minecraft to get new MC token
+    const xblToken = await this.authenticateXboxLive(msAccessToken);
+    const xstsToken = await this.getXSTSToken(xblToken);
+    const mcToken = await this.authenticateMinecraft(xstsToken);
+    
+    console.log('[Auth] Full token refresh complete');
+
     return {
-      accessToken: response.data.access_token,
-      refreshToken: response.data.refresh_token,
-      expiresIn: response.data.expires_in,
+      accessToken: mcToken,  // Return Minecraft access token, not MS token
+      refreshToken: newRefreshToken,
+      expiresIn,
     };
   }
 
