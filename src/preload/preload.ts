@@ -143,6 +143,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke(IPC_CHANNELS.RESOURCEPACK_DISABLE, profileId, fileName),
     delete: (profileId: string, fileName: string): Promise<{ success: boolean }> =>
       ipcRenderer.invoke(IPC_CHANNELS.RESOURCEPACK_DELETE, profileId, fileName),
+    install: (profileId: string, filePath: string): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.RESOURCEPACK_INSTALL, profileId, filePath),
+    selectFile: (): Promise<string | null> =>
+      ipcRenderer.invoke(IPC_CHANNELS.RESOURCEPACK_SELECT_FILE),
   },
 
   // Shader Pack APIs
@@ -155,6 +159,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke(IPC_CHANNELS.SHADERPACK_DISABLE, profileId, fileName, isDirectory),
     delete: (profileId: string, fileName: string, isDirectory: boolean): Promise<{ success: boolean }> =>
       ipcRenderer.invoke(IPC_CHANNELS.SHADERPACK_DELETE, profileId, fileName, isDirectory),
+    install: (profileId: string, filePath: string): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SHADERPACK_INSTALL, profileId, filePath),
+    selectFile: (): Promise<string | null> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SHADERPACK_SELECT_FILE),
   },
 
   // Modpack APIs
@@ -272,6 +280,8 @@ declare global {
         enable: (profileId: string, fileName: string) => Promise<{ success: boolean }>;
         disable: (profileId: string, fileName: string) => Promise<{ success: boolean }>;
         delete: (profileId: string, fileName: string) => Promise<{ success: boolean }>;
+        install: (profileId: string, filePath: string) => Promise<{ success: boolean }>;
+        selectFile: () => Promise<string | null>;
       };
       shaderpack: {
         list: (profileId: string) => Promise<any[]>;

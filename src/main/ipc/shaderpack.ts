@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { ipcMain, dialog } from 'electron';
 import { IPC_CHANNELS } from '../../shared/constants';
 import { ShaderPackManager } from '../services/shaderpack-manager';
 import { getProfileInstanceDir } from '../utils/paths';
@@ -22,6 +22,33 @@ export function registerShaderPackHandlers(): void {
       }));
     } catch (error) {
       console.error('[IPC ShaderPack] Failed to list shader packs:', error);
+      throw error;
+    }
+  });
+
+  // Select shader pack file
+  ipcMain.handle(IPC_CHANNELS.SHADERPACK_SELECT_FILE, async () => {
+    const result = await dialog.showOpenDialog({
+      title: '셰이더팩 파일 선택',
+      properties: ['openFile'],
+      filters: [
+        { name: 'Zip', extensions: ['zip'] },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return result.filePaths[0];
+  });
+
+  // Install shader pack from file
+  ipcMain.handle(IPC_CHANNELS.SHADERPACK_INSTALL, async (_event, profileId: string, filePath: string) => {
+    try {
+      const gameDir = getProfileInstanceDir(profileId);
+      const packManager = new ShaderPackManager();
+      await packManager.installPack(gameDir, filePath);
+      return { success: true };
+    } catch (error) {
+      console.error('[IPC ShaderPack] Failed to install pack:', error);
       throw error;
     }
   });

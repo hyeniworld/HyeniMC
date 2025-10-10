@@ -156,7 +156,7 @@ export class ModpackManager {
     profileId: string,
     instanceDir: string,
     onProgress?: (progress: ModpackInstallProgress) => void
-  ): Promise<void> {
+  ): Promise<{ gameVersion?: string; loaderType?: 'vanilla' | 'fabric' | 'forge' | 'neoforge' | 'quilt'; loaderVersion?: string }> {
     const tempDir = path.join(instanceDir, '.temp_modpack');
     
     try {
@@ -270,6 +270,17 @@ export class ModpackManager {
       });
 
       console.log('[ModpackManager] Modpack installation complete');
+      // Extract loader info to return
+      const deps = manifest?.dependencies || {};
+      let loaderType: 'vanilla' | 'fabric' | 'forge' | 'neoforge' | 'quilt' | undefined = 'vanilla';
+      let loaderVersion: string | undefined;
+      if (deps['fabric-loader']) { loaderType = 'fabric'; loaderVersion = deps['fabric-loader']; }
+      else if (deps['quilt-loader']) { loaderType = 'quilt'; loaderVersion = deps['quilt-loader']; }
+      else if (deps['forge']) { loaderType = 'forge'; loaderVersion = deps['forge']; }
+      else if (deps['neoforge']) { loaderType = 'neoforge'; loaderVersion = deps['neoforge']; }
+
+      const gameVersion = deps?.minecraft || undefined;
+      return { gameVersion, loaderType, loaderVersion };
     } catch (error) {
       console.error('[ModpackManager] Failed to install modpack:', error);
       throw error;

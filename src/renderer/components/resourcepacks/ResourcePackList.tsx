@@ -18,6 +18,14 @@ export const ResourcePackList: React.FC<ResourcePackListProps> = ({ profileId })
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
 
+  const renderDescription = (desc: any): string => {
+    if (!desc) return '';
+    if (typeof desc === 'string') return desc;
+    if (Array.isArray(desc)) return desc.filter((v) => typeof v === 'string').join(' ');
+    // object form like { translate, fallback }
+    return desc.fallback || desc.translate || JSON.stringify(desc);
+  };
+
   useEffect(() => {
     loadPacks();
   }, [profileId]);
@@ -64,18 +72,11 @@ export const ResourcePackList: React.FC<ResourcePackListProps> = ({ profileId })
     }
   };
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const formData = new FormData();
-    formData.append('pack', file);
-
+  const handleFileUpload = async () => {
     try {
-      await fetch(`/api/profiles/${profileId}/resourcepacks`, {
-        method: 'POST',
-        body: formData,
-      });
+      const filePath = await window.electronAPI.resourcepack.selectFile();
+      if (!filePath) return;
+      await window.electronAPI.resourcepack.install(profileId, filePath);
       await loadPacks();
     } catch (error) {
       console.error('Failed to install resource pack:', error);
@@ -102,15 +103,9 @@ export const ResourcePackList: React.FC<ResourcePackListProps> = ({ profileId })
         <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200">
           리소스팩 ({filteredPacks.length})
         </h2>
-        <label className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer transition-colors">
+        <button onClick={handleFileUpload} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
           리소스팩 추가
-          <input
-            type="file"
-            accept=".zip"
-            onChange={handleFileUpload}
-            className="hidden"
-          />
-        </label>
+        </button>
       </div>
 
       {/* Search */}
@@ -162,7 +157,7 @@ export const ResourcePackList: React.FC<ResourcePackListProps> = ({ profileId })
                   </div>
                   {pack.description && (
                     <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                      {pack.description}
+                      {renderDescription(pack.description as any)}
                     </p>
                   )}
                 </div>

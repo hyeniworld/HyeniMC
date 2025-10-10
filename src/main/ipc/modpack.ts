@@ -39,7 +39,7 @@ export function registerModpackHandlers(): void {
       console.log(`[IPC Modpack] Installing modpack version: ${versionId} to profile: ${profileId}`);
       const instanceDir = getProfileInstanceDir(profileId);
 
-      await modpackManager.installModpack(
+      const result = await modpackManager.installModpack(
         versionId,
         profileId,
         instanceDir,
@@ -48,6 +48,26 @@ export function registerModpackHandlers(): void {
           event.sender.send('modpack:install-progress', progress);
         }
       );
+
+      // Patch profile with detected loader/gameVersion
+      try {
+        const { IPC_CHANNELS: CHANNELS } = await import('../../shared/constants');
+        const axios = (await import('axios')).default;
+        const { getBackendAddress } = await import('../backend/manager');
+        const addr = getBackendAddress();
+        if (addr) {
+          const patchData: any = {};
+          if (result.gameVersion) patchData.gameVersion = result.gameVersion;
+          if (result.loaderType) patchData.loaderType = result.loaderType;
+          if (result.loaderVersion) patchData.loaderVersion = result.loaderVersion;
+          if (Object.keys(patchData).length > 0) {
+            await axios.patch(`http://${addr}/api/profiles/${profileId}`, patchData);
+            console.log('[IPC Modpack] Profile patched with loader info:', patchData);
+          }
+        }
+      } catch (e) {
+        console.warn('[IPC Modpack] Failed to patch profile after install:', e);
+      }
 
       console.log('[IPC Modpack] Modpack installation complete');
       return { success: true };

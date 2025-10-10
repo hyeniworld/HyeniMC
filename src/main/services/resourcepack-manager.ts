@@ -74,6 +74,11 @@ export class ResourcePackManager {
     enabled: boolean
   ): Promise<ResourcePackInfo> {
     const zip = new AdmZip(filePath);
+    const safeParse = (text: string) => {
+      // Remove control chars except \n, \r, \t
+      const sanitized = text.replace(/[\u0000-\u0019\u007F]/g, (ch) => (ch === '\n' || ch === '\r' || ch === '\t' ? ch : ' '));
+      return JSON.parse(sanitized);
+    };
     
     // Try to find pack.mcmeta
     const packEntry = zip.getEntry('pack.mcmeta');
@@ -82,7 +87,18 @@ export class ResourcePackManager {
     }
 
     const content = packEntry.getData().toString('utf8');
-    const json = JSON.parse(content);
+    const json = safeParse(content);
+    // Normalize description to string to avoid React rendering errors
+    let description: string | undefined = undefined;
+    const rawDesc = json.pack?.description;
+    if (typeof rawDesc === 'string') {
+      description = rawDesc;
+    } else if (rawDesc && typeof rawDesc === 'object') {
+      // Common form: { translate: 'key', fallback: 'text' }
+      description = rawDesc.fallback || rawDesc.translate || JSON.stringify(rawDesc);
+    } else if (Array.isArray(rawDesc)) {
+      description = rawDesc.filter((v: any) => typeof v === 'string').join(' ');
+    }
     
     // Extract icon if available
     let iconBase64: string | undefined;
@@ -94,7 +110,7 @@ export class ResourcePackManager {
 
     return {
       name: fileName.replace('.zip', ''),
-      description: json.pack?.description,
+      description,
       packFormat: json.pack?.pack_format || 0,
       fileName,
       filePath,

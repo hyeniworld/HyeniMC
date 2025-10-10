@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Loader2, Package, Settings, FileArchive } from 'lucide-react';
 import { ModpackSearchModal } from '../modpack/ModpackSearchModal';
 import { ImportModpackTab } from './ImportModpackTab';
+import { IPC_EVENTS } from '../../../shared/constants/ipc';
 
 interface CreateProfileModalProps {
   onClose: () => void;
@@ -35,6 +36,7 @@ export function CreateProfileModal({ onClose, onSuccess }: CreateProfileModalPro
   const [selectedJava, setSelectedJava] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [modpackProgress, setModpackProgress] = useState<{ stage: string; progress: number; message: string } | null>(null);
   
   // Loader versions
   const [loaderVersions, setLoaderVersions] = useState<Array<{ version: string; stable: boolean }>>([]);
@@ -66,6 +68,25 @@ export function CreateProfileModal({ onClose, onSuccess }: CreateProfileModalPro
     loadVersions();
   }, []);
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.name.trim()) {
+      setError('프로필 이름을 입력해주세요.');
+      return;
+    }
+    try {
+      setLoading(true);
+      setError(null);
+      await window.electronAPI.profile.create(formData);
+      onSuccess();
+    } catch (err) {
+      console.error('Failed to create profile:', err);
+      setError(err instanceof Error ? err.message : '프로필 생성에 실패했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Load Java installations on mount
   React.useEffect(() => {
     const loadJava = async () => {
@@ -87,9 +108,10 @@ export function CreateProfileModal({ onClose, onSuccess }: CreateProfileModalPro
   // Update recommended Java when version changes
   React.useEffect(() => {
     if (formData.gameVersion) {
-      window.electronAPI.java.getRecommended(formData.gameVersion).then(recommended => {
-        setRecommendedJava(recommended);
-      });
+      window.electronAPI.java
+        .getRecommended(formData.gameVersion)
+        .then((recommended) => setRecommendedJava(recommended))
+        .catch(() => {});
     }
   }, [formData.gameVersion]);
 
@@ -104,21 +126,10 @@ export function CreateProfileModal({ onClose, onSuccess }: CreateProfileModalPro
             formData.gameVersion,
             includeUnstableVersions
           );
-          
-          console.log('[UI] Loader versions result:', result);
-          const versions = result.versions || [];
-          console.log('[UI] Loader versions count:', versions.length);
-          console.log('[UI] Include unstable:', includeUnstableVersions);
-          if (versions.length > 0) {
-            console.log('[UI] First version (latest):', versions[0]);
-          }
-          
-          setLoaderVersions(versions);
-          
+          setLoaderVersions(result.versions || []);
           // Auto-select first version (최신 버전)
-          if (versions.length > 0) {
-            const firstVersion = versions[0];
-            console.log('[UI] Auto-selecting version:', firstVersion.version);
+          if (result.versions.length > 0) {
+            const firstVersion = result.versions[0];
             setFormData((prev: any) => ({ ...prev, loaderVersion: firstVersion.version }));
           } else {
             setFormData((prev: any) => ({ ...prev, loaderVersion: '' }));
@@ -137,27 +148,20 @@ export function CreateProfileModal({ onClose, onSuccess }: CreateProfileModalPro
     }
   }, [formData.loaderType, formData.gameVersion, includeUnstableVersions]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!formData.name.trim()) {
-      setError('프로필 이름을 입력해주세요.');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError(null);
-      
-      await window.electronAPI.profile.create(formData);
-      onSuccess();
-    } catch (err) {
-      console.error('Failed to create profile:', err);
-      setError(err instanceof Error ? err.message : '프로필 생성에 실패했습니다.');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Listen modpack install progress events from main process
+  React.useEffect(() => {
+    const unsubscribe = window.electronAPI.on(
+      IPC_EVENTS.MODPACK_INSTALL_PROGRESS,
+      (progress: { stage: string; progress: number; message: string }) => {
+        setModpackProgress(progress);
+      }
+    );
+    return () => {
+      try {
+        (unsubscribe as any)?.();
+      } catch {}
+    };
+  }, []);
 
   const handleChange = (field: string, value: string) => {
     setFormData((prev: any) => ({ ...prev, [field]: value }));
@@ -167,6 +171,7 @@ export function CreateProfileModal({ onClose, onSuccess }: CreateProfileModalPro
     try {
       setLoading(true);
       setError(null);
+      setModpackProgress({ stage: 'starting', progress: 0, message: '모드팩 설치를 준비 중...' });
 
       // Create profile for modpack
       const profileData = {
@@ -188,11 +193,30 @@ export function CreateProfileModal({ onClose, onSuccess }: CreateProfileModalPro
       console.error('Failed to install modpack:', err);
       setError(err instanceof Error ? err.message : '모드팩 설치에 실패했습니다.');
       setLoading(false);
+      setModpackProgress(null);
     }
   };
 
   return (
     <>
+      {/* Modpack install progress overlay */}
+      {loading && modpackProgress && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <Loader2 className="w-5 h-5 text-purple-400 animate-spin" />
+              <h3 className="text-white font-semibold">모드팩 설치 중</h3>
+            </div>
+            <div className="w-full h-2 rounded bg-gray-800 overflow-hidden">
+              <div
+                className="h-full bg-purple-500 transition-all"
+                style={{ width: `${Math.min(100, Math.max(0, modpackProgress.progress))}%` }}
+              />
+            </div>
+            <p className="text-sm text-gray-300 mt-3">{modpackProgress.message}</p>
+          </div>
+        </div>
+      )}
       <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
         <div className="card max-w-lg w-full shadow-2xl animate-in zoom-in-95 duration-200">
           {/* Header */}
@@ -529,14 +553,15 @@ export function CreateProfileModal({ onClose, onSuccess }: CreateProfileModalPro
                   <Package className="w-5 h-5" />
                   모드팩 검색
                 </button>
+                {modpackProgress && (
+                  <div className="mt-6 text-left">
+                    <div className="w-full h-2 rounded bg-gray-800 overflow-hidden">
+                      <div className="h-full bg-purple-500 transition-all" style={{ width: `${modpackProgress.progress}%` }} />
+                    </div>
+                    <p className="text-sm text-gray-300 mt-2">{modpackProgress.message}</p>
+                  </div>
+                )}
               </div>
-
-              {error && (
-                <div className="text-sm text-red-300 bg-red-900/30 border border-red-800 rounded-lg px-4 py-3 flex items-start gap-2">
-                  <span className="text-red-400 font-bold">⚠</span>
-                  <span>{error}</span>
-                </div>
-              )}
 
               <button
                 type="button"

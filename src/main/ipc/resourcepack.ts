@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { ipcMain, dialog } from 'electron';
 import { IPC_CHANNELS } from '../../shared/constants';
 import { ResourcePackManager } from '../services/resourcepack-manager';
 import { getProfileInstanceDir } from '../utils/paths';
@@ -23,6 +23,33 @@ export function registerResourcePackHandlers(): void {
       }));
     } catch (error) {
       console.error('[IPC ResourcePack] Failed to list resource packs:', error);
+      throw error;
+    }
+  });
+
+  // Select file dialog for installing a resource pack
+  ipcMain.handle(IPC_CHANNELS.RESOURCEPACK_SELECT_FILE, async () => {
+    const result = await dialog.showOpenDialog({
+      title: '리소스팩 파일 선택',
+      properties: ['openFile'],
+      filters: [
+        { name: 'Zip', extensions: ['zip'] },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return result.filePaths[0];
+  });
+
+  // Install a resource pack from a given file path
+  ipcMain.handle(IPC_CHANNELS.RESOURCEPACK_INSTALL, async (_event, profileId: string, filePath: string) => {
+    try {
+      const gameDir = getProfileInstanceDir(profileId);
+      const packManager = new ResourcePackManager();
+      await packManager.installPack(gameDir, filePath);
+      return { success: true };
+    } catch (error) {
+      console.error('[IPC ResourcePack] Failed to install pack:', error);
       throw error;
     }
   });

@@ -57,12 +57,16 @@ export const IPC_CHANNELS = {
   RESOURCEPACK_ENABLE: 'resourcepack:enable',
   RESOURCEPACK_DISABLE: 'resourcepack:disable',
   RESOURCEPACK_DELETE: 'resourcepack:delete',
+  RESOURCEPACK_INSTALL: 'resourcepack:install',
+  RESOURCEPACK_SELECT_FILE: 'resourcepack:select-file',
   
   // Shader Pack Management
   SHADERPACK_LIST: 'shaderpack:list',
   SHADERPACK_ENABLE: 'shaderpack:enable',
   SHADERPACK_DISABLE: 'shaderpack:disable',
   SHADERPACK_DELETE: 'shaderpack:delete',
+  SHADERPACK_INSTALL: 'shaderpack:install',
+  SHADERPACK_SELECT_FILE: 'shaderpack:select-file',
   
   // Modpack
   MODPACK_SEARCH: 'modpack:search',

@@ -79,12 +79,24 @@ export class ModManager {
     enabled: boolean
   ): Promise<ModInfo> {
     const zip = new AdmZip(filePath);
+    const safeParse = (text: string) => {
+      try {
+        // Remove control characters except tab(\t), newline(\n), carriage return(\r)
+        // Covers C0 (U+0000–U+001F) and C1 (U+0080–U+009F)
+        const sanitized = text.replace(/[\u0000-\u001F\u007F-\u009F]/g, (ch) => {
+          return ch === '\n' || ch === '\r' || ch === '\t' ? ch : ' ';
+        });
+        return JSON.parse(sanitized);
+      } catch (e) {
+        throw e;
+      }
+    };
     
     // Try Fabric mod first
     let fabricEntry = zip.getEntry('fabric.mod.json');
     if (fabricEntry) {
       const content = fabricEntry.getData().toString('utf8');
-      const json = JSON.parse(content);
+      const json = safeParse(content);
       
       return {
         id: json.id || fileName,
@@ -140,7 +152,7 @@ export class ModManager {
     if (quiltEntry) {
       try {
         const content = quiltEntry.getData().toString('utf8');
-        const json = JSON.parse(content);
+        const json = safeParse(content);
         const quilMod = json.quilt_loader?.metadata || {};
         
         return {

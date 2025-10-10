@@ -67,18 +67,11 @@ export const ShaderPackList: React.FC<ShaderPackListProps> = ({ profileId }) => 
     }
   };
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const formData = new FormData();
-    formData.append('pack', file);
-
+  const handleFileUpload = async () => {
     try {
-      await fetch(`/api/profiles/${profileId}/shaderpacks`, {
-        method: 'POST',
-        body: formData,
-      });
+      const filePath = await window.electronAPI.shaderpack.selectFile();
+      if (!filePath) return;
+      await window.electronAPI.shaderpack.install(profileId, filePath);
       await loadPacks();
     } catch (error) {
       console.error('Failed to install shader pack:', error);
@@ -110,15 +103,9 @@ export const ShaderPackList: React.FC<ShaderPackListProps> = ({ profileId }) => 
             Iris 또는 OptiFine이 필요합니다
           </p>
         </div>
-        <label className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer transition-colors">
+        <button onClick={handleFileUpload} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
           셰이더팩 추가
-          <input
-            type="file"
-            accept=".zip"
-            onChange={handleFileUpload}
-            className="hidden"
-          />
-        </label>
+        </button>
       </div>
 
       {/* Search */}
