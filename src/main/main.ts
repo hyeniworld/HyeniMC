@@ -11,6 +11,7 @@ app.commandLine.appendSwitch('ignore-certificate-errors');
 
 let mainWindow: BrowserWindow | null = null;
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+const isWin = process.platform === 'win32';
 
 async function createWindow() {
   const preloadPath = isDev
@@ -30,7 +31,15 @@ async function createWindow() {
     },
     titleBarStyle: 'hiddenInset',
     show: false,
+    // Hide menubar on Windows
+    autoHideMenuBar: isWin,
   });
+
+  // Ensure menu bar hidden on Windows
+  if (isWin) {
+    mainWindow.removeMenu();
+    mainWindow.setMenuBarVisibility(false);
+  }
 
   // Show window when ready
   mainWindow.once('ready-to-show', () => {

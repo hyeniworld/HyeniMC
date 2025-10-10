@@ -9,13 +9,13 @@
   "scripts": {
     "dev": "npm run build:main && concurrently \"npm run dev:vite\" \"npm run dev:electron\"",
     "dev:vite": "vite",
-    "dev:electron": "NODE_ENV=development electron ./dist/main/main.js",
+    "dev:electron": "cross-env NODE_ENV=development electron ./dist/main/main.js",
     "build": "npm run build:renderer && npm run build:main",
     "build:renderer": "vite build",
     "build:main": "tsc -p tsconfig.main.json",
     "package": "npm run build && electron-builder",
     "package:mac": "npm run backend:build:mac-arm64 && npm run backend:build:mac-x64 && npm run build && electron-builder --mac",
-    "package:win": "npm run build && electron-builder --win",
+    "package:win": "npm run backend:build:win-x64 && npm run build && electron-builder --win",
     "test": "vitest",
     "test:ui": "vitest --ui",
     "lint": "eslint src --ext .ts,.tsx",
@@ -24,7 +24,7 @@
     "backend:build:mac-arm64": "cd backend && GOOS=darwin GOARCH=arm64 go build -o bin/hyenimc-backend-arm64 ./cmd/hyenimc",
     "backend:build:mac-x64": "cd backend && GOOS=darwin GOARCH=amd64 go build -o bin/hyenimc-backend-x64 ./cmd/hyenimc",
     "backend:build:mac-universal": "npm run backend:build:mac-arm64 && npm run backend:build:mac-x64 && lipo -create -output backend/bin/hyenimc-backend backend/bin/hyenimc-backend-arm64 backend/bin/hyenimc-backend-x64",
-    "backend:build:win-x64": "cd backend && GOOS=windows GOARCH=amd64 go build -o bin/hyenimc-backend.exe ./cmd/hyenimc",
+    "backend:build:win-x64": "cd backend && go build -o bin/hyenimc-backend.exe ./cmd/hyenimc",
     "backend:build:all": "npm run backend:build:mac-universal && npm run backend:build:win-x64"
   },
   "dependencies": {
@@ -47,6 +47,7 @@
     "zustand": "^4.4.7"
   },
   "devDependencies": {
+    "cross-env": "^7.0.3",
     "@types/adm-zip": "^0.5.7",
     "@types/fs-extra": "^11.0.4",
     "@types/node": "^20.10.5",
@@ -102,17 +103,25 @@
           "**/*"
         ]
       },
+      {
+        "from": "node_modules",
+        "to": "node_modules",
+        "filter": [
+          "**/*"
+        ]
+      },
       "package.json"
     ],
-    "extraResources": [
-      {
-        "from": "backend/bin/hyenimc-backend-${arch}",
-        "to": "backend/hyenimc-backend"
-      }
-    ],
+    
     "mac": {
       "category": "public.app-category.games",
       "icon": "build/icon.icns",
+      "extraResources": [
+        {
+          "from": "backend/bin/hyenimc-backend",
+          "to": "backend/hyenimc-backend"
+        }
+      ],
       "target": [
         {
           "target": "dmg",
@@ -122,6 +131,12 @@
     },
     "win": {
       "icon": "build/icon.ico",
+      "extraResources": [
+        {
+          "from": "backend/bin/hyenimc-backend.exe",
+          "to": "backend/hyenimc-backend.exe"
+        }
+      ],
       "target": [
         {
           "target": "nsis",
