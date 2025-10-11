@@ -114,8 +114,12 @@ export class ModManager {
       };
     }
 
-    // Try NeoForge/Forge mod
-    let neoforgeEntry = zip.getEntry('META-INF/mods.toml');
+    // Try NeoForge mod (uses neoforge.mods.toml)
+    let neoforgeEntry = zip.getEntry('META-INF/neoforge.mods.toml');
+    if (!neoforgeEntry) {
+      // Fallback to Forge format (uses mods.toml)
+      neoforgeEntry = zip.getEntry('META-INF/mods.toml');
+    }
     if (neoforgeEntry) {
       try {
         const content = neoforgeEntry.getData().toString('utf8');
