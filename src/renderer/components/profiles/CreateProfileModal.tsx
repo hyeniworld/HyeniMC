@@ -23,6 +23,7 @@ export function CreateProfileModal({ onClose, onSuccess }: CreateProfileModalPro
   
   const [versions, setVersions] = useState<string[]>([]);
   const [loadingVersions, setLoadingVersions] = useState(true);
+  const [releaseOnly, setReleaseOnly] = useState<boolean>(true);
   const [javaInstallations, setJavaInstallations] = useState<JavaInstallation[]>([]);
   const [loadingJava, setLoadingJava] = useState(true);
   const [recommendedJava, setRecommendedJava] = useState<number>(17);
@@ -43,14 +44,14 @@ export function CreateProfileModal({ onClose, onSuccess }: CreateProfileModalPro
   const [loadingLoaderVersions, setLoadingLoaderVersions] = useState(false);
   const [includeUnstableVersions, setIncludeUnstableVersions] = useState(false);
 
-  // Load Minecraft versions on mount
   React.useEffect(() => {
     const loadVersions = async () => {
       try {
-        const versionList = await window.electronAPI.version.list();
+        const versionList = await window.electronAPI.version.list(releaseOnly);
         const latest = await window.electronAPI.version.latest();
         setVersions(versionList);
-        setFormData((prev: any) => ({ ...prev, gameVersion: latest }));
+        const initial = releaseOnly && versionList.includes(latest) ? latest : (versionList[0] || latest);
+        setFormData((prev: any) => ({ ...prev, gameVersion: initial }));
       } catch (err) {
         console.error('Failed to load versions:', err);
         // Fallback versions
@@ -66,7 +67,7 @@ export function CreateProfileModal({ onClose, onSuccess }: CreateProfileModalPro
       }
     };
     loadVersions();
-  }, []);
+  }, [releaseOnly]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -329,6 +330,21 @@ export function CreateProfileModal({ onClose, onSuccess }: CreateProfileModalPro
                   ))
                 )}
               </select>
+              <div className="mt-2 flex items-center gap-2 text-xs text-gray-400">
+                <input
+                  id="releaseOnly"
+                  type="checkbox"
+                  checked={releaseOnly}
+                  onChange={(e) => {
+                    setLoadingVersions(true);
+                    setReleaseOnly(e.target.checked);
+                  }}
+                  className="w-4 h-4 rounded border-gray-600 bg-gray-800 text-purple-500 focus:ring-purple-500 focus:ring-offset-gray-900"
+                />
+                <label htmlFor="releaseOnly" className="cursor-pointer">
+                  정식 버전만 보기
+                </label>
+              </div>
             </div>
 
             {/* Loader Type */}

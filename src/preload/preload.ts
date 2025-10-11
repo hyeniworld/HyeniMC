@@ -41,8 +41,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // Version APIs
   version: {
-    list: (): Promise<string[]> => 
-      ipcRenderer.invoke(IPC_CHANNELS.VERSION_LIST),
+    list: (releaseOnly?: boolean): Promise<string[]> => 
+      ipcRenderer.invoke(IPC_CHANNELS.VERSION_LIST, releaseOnly),
     
     latest: (): Promise<string> => 
       ipcRenderer.invoke(IPC_CHANNELS.VERSION_LATEST),
@@ -229,7 +229,7 @@ declare global {
         remove: (id: string) => Promise<void>;
       };
       version: {
-        list: () => Promise<string[]>;
+        list: (releaseOnly?: boolean) => Promise<string[]>;
         latest: () => Promise<string>;
       };
       java: {
