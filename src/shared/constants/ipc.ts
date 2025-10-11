@@ -100,6 +100,10 @@ export const IPC_CHANNELS = {
   SETTINGS_DETECT_JAVA: 'settings:detect-java',
   SETTINGS_SELECT_DIRECTORY: 'settings:select-directory',
   SETTINGS_SELECT_FILE: 'settings:select-file',
+  SETTINGS_RESET_CACHE: 'settings:reset-cache',
+  SETTINGS_GET_CACHE_STATS: 'settings:get-cache-stats',
+  SETTINGS_EXPORT: 'settings:export',
+  SETTINGS_IMPORT: 'settings:import',
   
   // Instance
   INSTANCE_GET_LOGS: 'instance:get-logs',

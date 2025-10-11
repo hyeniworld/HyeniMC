@@ -55,12 +55,6 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
   // Initialize from profile (only when profile ID changes)
   useEffect(() => {
     if (profile) {
-      console.log('[ProfileSettings] Profile ID changed, reinitializing:', profile.id);
-      console.log('[ProfileSettings] Profile data:', {
-        resolution: profile.resolution,
-        fullscreen: profile.fullscreen,
-      });
-      
       const hasCustomMemory = profile.memory?.min > 0 || profile.memory?.max > 0;
       setUseGlobalMemory(!hasCustomMemory);
       setMinMemory(profile.memory?.min || 1024);
@@ -71,7 +65,6 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
       
       // Resolution includes fullscreen
       const hasCustomResolution = profile.resolution?.width > 0 || profile.resolution?.height > 0;
-      console.log('[ProfileSettings] hasCustomResolution:', hasCustomResolution, 'setting useGlobalResolution to:', !hasCustomResolution);
       setUseGlobalResolution(!hasCustomResolution);
       setWindowWidth(profile.resolution?.width || 854);
       setWindowHeight(profile.resolution?.height || 480);
@@ -158,7 +151,6 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
   };
 
   const handleUseGlobalResolutionChange = (checked: boolean) => {
-    console.log('[ProfileSettings] Resolution checkbox changed to:', checked);
     setUseGlobalResolution(checked);
     if (checked && globalSettings) {
       setWindowWidth(globalSettings.resolution?.width || 854);
@@ -168,13 +160,6 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
   };
 
   const handleSave = async () => {
-    console.log('[ProfileSettings] Save button clicked');
-    console.log('[ProfileSettings] Current state:', {
-      useGlobalResolution,
-      windowWidth,
-      windowHeight,
-      fullscreen,
-    });
     setSaving(true);
     try {
       const updates: any = {
@@ -193,8 +178,6 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
         gameDirectory: gameDir,
         icon,
       };
-
-      console.log('[ProfileSettings] Saving settings:', updates);
       await window.electronAPI.profile.update(profile.id, updates);
       
       alert('✅ 설정이 저장되었습니다!');

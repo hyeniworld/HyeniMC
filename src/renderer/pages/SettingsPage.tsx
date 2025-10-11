@@ -43,6 +43,7 @@ export function SettingsPage() {
   const [tab, setTab] = useState<'download'|'java'|'resolution'|'cache'>('download');
   const [javaList, setJavaList] = useState<Array<{ path: string; version: string; majorVersion: number; vendor?: string; architecture: string }>>([]);
   const [systemMemory, setSystemMemory] = useState(16384);
+  const [cacheStats, setCacheStats] = useState<{ size: number; files: number }>({ size: 0, files: 0 });
   const s = settings;
 
   useEffect(() => {
@@ -54,15 +55,17 @@ export function SettingsPage() {
         
         // Get settings
         const gs = await window.electronAPI.settings.get();
-        console.log('[SettingsPage] Received from backend:', gs);
         const filled = fillDefaults(gs || {});
-        console.log('[SettingsPage] After fillDefaults:', filled);
         setSettings(filled);
         setOriginal(filled);
         
         // Auto-detect Java
         const javaInstalls = await window.electronAPI.java.detect();
         setJavaList(javaInstalls || []);
+        
+        // Get cache stats
+        const stats = await window.electronAPI.settings.getCacheStats();
+        setCacheStats(stats);
       } finally {
         setLoading(false);
       }
@@ -87,6 +90,60 @@ export function SettingsPage() {
   const isDirty = useMemo(() => JSON.stringify(settings ?? {}) !== JSON.stringify(original ?? {}), [settings, original]);
   const onCancel = () => navigate(-1);
   const onReset = () => setSettings(original);
+  
+  const onExport = async () => {
+    try {
+      const data = await window.electronAPI.settings.export();
+      const blob = new Blob([data], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `hyenimc-settings-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      alert('✅ 설정을 내보냈습니다.');
+    } catch (error) {
+      alert('❌ 설정 내보내기에 실패했습니다.');
+    }
+  };
+  
+  const onImport = async () => {
+    try {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.json';
+      input.onchange = async (e: any) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+          try {
+            const data = e.target?.result as string;
+            const result = await window.electronAPI.settings.import(data);
+            if (result.success) {
+              alert('✅ ' + result.message);
+              // Reload settings
+              const gs = await window.electronAPI.settings.get();
+              const filled = fillDefaults(gs || {});
+              setSettings(filled);
+              setOriginal(filled);
+            } else {
+              alert('❌ ' + result.message);
+            }
+          } catch (error) {
+            alert('❌ JSON 파싱에 실패했습니다.');
+          }
+        };
+        reader.readAsText(file);
+      };
+      input.click();
+    } catch (error) {
+      alert('❌ 설정 가져오기에 실패했습니다.');
+    }
+  };
 
   const onSave = async () => {
     setSaving(true);
@@ -113,6 +170,9 @@ export function SettingsPage() {
             <p className="text-gray-400 text-sm mt-1">프로필 기본값으로 상속됩니다. 프로필에서 미설정 시 이 값이 사용됩니다.</p>
           </div>
           <div className="hidden md:flex gap-2">
+            <button onClick={onExport} className="px-3 py-2 bg-gray-800 hover:bg-gray-750 border border-gray-700 rounded-lg text-sm">내보내기</button>
+            <button onClick={onImport} className="px-3 py-2 bg-gray-800 hover:bg-gray-750 border border-gray-700 rounded-lg text-sm">가져오기</button>
+            <div className="border-l border-gray-700 mx-1"></div>
             <button onClick={onCancel} className="px-3 py-2 bg-gray-800 hover:bg-gray-750 border border-gray-700 rounded-lg">취소</button>
             <button onClick={onReset} disabled={!isDirty} className="px-3 py-2 bg-gray-800 hover:bg-gray-750 border border-gray-700 rounded-lg disabled:opacity-50">되돌리기</button>
             <button onClick={onSave} disabled={!isDirty || saving} className="px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg disabled:opacity-50">{saving ? '저장 중...' : '저장'}</button>
@@ -275,21 +335,62 @@ export function SettingsPage() {
 
         {tab==='cache' && (
           <SectionCard title="캐시" subtitle="공유 캐시(에셋/라이브러리)의 용량과 TTL을 관리합니다.">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <label className="flex items-center gap-2 select-none">
-                <input type="checkbox" className="accent-purple-500" checked={s.cache?.enabled ?? true} onChange={(e) => update('cache.enabled', e.target.checked)} />
-                <span className="text-sm text-gray-300">활성화</span>
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="text-sm text-gray-400">최대 용량(GB)</span>
-                <input type="number" className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-purple-500" value={s.cache?.max_size_gb ?? ''} onChange={(e) => update('cache.max_size_gb', e.target.value === '' ? '' : Number(e.target.value))} />
-                <span className="text-xs text-gray-500">기본 10GB</span>
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="text-sm text-gray-400">TTL(일)</span>
-                <input type="number" className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-purple-500" value={s.cache?.ttl_days ?? ''} onChange={(e) => update('cache.ttl_days', e.target.value === '' ? '' : Number(e.target.value))} />
-                <span className="text-xs text-gray-500">기본 30일</span>
-              </label>
+            <div className="space-y-6">
+              {/* Cache statistics */}
+              <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-4">
+                <div className="text-sm text-gray-400 mb-3">캐시 통계</div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <div className="text-2xl font-semibold text-purple-400">{(cacheStats.size / 1024 / 1024 / 1024).toFixed(2)} GB</div>
+                    <div className="text-xs text-gray-500">현재 사용량</div>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-semibold text-purple-400">{cacheStats.files.toLocaleString()}</div>
+                    <div className="text-xs text-gray-500">캐시된 파일 수</div>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Cache settings */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <label className="flex items-center gap-2 select-none">
+                  <input type="checkbox" className="accent-purple-500" checked={s.cache?.enabled ?? true} onChange={(e) => update('cache.enabled', e.target.checked)} />
+                  <span className="text-sm text-gray-300">활성화</span>
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-sm text-gray-400">최대 용량(GB)</span>
+                  <input type="number" className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-purple-500" value={s.cache?.max_size_gb ?? ''} onChange={(e) => update('cache.max_size_gb', e.target.value === '' ? '' : Number(e.target.value))} />
+                  <span className="text-xs text-gray-500">기본 10GB</span>
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-sm text-gray-400">TTL(일)</span>
+                  <input type="number" className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-purple-500" value={s.cache?.ttl_days ?? ''} onChange={(e) => update('cache.ttl_days', e.target.value === '' ? '' : Number(e.target.value))} />
+                  <span className="text-xs text-gray-500">기본 30일</span>
+                </label>
+              </div>
+              
+              {/* Danger zone */}
+              <div className="bg-red-900/10 border border-red-900/30 rounded-lg p-4">
+                <div className="text-sm font-medium text-red-400 mb-2">위험 영역</div>
+                <div className="text-xs text-gray-400 mb-3">캐시를 삭제하면 모든 다운로드된 에셋과 라이브러리가 제거되며, 다음 게임 실행 시 다시 다운로드됩니다.</div>
+                <button 
+                  onClick={async () => {
+                    if (confirm('정말로 모든 캐시를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
+                      const result = await window.electronAPI.settings.resetCache();
+                      if (result.success) {
+                        alert('✅ ' + result.message);
+                        const stats = await window.electronAPI.settings.getCacheStats();
+                        setCacheStats(stats);
+                      } else {
+                        alert('❌ ' + result.message);
+                      }
+                    }
+                  }}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors"
+                >
+                  캐시 전체 삭제
+                </button>
+              </div>
             </div>
           </SectionCard>
         )}

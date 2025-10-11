@@ -28,6 +28,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   settings: {
     get: (): Promise<any> => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET),
     update: (settings: any): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_UPDATE, settings),
+    resetCache: (): Promise<{ success: boolean; message: string }> => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_RESET_CACHE),
+    getCacheStats: (): Promise<{ size: number; files: number }> => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET_CACHE_STATS),
+    export: (): Promise<string> => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_EXPORT),
+    import: (data: string): Promise<{ success: boolean; message: string }> => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_IMPORT, data),
   },
   
   // Account APIs
@@ -301,6 +305,10 @@ declare global {
       settings: {
         get: () => Promise<any>;
         update: (settings: any) => Promise<{ ok: boolean }>;
+        resetCache: () => Promise<{ success: boolean; message: string }>;
+        getCacheStats: () => Promise<{ size: number; files: number }>;
+        export: () => Promise<string>;
+        import: (data: string) => Promise<{ success: boolean; message: string }>;
       };
       modpack: {
         search: (query: string, gameVersion?: string) => Promise<any[]>;

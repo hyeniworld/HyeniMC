@@ -1,5 +1,7 @@
-import { ipcMain } from 'electron';
+import { app, ipcMain } from 'electron';
 import { IPC_CHANNELS } from '../../shared/constants';
+import * as fs from 'fs/promises';
+import * as path from 'path';
 
 export function registerSettingsHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.SETTINGS_GET, async () => {
@@ -63,4 +65,96 @@ export function registerSettingsHandlers(): void {
     const res = await settingsRpc.updateSettings({ settings: cleanSettings });
     return res;
   });
+
+  // Reset cache (clear cache directory)
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_RESET_CACHE, async () => {
+    const dataPath = app.getPath('userData');
+    const cachePath = path.join(dataPath, 'cache');
+    
+    try {
+      // Check if cache directory exists
+      await fs.access(cachePath);
+      
+      // Remove all files in cache directory
+      const entries = await fs.readdir(cachePath, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(cachePath, entry.name);
+        if (entry.isDirectory()) {
+          await fs.rm(fullPath, { recursive: true, force: true });
+        } else {
+          await fs.unlink(fullPath);
+        }
+      }
+      
+      return { success: true, message: '캐시가 삭제되었습니다.' };
+    } catch (error) {
+      console.error('[IPC Settings] Failed to reset cache:', error);
+      return { success: false, message: '캐시 삭제에 실패했습니다.' };
+    }
+  });
+
+  // Get cache statistics
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_GET_CACHE_STATS, async () => {
+    const dataPath = app.getPath('userData');
+    const cachePath = path.join(dataPath, 'cache');
+    
+    try {
+      const stats = await getCacheStats(cachePath);
+      return stats;
+    } catch (error) {
+      console.error('[IPC Settings] Failed to get cache stats:', error);
+      return { size: 0, files: 0 };
+    }
+  });
+
+  // Export settings
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_EXPORT, async () => {
+    const { settingsRpc } = await import('../grpc/clients');
+    const res = await settingsRpc.getSettings();
+    return JSON.stringify(res.settings, null, 2);
+  });
+
+  // Import settings
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_IMPORT, async (_event, data: string) => {
+    try {
+      const settings = JSON.parse(data);
+      const { settingsRpc } = await import('../grpc/clients');
+      await settingsRpc.updateSettings({ settings });
+      return { success: true, message: '설정을 가져왔습니다.' };
+    } catch (error) {
+      console.error('[IPC Settings] Failed to import settings:', error);
+      return { success: false, message: '설정 가져오기에 실패했습니다.' };
+    }
+  });
+}
+
+// Helper function to calculate directory size
+async function getCacheStats(dirPath: string): Promise<{ size: number; files: number }> {
+  let totalSize = 0;
+  let fileCount = 0;
+
+  try {
+    await fs.access(dirPath);
+  } catch {
+    return { size: 0, files: 0 };
+  }
+
+  async function traverse(currentPath: string) {
+    const entries = await fs.readdir(currentPath, { withFileTypes: true });
+    
+    for (const entry of entries) {
+      const fullPath = path.join(currentPath, entry.name);
+      
+      if (entry.isDirectory()) {
+        await traverse(fullPath);
+      } else {
+        const stats = await fs.stat(fullPath);
+        totalSize += stats.size;
+        fileCount++;
+      }
+    }
+  }
+
+  await traverse(dirPath);
+  return { size: totalSize, files: fileCount };
 }
