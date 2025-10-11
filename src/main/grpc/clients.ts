@@ -23,16 +23,46 @@ import {
   type StateRequest,
   type StateEvent,
 } from '../gen/launcher/instance';
+import { HealthServiceClient, type HealthStatus } from '../gen/launcher/health';
+import {
+  VersionServiceClient,
+  type ListMinecraftVersionsRequest,
+  type ListMinecraftVersionsResponse,
+  type ListLoaderVersionsRequest,
+  type ListLoaderVersionsResponse,
+  type CheckCompatibilityRequest,
+  type CheckCompatibilityResponse,
+} from '../gen/launcher/version';
 
 let profileClient: ProfileServiceClient | null = null;
 let downloadClient: DownloadServiceClient | null = null;
 let instanceClient: InstanceServiceClient | null = null;
+let healthClient: HealthServiceClient | null = null;
+let versionClient: VersionServiceClient | null = null;
 let lastAddr: string | null = null;
 
 function ensureAddr(): string {
   const addr = getBackendAddress();
   if (!addr) throw new Error('Backend server is not running');
   return addr;
+}
+
+function ensureHealthClient(): HealthServiceClient {
+  const addr = ensureAddr();
+  if (!healthClient || lastAddr !== addr) {
+    healthClient = new HealthServiceClient(addr, credentials.createInsecure());
+    lastAddr = addr;
+  }
+  return healthClient;
+}
+
+function ensureVersionClient(): VersionServiceClient {
+  const addr = ensureAddr();
+  if (!versionClient || lastAddr !== addr) {
+    versionClient = new VersionServiceClient(addr, credentials.createInsecure());
+    lastAddr = addr;
+  }
+  return versionClient;
 }
 
 export function streamState(
@@ -51,6 +81,12 @@ export function streamState(
   };
 }
 
+export const healthRpc = {
+  check: () => promisify<any, HealthStatus>(
+    (empty: any, cb: (err: any, res: HealthStatus) => void) => (ensureHealthClient() as any).check({}, cb as any)
+  )({}),
+};
+
 export const downloadRpc = {
   publishProgress: (ev: ProgressEvent) =>
     promisify<ProgressEvent, { ok: boolean }>(ensureDownloadClient().publishProgress.bind(ensureDownloadClient()))(ev),
@@ -61,6 +97,15 @@ export const instanceRpc = {
     promisify<LogLine, { ok: boolean }>(ensureInstanceClient().publishLog.bind(ensureInstanceClient()))(line),
   publishState: (ev: StateEvent) =>
     promisify<StateEvent, { ok: boolean }>(ensureInstanceClient().publishState.bind(ensureInstanceClient()))(ev),
+};
+
+export const versionRpc = {
+  listMinecraftVersions: (req: ListMinecraftVersionsRequest) =>
+    promisify<ListMinecraftVersionsRequest, ListMinecraftVersionsResponse>(ensureVersionClient().listMinecraftVersions.bind(ensureVersionClient()))(req),
+  listLoaderVersions: (req: ListLoaderVersionsRequest) =>
+    promisify<ListLoaderVersionsRequest, ListLoaderVersionsResponse>(ensureVersionClient().listLoaderVersions.bind(ensureVersionClient()))(req),
+  checkCompatibility: (req: CheckCompatibilityRequest) =>
+    promisify<CheckCompatibilityRequest, CheckCompatibilityResponse>(ensureVersionClient().checkCompatibility.bind(ensureVersionClient()))(req),
 };
 
 export function streamLogs(

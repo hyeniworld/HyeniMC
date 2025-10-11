@@ -3,6 +3,7 @@ import * as path from 'path';
 import { registerIpcHandlers } from './ipc/handlers';
 import { initializeDownloadStreamBridge, shutdownDownloadStreamBridge } from './ipc/downloadStream';
 import { initializeInstanceLogBridge, shutdownInstanceLogBridge } from './ipc/instanceStream';
+import { initializeInstanceStateBridge, shutdownInstanceStateBridge } from './ipc/instanceState';
 import { startBackend, stopBackend } from './backend/manager';
 
 // Set app name
@@ -75,6 +76,8 @@ async function initialize() {
     initializeDownloadStreamBridge();
     // Initialize gRPC instance log stream bridge (global)
     initializeInstanceLogBridge();
+    // Initialize gRPC instance state stream bridge (global)
+    initializeInstanceStateBridge();
   } catch (error) {
     console.error('Failed to initialize app:', error);
     app.quit();
@@ -104,6 +107,7 @@ app.on('activate', () => {
 app.on('before-quit', async () => {
   shutdownDownloadStreamBridge();
   shutdownInstanceLogBridge();
+  shutdownInstanceStateBridge();
   await stopBackend();
 });
 

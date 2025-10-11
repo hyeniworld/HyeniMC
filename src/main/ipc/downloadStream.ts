@@ -4,6 +4,10 @@ import { streamDownloadProgress } from '../grpc/clients';
 
 let cancelStream: (() => void) | null = null;
 let started = false;
+let backoffMs = 1000;
+const backoffMax = 30000;
+let pending: any | null = null;
+let throttleTimer: NodeJS.Timeout | null = null;
 
 function broadcast(channel: string, payload: any) {
   const windows = BrowserWindow.getAllWindows();
@@ -16,8 +20,12 @@ export function initializeDownloadStreamBridge(profileId?: string) {
   if (started) return;
   started = true;
 
-  const start = () => {
+  const start = async () => {
     try {
+      // Health check before subscribing
+      const { healthRpc } = await import('../grpc/clients');
+      await healthRpc.check();
+
       cancelStream = streamDownloadProgress(
         { profileId: profileId ?? '' },
         (ev) => {
@@ -32,12 +40,22 @@ export function initializeDownloadStreamBridge(profileId?: string) {
             error: ev.error,
           };
 
-          if (ev.status === 'completed') {
-            broadcast(IPC_EVENTS.DOWNLOAD_COMPLETE, base);
-          } else if (ev.status === 'failed') {
-            broadcast(IPC_EVENTS.DOWNLOAD_ERROR, base);
-          } else {
-            broadcast(IPC_EVENTS.DOWNLOAD_PROGRESS, base);
+          // throttle to 100ms
+          pending = base;
+          if (!throttleTimer) {
+            throttleTimer = setTimeout(() => {
+              const data = pending;
+              pending = null;
+              throttleTimer = null;
+              if (!data) return;
+              if (data.status === 'completed') {
+                broadcast(IPC_EVENTS.DOWNLOAD_COMPLETE, data);
+              } else if (data.status === 'failed') {
+                broadcast(IPC_EVENTS.DOWNLOAD_ERROR, data);
+              } else {
+                broadcast(IPC_EVENTS.DOWNLOAD_PROGRESS, data);
+              }
+            }, 100);
           }
         },
         (err) => {
@@ -50,6 +68,7 @@ export function initializeDownloadStreamBridge(profileId?: string) {
         }
       );
       console.log('[DownloadStream] subscribed');
+      backoffMs = 1000; // reset on success
     } catch (e) {
       console.warn('[DownloadStream] failed to subscribe, will retry:', (e as Error).message);
       scheduleReconnect();
@@ -59,17 +78,19 @@ export function initializeDownloadStreamBridge(profileId?: string) {
   let retryTimer: NodeJS.Timeout | null = null;
   function scheduleReconnect() {
     if (retryTimer) return;
-    // Exponential backoff (simple): 1.5s fixed for now; can enhance later
+    // Exponential backoff with cap
+    const delay = backoffMs;
+    backoffMs = Math.min(backoffMax, Math.floor(backoffMs * 2));
     retryTimer = setTimeout(() => {
       retryTimer = null;
       if (!started) return;
       if (cancelStream) { try { cancelStream(); } catch {} }
       start();
-    }, 1500);
+    }, delay);
   }
 
   // defer a little to allow windows to be ready
-  setTimeout(start, 300);
+  setTimeout(() => { start().catch(() => scheduleReconnect()); }, 300);
 }
 
 export function shutdownDownloadStreamBridge() {

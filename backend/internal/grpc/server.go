@@ -33,6 +33,8 @@ func StartGRPCServer(addr string, profileSvc *services.ProfileService) error {
 	pb.RegisterProfileServiceServer(server, NewProfileServiceServer(profileSvc))
 	pb.RegisterDownloadServiceServer(server, NewDownloadServiceServer())
 	pb.RegisterInstanceServiceServer(server, NewInstanceServiceServer())
+	pb.RegisterVersionServiceServer(server, NewVersionServiceServer())
+	pb.RegisterHealthServiceServer(server, NewHealthServiceServer())
 
 	if err := server.Serve(lis); err != nil {
 		return fmt.Errorf("failed to serve gRPC: %w", err)

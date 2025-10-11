@@ -1,0 +1,13 @@
+syntax = "proto3";
+package launcher;
+option go_package = "hyenimc/backend/gen/launcher;launcher";
+
+import "google/protobuf/empty.proto";
+
+service HealthService {
+  rpc Check(google.protobuf.Empty) returns (HealthStatus);
+}
+
+message HealthStatus {
+  string status = 1; // SERVING|NOT_SERVING
+}
