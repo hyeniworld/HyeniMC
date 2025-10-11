@@ -33,18 +33,39 @@ import {
   type CheckCompatibilityRequest,
   type CheckCompatibilityResponse,
 } from '../gen/launcher/version';
+import {
+  LoaderServiceClient,
+  type GetVersionsRequest as LoaderGetVersionsRequest,
+  type GetVersionsResponse as LoaderGetVersionsResponse,
+  type GetRecommendedRequest as LoaderGetRecommendedRequest,
+  type GetRecommendedResponse as LoaderGetRecommendedResponse,
+  type CheckInstalledRequest as LoaderCheckInstalledRequest,
+  type CheckInstalledResponse as LoaderCheckInstalledResponse,
+  type InstallRequest as LoaderInstallRequest,
+  type InstallResponse as LoaderInstallResponse,
+} from '../gen/launcher/loader';
 
 let profileClient: ProfileServiceClient | null = null;
 let downloadClient: DownloadServiceClient | null = null;
 let instanceClient: InstanceServiceClient | null = null;
 let healthClient: HealthServiceClient | null = null;
 let versionClient: VersionServiceClient | null = null;
+let loaderClient: LoaderServiceClient | null = null;
 let lastAddr: string | null = null;
 
 function ensureAddr(): string {
   const addr = getBackendAddress();
   if (!addr) throw new Error('Backend server is not running');
   return addr;
+}
+
+function ensureLoaderClient(): LoaderServiceClient {
+  const addr = ensureAddr();
+  if (!loaderClient || lastAddr !== addr) {
+    loaderClient = new LoaderServiceClient(addr, credentials.createInsecure());
+    lastAddr = addr;
+  }
+  return loaderClient;
 }
 
 function ensureHealthClient(): HealthServiceClient {
@@ -80,6 +101,17 @@ export function streamState(
     try { stream.cancel(); } catch {}
   };
 }
+
+export const loaderRpc = {
+  getVersions: (req: LoaderGetVersionsRequest) =>
+    promisify<LoaderGetVersionsRequest, LoaderGetVersionsResponse>(ensureLoaderClient().getVersions.bind(ensureLoaderClient()))(req),
+  getRecommended: (req: LoaderGetRecommendedRequest) =>
+    promisify<LoaderGetRecommendedRequest, LoaderGetRecommendedResponse>(ensureLoaderClient().getRecommended.bind(ensureLoaderClient()))(req),
+  checkInstalled: (req: LoaderCheckInstalledRequest) =>
+    promisify<LoaderCheckInstalledRequest, LoaderCheckInstalledResponse>(ensureLoaderClient().checkInstalled.bind(ensureLoaderClient()))(req),
+  install: (req: LoaderInstallRequest) =>
+    promisify<LoaderInstallRequest, LoaderInstallResponse>(ensureLoaderClient().install.bind(ensureLoaderClient()))(req),
+};
 
 export const healthRpc = {
   check: () => promisify<any, HealthStatus>(

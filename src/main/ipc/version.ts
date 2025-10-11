@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
 import { IPC_CHANNELS } from '../../shared/constants';
 import { versionRpc } from '../grpc/clients';
+import { normalizeGrpcError } from '../grpc/errors';
 
 /**
  * Register version-related IPC handlers
@@ -17,7 +18,8 @@ export function registerVersionHandlers(): void {
       return versions;
     } catch (err) {
       console.error('[IPC Version] Failed to fetch versions:', err);
-      throw new Error(err instanceof Error ? err.message : 'Failed to fetch versions');
+      const ne = normalizeGrpcError(err, '버전 목록을 불러오지 못했습니다.');
+      throw new Error(ne.message);
     }
   });
 
@@ -32,7 +34,8 @@ export function registerVersionHandlers(): void {
       return latest;
     } catch (err) {
       console.error('[IPC Version] Failed to fetch latest version:', err);
-      throw new Error(err instanceof Error ? err.message : 'Failed to fetch latest version');
+      const ne = normalizeGrpcError(err, '최신 버전을 불러오지 못했습니다.');
+      throw new Error(ne.message);
     }
   });
 }

@@ -1,5 +1,7 @@
 import { ipcMain, BrowserWindow } from 'electron';
 import { IPC_CHANNELS } from '../../shared/constants';
+import { loaderRpc } from '../grpc/clients';
+import { normalizeGrpcError } from '../grpc/errors';
 import { LoaderManager } from '../services/loader-manager';
 import { LoaderType } from '../../shared/types/profile';
 import { app } from 'electron';
@@ -25,12 +27,24 @@ export function registerLoaderHandlers(): void {
     async (event, loaderType: LoaderType, minecraftVersion?: string, includeUnstable = false) => {
       try {
         console.log(`[IPC Loader] Getting versions for ${loaderType}${minecraftVersion ? ` (MC ${minecraftVersion})` : ''} (includeUnstable: ${includeUnstable})`);
+        // Try gRPC first when gameVersion is provided
+        if (minecraftVersion) {
+          try {
+            const res = await loaderRpc.getVersions({ loaderType, gameVersion: minecraftVersion, includeUnstable } as any);
+            const versions = (res.versions || []).map(v => ({ version: v.version, stable: !!(v as any).stable }));
+            return { success: true, versions };
+          } catch (e) {
+            console.warn('[IPC Loader] gRPC getVersions failed, falling back to TS manager:', (e as Error).message);
+          }
+        }
+        // Fallback to existing TS manager
         const manager = getLoaderManager();
         const versions = await manager.getLoaderVersions(loaderType, minecraftVersion, includeUnstable);
         return { success: true, versions };
       } catch (err) {
         console.error('[IPC Loader] Failed to get versions:', err);
-        throw new Error(err instanceof Error ? err.message : 'Failed to get loader versions');
+        const ne = normalizeGrpcError(err, '로더 버전 목록을 가져오지 못했습니다.');
+        throw new Error(ne.message);
       }
     }
   );
@@ -41,12 +55,21 @@ export function registerLoaderHandlers(): void {
     async (event, loaderType: LoaderType, minecraftVersion: string) => {
       try {
         console.log(`[IPC Loader] Getting recommended ${loaderType} version for MC ${minecraftVersion}`);
+        // Try gRPC first
+        try {
+          const res = await loaderRpc.getRecommended({ loaderType, gameVersion: minecraftVersion } as any);
+          const version = res.version?.version || '';
+          if (version) return { success: true, version };
+        } catch (e) {
+          console.warn('[IPC Loader] gRPC getRecommended failed, falling back to TS manager:', (e as Error).message);
+        }
         const manager = getLoaderManager();
         const version = await manager.getRecommendedVersion(loaderType, minecraftVersion);
         return { success: true, version };
       } catch (err) {
         console.error('[IPC Loader] Failed to get recommended version:', err);
-        throw new Error(err instanceof Error ? err.message : 'Failed to get recommended version');
+        const ne = normalizeGrpcError(err, '권장 로더 버전을 가져오지 못했습니다.');
+        throw new Error(ne.message);
       }
     }
   );
@@ -67,13 +90,30 @@ export function registerLoaderHandlers(): void {
         
         const mainWindow = BrowserWindow.fromWebContents(event.sender);
         
+        // Try gRPC install first
+        try {
+          const res = await loaderRpc.install({
+            loaderType,
+            gameVersion: minecraftVersion,
+            loaderVersion,
+            instanceDir: gameDir,
+          } as any);
+          const versionId = res.versionId || '';
+          if (versionId) {
+            console.log(`[IPC Loader] gRPC install completed: ${versionId}`);
+            return { success: true, versionId };
+          }
+        } catch (e) {
+          console.warn('[IPC Loader] gRPC install failed, falling back to TS manager:', (e as Error).message);
+        }
+
+        // Fallback: TS manager with progress events
         const versionId = await manager.installLoader(
           loaderType,
           minecraftVersion,
           loaderVersion,
           gameDir,
           (message, current, total) => {
-            // 진행률을 렌더러에 전송
             if (mainWindow) {
               mainWindow.webContents.send('loader:install-progress', {
                 loaderType,
@@ -90,7 +130,8 @@ export function registerLoaderHandlers(): void {
         return { success: true, versionId };
       } catch (err) {
         console.error('[IPC Loader] Failed to install:', err);
-        throw new Error(err instanceof Error ? err.message : 'Failed to install loader');
+        const ne = normalizeGrpcError(err, '로더 설치에 실패했습니다.');
+        throw new Error(ne.message);
       }
     }
   );
@@ -111,6 +152,20 @@ export function registerLoaderHandlers(): void {
         const gameDir = profileId
           ? getProfileInstanceDir(profileId)
           : path.join(app.getPath('userData'), 'game');
+
+        // Try gRPC first with instance_dir
+        try {
+          const res = await loaderRpc.checkInstalled({
+            loaderType,
+            gameVersion: minecraftVersion,
+            loaderVersion,
+            profileId: profileId ?? '',
+            instanceDir: gameDir,
+          } as any);
+          return { success: true, installed: !!res.installed };
+        } catch (e) {
+          console.warn('[IPC Loader] gRPC checkInstalled failed, falling back to TS manager:', (e as Error).message);
+        }
 
         const installed = await manager.isLoaderInstalled(
           loaderType,

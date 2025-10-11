@@ -1,0 +1,23 @@
+syntax = "proto3";
+package launcher;
+option go_package = "hyenimc/backend/gen/launcher;launcher";
+import "launcher/version.proto"; // reuse LoaderVersion definition
+
+service LoaderService {
+  rpc GetVersions(GetVersionsRequest) returns (GetVersionsResponse);
+  rpc GetRecommended(GetRecommendedRequest) returns (GetRecommendedResponse);
+  rpc CheckInstalled(CheckInstalledRequest) returns (CheckInstalledResponse);
+  rpc Install(InstallRequest) returns (InstallResponse);
+}
+
+message GetVersionsRequest { string loader_type = 1; string game_version = 2; bool include_unstable = 3; }
+message GetVersionsResponse { repeated LoaderVersion versions = 1; }
+
+message GetRecommendedRequest { string loader_type = 1; string game_version = 2; }
+message GetRecommendedResponse { LoaderVersion version = 1; }
+
+message CheckInstalledRequest { string loader_type = 1; string game_version = 2; string loader_version = 3; string profile_id = 4; string instance_dir = 5; }
+message CheckInstalledResponse { bool installed = 1; }
+
+message InstallRequest { string loader_type = 1; string game_version = 2; string loader_version = 3; string instance_dir = 4; }
+message InstallResponse { bool success = 1; string version_id = 2; }
