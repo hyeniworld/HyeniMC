@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { downloadRpc } from '../grpc/clients';
+import { downloadRpc, modRpc } from '../grpc/clients';
 import { IPC_CHANNELS } from '../../shared/constants';
 import { ModManager } from '../services/mod-manager';
 import { ModrinthAPI } from '../services/modrinth-api';
@@ -18,20 +18,23 @@ const modUpdater = new ModUpdater();
  * Register mod-related IPC handlers
  */
 export function registerModHandlers(): void {
-  // List mods for a profile
-  ipcMain.handle(IPC_CHANNELS.MOD_LIST, async (_event, profileId: string) => {
+  // List mods for a profile (cache-based)
+  ipcMain.handle(IPC_CHANNELS.MOD_LIST, async (_event, profileId: string, forceRefresh = false) => {
     try {
-      const gameDir = getProfileInstanceDir(profileId);
-      const modManager = new ModManager();
-      const mods = await modManager.listMods(gameDir);
+      console.log(`[IPC Mod] Listing mods for profile: ${profileId} (forceRefresh: ${forceRefresh})`);
+      const result = await modRpc.listMods({ profileId, forceRefresh });
       
-      return mods.map(mod => ({
+      return (result.mods || []).map(mod => ({
+        id: mod.id,
         fileName: mod.fileName,
-        name: mod.name,
-        version: mod.version,
-        description: mod.description,
-        authors: mod.authors,
+        name: mod.name || mod.fileName,
+        version: mod.version || 'Unknown',
+        description: mod.description || '',
+        authors: mod.authors || [],
         enabled: mod.enabled,
+        modId: mod.modId,
+        source: mod.source,
+        fileSize: mod.fileSize,
       }));
     } catch (error) {
       console.error('[IPC Mod] Failed to list mods:', error);
@@ -40,18 +43,23 @@ export function registerModHandlers(): void {
   });
 
   // Toggle mod (enable/disable)
-  ipcMain.handle(IPC_CHANNELS.MOD_TOGGLE, async (_event, profileId: string, fileName: string, enabled: boolean) => {
+  ipcMain.handle(IPC_CHANNELS.MOD_TOGGLE, async (_event, profileId: string, modIdOrFileName: string, enabled: boolean) => {
     try {
-      const gameDir = getProfileInstanceDir(profileId);
-      const modManager = new ModManager();
+      console.log(`[IPC Mod] Toggling mod: ${modIdOrFileName} -> ${enabled}`);
       
-      if (enabled) {
-        await modManager.enableMod(gameDir, fileName);
-      } else {
-        await modManager.disableMod(gameDir, fileName);
+      // If it's a fileName, find the mod ID first
+      let modId = modIdOrFileName;
+      if (modIdOrFileName.includes('.jar')) {
+        const result = await modRpc.listMods({ profileId, forceRefresh: false });
+        const mod = (result.mods || []).find(m => m.fileName === modIdOrFileName);
+        if (!mod) {
+          throw new Error(`Mod not found: ${modIdOrFileName}`);
+        }
+        modId = mod.id;
       }
       
-      return { success: true };
+      const toggleResult = await modRpc.toggleMod({ modId, enabled });
+      return { success: toggleResult.success };
     } catch (error) {
       console.error('[IPC Mod] Failed to toggle mod:', error);
       throw error;

@@ -49,7 +49,7 @@ func main() {
 
 	// Start gRPC server (prints chosen address to stdout internally)
 	addr := os.Getenv("HYENIMC_ADDR")
-	if err := grpc.StartGRPCServer(addr, profileService, settingsService); err != nil {
+	if err := grpc.StartGRPCServer(addr, db.Get(), dataDir, profileService, settingsService); err != nil {
 		log.Fatalf("failed to start gRPC server: %v", err)
 	}
 }

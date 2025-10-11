@@ -82,6 +82,130 @@ var migrations = []Migration{
 			CREATE INDEX IF NOT EXISTS idx_profiles_updated_at ON profiles(updated_at DESC);
 		`,
 	},
+	{
+		Version: 4,
+		Name:    "create_profile_mods_cache",
+		SQL: `
+			CREATE TABLE IF NOT EXISTS profile_mods (
+				id TEXT PRIMARY KEY,
+				profile_id TEXT NOT NULL,
+				file_name TEXT NOT NULL,
+				file_path TEXT NOT NULL,
+				file_hash TEXT,
+				file_size INTEGER,
+				mod_id TEXT,
+				name TEXT,
+				version TEXT,
+				description TEXT,
+				authors TEXT,
+				enabled INTEGER DEFAULT 1,
+				source TEXT,
+				last_modified INTEGER,
+				created_at INTEGER NOT NULL,
+				updated_at INTEGER NOT NULL,
+				FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+			);
+			
+			CREATE INDEX IF NOT EXISTS idx_profile_mods_profile ON profile_mods(profile_id);
+			CREATE INDEX IF NOT EXISTS idx_profile_mods_hash ON profile_mods(file_hash);
+			CREATE INDEX IF NOT EXISTS idx_profile_mods_mod_id ON profile_mods(mod_id);
+			CREATE UNIQUE INDEX IF NOT EXISTS idx_profile_mods_unique ON profile_mods(profile_id, file_name);
+		`,
+	},
+	{
+		Version: 5,
+		Name:    "create_profile_resourcepacks_cache",
+		SQL: `
+			CREATE TABLE IF NOT EXISTS profile_resourcepacks (
+				id TEXT PRIMARY KEY,
+				profile_id TEXT NOT NULL,
+				file_name TEXT NOT NULL,
+				file_path TEXT NOT NULL,
+				file_hash TEXT,
+				file_size INTEGER,
+				is_directory INTEGER DEFAULT 0,
+				pack_format INTEGER,
+				description TEXT,
+				enabled INTEGER DEFAULT 0,
+				last_modified INTEGER,
+				created_at INTEGER NOT NULL,
+				updated_at INTEGER NOT NULL,
+				FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+			);
+			
+			CREATE INDEX IF NOT EXISTS idx_profile_resourcepacks_profile ON profile_resourcepacks(profile_id);
+			CREATE UNIQUE INDEX IF NOT EXISTS idx_profile_resourcepacks_unique ON profile_resourcepacks(profile_id, file_name);
+		`,
+	},
+	{
+		Version: 6,
+		Name:    "create_profile_shaderpacks_cache",
+		SQL: `
+			CREATE TABLE IF NOT EXISTS profile_shaderpacks (
+				id TEXT PRIMARY KEY,
+				profile_id TEXT NOT NULL,
+				file_name TEXT NOT NULL,
+				file_path TEXT NOT NULL,
+				file_hash TEXT,
+				is_directory INTEGER DEFAULT 0,
+				enabled INTEGER DEFAULT 0,
+				last_modified INTEGER,
+				created_at INTEGER NOT NULL,
+				updated_at INTEGER NOT NULL,
+				FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+			);
+			
+			CREATE INDEX IF NOT EXISTS idx_profile_shaderpacks_profile ON profile_shaderpacks(profile_id);
+			CREATE UNIQUE INDEX IF NOT EXISTS idx_profile_shaderpacks_unique ON profile_shaderpacks(profile_id, file_name);
+		`,
+	},
+	{
+		Version: 7,
+		Name:    "create_mod_updates_cache",
+		SQL: `
+			CREATE TABLE IF NOT EXISTS mod_updates (
+				mod_id TEXT PRIMARY KEY,
+				profile_id TEXT NOT NULL,
+				current_version TEXT,
+				latest_version TEXT,
+				update_available INTEGER DEFAULT 0,
+				changelog TEXT,
+				checked_at INTEGER,
+				FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+			);
+			
+			CREATE INDEX IF NOT EXISTS idx_mod_updates_profile ON mod_updates(profile_id);
+			CREATE INDEX IF NOT EXISTS idx_mod_updates_available ON mod_updates(update_available, profile_id);
+		`,
+	},
+	{
+		Version: 8,
+		Name:    "fix_profile_game_directories",
+		SQL: `
+			-- Fix existing profiles with incorrect game_directory
+			-- Extract base path and reconstruct with profile ID
+			-- This handles both forward and backslashes
+			UPDATE profiles
+			SET game_directory = 
+				CASE 
+					WHEN game_directory LIKE '%/data/instances/%' 
+						THEN REPLACE(SUBSTR(game_directory, 1, INSTR(game_directory, '/data/')), '/data', '') || 'instances/' || id
+					WHEN game_directory LIKE '%\data\instances\%' 
+						THEN REPLACE(SUBSTR(game_directory, 1, INSTR(game_directory, '\data\')), '\data', '') || 'instances\' || id
+					ELSE game_directory
+				END
+			WHERE game_directory LIKE '%/data/instances/%' OR game_directory LIKE '%\data\instances\%';
+		`,
+	},
+	{
+		Version: 9,
+		Name:    "clean_invalid_mod_cache",
+		SQL: `
+			-- Remove non-.jar files from mod cache (these were cached incorrectly)
+			DELETE FROM profile_mods
+			WHERE file_name NOT LIKE '%.jar' AND file_name NOT LIKE '%.jar.disabled';
+		`,
+	},
 }
 
 func runMigrations(db *sql.DB) error {

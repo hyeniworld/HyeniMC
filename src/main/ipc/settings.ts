@@ -75,21 +75,56 @@ export function registerSettingsHandlers(): void {
       // Check if cache directory exists
       await fs.access(cachePath);
       
-      // Remove all files in cache directory
+      // Try to clear Electron's session cache first
+      const { session } = require('electron');
+      try {
+        await session.defaultSession.clearCache();
+        await session.defaultSession.clearStorageData({
+          storages: ['appcache', 'filesystem', 'indexdb', 'localstorage', 'shadercache', 'websql', 'serviceworkers', 'cachestorage']
+        });
+      } catch (sessionError) {
+        console.warn('[IPC Settings] Failed to clear session cache:', sessionError);
+      }
+      
+      // Remove all files in cache directory with retry logic
       const entries = await fs.readdir(cachePath, { withFileTypes: true });
+      let failedCount = 0;
+      
       for (const entry of entries) {
         const fullPath = path.join(cachePath, entry.name);
-        if (entry.isDirectory()) {
-          await fs.rm(fullPath, { recursive: true, force: true });
-        } else {
-          await fs.unlink(fullPath);
+        try {
+          if (entry.isDirectory()) {
+            await fs.rm(fullPath, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+          } else {
+            await fs.unlink(fullPath);
+          }
+        } catch (fileError: any) {
+          // Skip files that are in use (EPERM, EBUSY)
+          if (fileError.code === 'EPERM' || fileError.code === 'EBUSY') {
+            console.warn(`[IPC Settings] Skipping locked file: ${entry.name}`);
+            failedCount++;
+          } else {
+            throw fileError;
+          }
         }
       }
       
-      return { success: true, message: '캐시가 삭제되었습니다.' };
+      if (failedCount > 0) {
+        return { 
+          success: true, 
+          message: `캐시가 삭제되었습니다. (${failedCount}개 파일은 사용 중이어서 건너뜀)\n앱을 재시작하면 완전히 초기화됩니다.`,
+          needsRestart: true
+        };
+      }
+      
+      return { success: true, message: '캐시가 삭제되었습니다.', needsRestart: false };
     } catch (error) {
       console.error('[IPC Settings] Failed to reset cache:', error);
-      return { success: false, message: '캐시 삭제에 실패했습니다.' };
+      return { 
+        success: false, 
+        message: '캐시 삭제에 실패했습니다. 앱을 종료 후 다시 시도해주세요.',
+        needsRestart: false
+      };
     }
   });
 

@@ -189,22 +189,40 @@ export class ModManager {
   }
 
   /**
-   * Simple TOML parser for mods.toml
+   * Improved TOML parser for mods.toml
    */
   private parseToml(content: string): any {
     const result: any = {};
     const lines = content.split('\n');
     let currentSection: any = result;
+    let inMultilineString = false;
+    let multilineKey = '';
+    let multilineValue = '';
 
-    for (const line of lines) {
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i];
       const trimmed = line.trim();
+      
+      // Handle multi-line strings
+      if (inMultilineString) {
+        if (trimmed.endsWith("'''") || trimmed.endsWith('"""')) {
+          multilineValue += '\n' + trimmed.slice(0, -3);
+          currentSection[multilineKey] = multilineValue;
+          inMultilineString = false;
+          multilineKey = '';
+          multilineValue = '';
+        } else {
+          multilineValue += '\n' + line;
+        }
+        continue;
+      }
       
       // Skip comments and empty lines
       if (trimmed.startsWith('#') || trimmed === '') continue;
 
-      // Section header
+      // Section header [[mods]]
       if (trimmed.startsWith('[[')) {
-        const sectionName = trimmed.slice(2, -2);
+        const sectionName = trimmed.slice(2, -2).trim();
         if (sectionName === 'mods') {
           currentSection = {};
           if (!result.mods) result.mods = [];
@@ -213,11 +231,37 @@ export class ModManager {
         continue;
       }
 
-      // Key-value pair
-      const match = trimmed.match(/^(\w+)\s*=\s*"?([^"]+)"?$/);
-      if (match) {
-        const [, key, value] = match;
-        currentSection[key] = value.replace(/"/g, '');
+      // Key-value pair with better matching
+      const kvMatch = trimmed.match(/^(\w+)\s*=\s*(.+)$/);
+      if (kvMatch) {
+        const [, key, rawValue] = kvMatch;
+        let value = rawValue.trim();
+        
+        // Handle multi-line string start
+        if (value.startsWith("'''") || value.startsWith('"""')) {
+          const quote = value.substring(0, 3);
+          if (value.endsWith(quote) && value.length > 6) {
+            // Single-line multi-line string
+            currentSection[key] = value.slice(3, -3);
+          } else {
+            // Multi-line string starts
+            inMultilineString = true;
+            multilineKey = key;
+            multilineValue = value.slice(3);
+          }
+          continue;
+        }
+        
+        // Remove quotes
+        if ((value.startsWith('"') && value.endsWith('"')) || 
+            (value.startsWith("'") && value.endsWith("'"))) {
+          value = value.slice(1, -1);
+        }
+        
+        // Handle variable substitution ${...}
+        value = value.replace(/\$\{[^}]+\}/g, 'unknown');
+        
+        currentSection[key] = value;
       }
     }
 

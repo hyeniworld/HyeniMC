@@ -3,6 +3,12 @@ package launcher;
 option go_package = "hyenimc/backend/gen/launcher;launcher";
 
 service ModService {
+  // Cache-based operations
+  rpc ListMods(ListModsRequest) returns (ListModsResponse);
+  rpc ToggleMod(ToggleModRequest) returns (ToggleModResponse);
+  rpc RefreshModCache(RefreshModCacheRequest) returns (RefreshModCacheResponse);
+  
+  // Online operations
   rpc SearchMods(SearchModsRequest) returns (SearchModsResponse);
   rpc GetMod(GetModRequest) returns (Mod);
   rpc GetModVersions(GetModVersionsRequest) returns (GetModVersionsResponse);
@@ -14,25 +20,48 @@ service ModService {
 
 message Mod {
   string id = 1;
-  string name = 2;
-  string version = 3;
-  string file_name = 4;
-  string source = 5; // modrinth|curseforge|custom|url
-  string source_id = 6;
-  string project_slug = 7;
-  string file_id = 8;
-  repeated string dependencies = 9;
-  bool enabled = 10;
-  bool required = 11;
-  repeated string game_versions = 12;
-  repeated string loaders = 13;
-  bool update_available = 14;
-  string latest_version = 15;
-  int64 file_size = 16;
-  string sha1 = 17;
-  string sha512 = 18;
+  string profile_id = 2;
+  string name = 3;
+  string version = 4;
+  string file_name = 5;
+  string file_path = 6;
+  string file_hash = 7;
+  int64 file_size = 8;
+  string mod_id = 9; // modrinth/curseforge ID
+  string description = 10;
+  repeated string authors = 11;
+  bool enabled = 12;
+  string source = 13; // modrinth|curseforge|local
+  int64 last_modified = 14;
+  int64 created_at = 15;
+  int64 updated_at = 16;
 }
 
+// Cache operations
+message ListModsRequest { 
+  string profile_id = 1; 
+  bool force_refresh = 2;
+}
+message ListModsResponse { 
+  repeated Mod mods = 1; 
+}
+
+message ToggleModRequest { 
+  string mod_id = 1; 
+  bool enabled = 2; 
+}
+message ToggleModResponse { 
+  bool success = 1; 
+}
+
+message RefreshModCacheRequest { 
+  string profile_id = 1; 
+}
+message RefreshModCacheResponse { 
+  int32 total_mods = 1; 
+}
+
+// Online operations
 message SearchModsRequest { string query = 1; string game_version = 2; string loader_type = 3; int32 limit = 4; int32 offset = 5; }
 message SearchModsResponse { repeated Mod results = 1; }
 

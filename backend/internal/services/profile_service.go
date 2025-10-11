@@ -42,15 +42,23 @@ func (s *ProfileService) CreateProfile(ctx context.Context, req *domain.CreatePr
 
 	// Create profile with empty memory settings
 	// Memory will inherit from global settings at launch time
+	profileID := uuid.New().String()
+	
+	// GameDirectory should be: {dataDir}/../instances/{profile-id}
+	// dataDir is typically: C:\Users\xxx\AppData\Roaming\HyeniMC\data
+	// instances is at: C:\Users\xxx\AppData\Roaming\HyeniMC\instances
+	parentDir := filepath.Dir(s.dataDir) // Remove "data" from path
+	gameDir := filepath.Join(parentDir, "instances", profileID)
+	
 	profile := &domain.Profile{
-		ID:            uuid.New().String(),
+		ID:            profileID,
 		Name:          req.Name,
 		Description:   req.Description,
 		Icon:          req.Icon,
 		GameVersion:   req.GameVersion,
 		LoaderType:    req.LoaderType,
 		LoaderVersion: req.LoaderVersion,
-		GameDirectory: filepath.Join(s.dataDir, "instances", sanitizeName(req.Name)),
+		GameDirectory: gameDir,
 		JvmArgs:       []string{},
 		Memory: domain.Memory{
 			Min: 0, // 0 means inherit from global settings

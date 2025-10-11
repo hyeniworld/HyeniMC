@@ -31,8 +31,8 @@ func Initialize(dataDir string) error {
 		dbPath = filepath.Join(dataDir, "hyenimc.db")
 		log.Printf("[DB] Database path: %s", dbPath)
 
-		// Open database
-		instance, err = sql.Open("sqlite", dbPath+"?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)")
+		// Open database with busy_timeout and WAL mode
+		instance, err = sql.Open("sqlite", dbPath+"?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(10000)")
 		if err != nil {
 			err = fmt.Errorf("failed to open database: %w", err)
 			return
@@ -44,9 +44,9 @@ func Initialize(dataDir string) error {
 			return
 		}
 
-		// Set connection pool settings
-		instance.SetMaxOpenConns(25)
-		instance.SetMaxIdleConns(5)
+		// Set connection pool settings for SQLite (reduce concurrency)
+		instance.SetMaxOpenConns(1)  // SQLite works best with single writer
+		instance.SetMaxIdleConns(1)
 
 		log.Println("[DB] Database connection established")
 

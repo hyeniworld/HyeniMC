@@ -60,6 +60,15 @@ import {
   type InstallResponse as LoaderInstallResponse,
   type InstallProgress as LoaderInstallProgress,
 } from '../gen/launcher/loader';
+import {
+  ModServiceClient,
+  type ListModsRequest,
+  type ListModsResponse,
+  type ToggleModRequest,
+  type ToggleModResponse,
+  type RefreshModCacheRequest,
+  type RefreshModCacheResponse,
+} from '../gen/launcher/mod';
 
 let profileClient: ProfileServiceClient | null = null;
 let downloadClient: DownloadServiceClient | null = null;
@@ -70,6 +79,7 @@ let loaderClient: LoaderServiceClient | null = null;
 let lastAddr: string | null = null;
 let assetClient: AssetServiceClient | null = null;
 let settingsClient: SettingsServiceClient | null = null;
+let modClient: ModServiceClient | null = null;
 
 function ensureAddr(): string {
   const addr = getBackendAddress();
@@ -281,6 +291,24 @@ export const profileRpc = {
     promisify<UpdateProfileRequest, Profile>(ensureProfileClient().updateProfile.bind(ensureProfileClient()))(req),
   deleteProfile: (req: DeleteProfileRequest) =>
     promisify<DeleteProfileRequest, { success: boolean }>(ensureProfileClient().deleteProfile.bind(ensureProfileClient()))(req),
+};
+
+function ensureModClient(): ModServiceClient {
+  const addr = ensureAddr();
+  if (!modClient || lastAddr !== addr) {
+    modClient = new ModServiceClient(addr, credentials.createInsecure());
+    lastAddr = addr;
+  }
+  return modClient;
+}
+
+export const modRpc = {
+  listMods: (req: ListModsRequest) =>
+    promisify<ListModsRequest, ListModsResponse>(ensureModClient().listMods.bind(ensureModClient()))(req),
+  toggleMod: (req: ToggleModRequest) =>
+    promisify<ToggleModRequest, ToggleModResponse>(ensureModClient().toggleMod.bind(ensureModClient()))(req),
+  refreshModCache: (req: RefreshModCacheRequest) =>
+    promisify<RefreshModCacheRequest, RefreshModCacheResponse>(ensureModClient().refreshModCache.bind(ensureModClient()))(req),
 };
 
 export function streamDownloadProgress(
