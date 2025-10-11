@@ -104,9 +104,9 @@ export function ProfileList() {
       // Mark as launching
       setLaunchingProfiles(prev => new Set(prev).add(profileId));
 
-      // Trigger global download modal immediately
-      showDownload(profile.id);
-      setDl({ phase: 'precheck', percent: 0, message: '실행 준비 중...' });
+      // Trigger global download modal immediately with human-friendly title (profile name)
+      showDownload(profile.name);
+      setDl({ phase: 'precheck', percent: 0, message: '실행 준비 중...', versionId: profile.name });
 
       try {
         // Pass accountId to launch

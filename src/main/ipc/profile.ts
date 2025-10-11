@@ -175,6 +175,7 @@ export function registerProfileHandlers(): void {
         if (window) {
           window.webContents.send('download:progress', {
             versionId: profile.gameVersion,
+            profileName: profile.name,
             ...progress,
           });
         }

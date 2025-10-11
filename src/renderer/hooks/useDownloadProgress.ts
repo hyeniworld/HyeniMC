@@ -19,8 +19,12 @@ export function useDownloadProgress() {
     // Any progress should surface the modal if not visible
     const onAnyProgress = (data: any) => {
       if (!visible && (data?.percent != null || data?.transferredBytes > 0 || data?.overallProgress != null)) {
-        show(data?.versionId);
+        // Prefer human-friendly title: profileName/profile.name/versionName > versionId
+        const title = data?.profileName || data?.profile?.name || data?.versionName || data?.versionId;
+        show(title);
       }
+      // Even if already visible, update header if a better title arrives (exclude generic name field)
+      const headerTitle = data?.profileName || data?.profile?.name || data?.versionName || undefined;
       const { percent, speed, currentFile, totalBytes, transferredBytes, message, phase } = data || {};
       // Support various counter field names from backend
       const totalTasks = data?.totalTasks ?? data?.totalAssets ?? data?.totalFiles;
@@ -47,6 +51,7 @@ export function useDownloadProgress() {
         completedTasks,
         currentFileDownloaded,
         currentFileTotal,
+        ...(headerTitle ? { versionId: headerTitle } : {}),
       });
     };
 
