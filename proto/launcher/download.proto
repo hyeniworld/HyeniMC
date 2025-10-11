@@ -5,6 +5,8 @@ option go_package = "hyenimc/backend/gen/launcher;launcher";
 service DownloadService {
   // 다운로드 진행 상황을 구독 (프로필 기준 또는 전체)
   rpc StreamProgress(ProgressRequest) returns (stream ProgressEvent);
+  // 메인 프로세스가 진행 이벤트를 퍼블리시 (브리지용)
+  rpc PublishProgress(ProgressEvent) returns (Ack);
 }
 
 message ProgressRequest {
@@ -21,4 +23,14 @@ message ProgressEvent {
   int64 total = 6;
   string status = 7; // pending|downloading|completed|failed|cancelled
   string error = 8;  // 실패 시 메시지
+  // UI 친화 필드
+  string profile_id = 9;
+  string profile_name = 10;
+  string version_id = 11;
+  string version_name = 12;
+  string file_name = 13;
+}
+
+message Ack {
+  bool ok = 1;
 }

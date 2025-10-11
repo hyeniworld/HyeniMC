@@ -1,9 +1,10 @@
 import { ipcMain } from 'electron';
 import { IPC_CHANNELS } from '../../shared/constants';
 import { Profile, CreateProfileData } from '../../shared/types';
-import axios from 'axios';
 import { getBackendAddress } from '../backend/manager';
 import { getAccountManager } from './account';
+import { profileRpc } from '../grpc/clients';
+import * as pb from '../gen/launcher/profile';
 
 /**
  * Register profile-related IPC handlers
@@ -17,10 +18,15 @@ export function registerProfileHandlers(): void {
         throw new Error('Backend server is not running');
       }
 
-      // For now, make HTTP request to backend
-      // TODO: Replace with gRPC client when proto code is generated
-      const response = await axios.post(`http://${addr}/api/profiles`, data);
-      return response.data as Profile;
+      const res = await profileRpc.createProfile({
+        name: data.name ?? '',
+        description: data.description ?? '',
+        icon: data.icon ?? '',
+        gameVersion: data.gameVersion ?? '',
+        loaderType: (data as any).loaderType ?? '',
+        loaderVersion: data.loaderVersion ?? '',
+      });
+      return fromPbProfile(res);
     } catch (error) {
       console.error('[IPC Profile] Create failed:', error);
       throw error;
@@ -35,9 +41,8 @@ export function registerProfileHandlers(): void {
         throw new Error('Backend server is not running');
       }
 
-      // TODO: Replace with gRPC client
-      const response = await axios.get(`http://${addr}/api/profiles`);
-      return response.data as Profile[];
+      const res = await profileRpc.listProfiles({});
+      return (res.profiles || []).map(fromPbProfile);
     } catch (error) {
       console.error('[IPC Profile] List failed:', error);
       throw error;
@@ -52,9 +57,8 @@ export function registerProfileHandlers(): void {
         throw new Error('Backend server is not running');
       }
 
-      // TODO: Replace with gRPC client
-      const response = await axios.get(`http://${addr}/api/profiles/${id}`);
-      return response.data as Profile;
+      const res = await profileRpc.getProfile({ id });
+      return fromPbProfile(res);
     } catch (error) {
       console.error('[IPC Profile] Get failed:', error);
       throw error;
@@ -71,12 +75,30 @@ export function registerProfileHandlers(): void {
         throw new Error('Backend server is not running');
       }
 
-      // TODO: Replace with gRPC client
-      const response = await axios.patch(`http://${addr}/api/profiles/${id}`, data);
       
-      console.log(`[IPC Profile] Profile updated successfully:`, response.data);
-      
-      return response.data as Profile;
+      const patch: pb.Profile = {
+        id,
+        name: data.name ?? '',
+        description: data.description ?? '',
+        icon: data.icon ?? '',
+        gameVersion: data.gameVersion ?? '',
+        loaderType: data.loaderType ?? '',
+        loaderVersion: data.loaderVersion ?? '',
+        gameDirectory: data.gameDirectory ?? '',
+        jvmArgs: data.jvmArgs ?? [],
+        memoryMin: data.memory?.min ?? 0,
+        memoryMax: data.memory?.max ?? 0,
+        gameArgs: data.gameArgs ?? [],
+        modpackId: data.modpackId ?? '',
+        modpackSource: (data as any).modpackSource ?? '',
+        createdAt: 0,
+        updatedAt: 0,
+        lastPlayed: 0,
+        totalPlayTime: data.totalPlayTime ?? 0,
+      };
+      const res = await profileRpc.updateProfile({ id, patch });
+      console.log(`[IPC Profile] Profile updated successfully:`);
+      return fromPbProfile(res);
     } catch (error) {
       console.error('[IPC Profile] Update failed:', error);
       throw error;
@@ -90,9 +112,7 @@ export function registerProfileHandlers(): void {
       if (!addr) {
         throw new Error('Backend server is not running');
       }
-
-      // TODO: Replace with gRPC client
-      await axios.delete(`http://${addr}/api/profiles/${id}`);
+      await profileRpc.deleteProfile({ id });
       
       // Delete profile instance directory (game files, saves, etc.)
       const { getProfileInstanceDir } = await import('../utils/paths');
@@ -124,9 +144,9 @@ export function registerProfileHandlers(): void {
         throw new Error('Backend server is not running');
       }
 
-      // Get profile
-      const response = await axios.get(`http://${addr}/api/profiles/${id}`);
-      const profile = response.data;
+      // Get profile via gRPC
+      const pbProfile = await profileRpc.getProfile({ id });
+      const profile = fromPbProfile(pbProfile);
       
       // Attach accountId to profile for later use
       (profile as any).accountId = accountId;
@@ -171,13 +191,37 @@ export function registerProfileHandlers(): void {
       console.log(`[IPC Profile] Ensuring ${profile.gameVersion} is fully downloaded...`);
       
       // Download (will skip files that already exist with correct checksum)
-      await versionManager.downloadVersion(profile.gameVersion, (progress) => {
+      await versionManager.downloadVersion(profile.gameVersion, async (progress) => {
+        const payload = {
+          versionId: profile.gameVersion,
+          profileName: profile.name,
+          ...progress,
+        } as any;
+
         if (window) {
-          window.webContents.send('download:progress', {
-            versionId: profile.gameVersion,
-            profileName: profile.name,
-            ...progress,
-          });
+          window.webContents.send('download:progress', payload);
+        }
+
+        // Also publish via gRPC so other consumers can subscribe through the server stream
+        try {
+          // Map to ProgressEvent with new proto fields
+          await (await import('../grpc/clients')).downloadRpc.publishProgress({
+            taskId: String(progress?.taskId || ''),
+            type: String(progress?.type || 'minecraft'),
+            name: String(progress?.name || ''),
+            progress: Number(progress?.percent ?? progress?.progress ?? 0),
+            downloaded: Number(progress?.downloaded ?? progress?.currentFileDownloaded ?? 0),
+            total: Number(progress?.total ?? progress?.currentFileTotal ?? 0),
+            status: String(progress?.status || 'downloading'),
+            error: progress?.error ? String(progress.error) : '',
+            profileId: String(profile.id || ''),
+            profileName: String(profile.name || ''),
+            versionId: String(profile.gameVersion || ''),
+            versionName: String(profile.gameVersion || ''),
+            fileName: String(progress?.currentFile || progress?.fileName || ''),
+          } as any);
+        } catch (e) {
+          // swallow publish errors to avoid impacting download flow
         }
       });
       
@@ -193,11 +237,12 @@ export function registerProfileHandlers(): void {
         const loaderManager = new LoaderManager();
         
         // Get recommended version if not specified
-        let loaderVersion = profile.loaderVersion;
+        let loaderVersion: string | undefined = profile.loaderVersion;
         if (!loaderVersion) {
           console.log(`[IPC Profile] Getting recommended ${profile.loaderType} version...`);
-          loaderVersion = await loaderManager.getRecommendedVersion(profile.loaderType, profile.gameVersion);
-          
+          const rec = await loaderManager.getRecommendedVersion(profile.loaderType, profile.gameVersion);
+          loaderVersion = rec ?? undefined;
+
           if (!loaderVersion) {
             throw new Error(`${profile.loaderType} 로더를 찾을 수 없습니다. 다른 로더를 선택해주세요.`);
           }
@@ -389,4 +434,32 @@ export function registerProfileHandlers(): void {
       throw new Error(error instanceof Error ? error.message : '게임 실행에 실패했습니다');
     }
   });
+}
+
+function fromPbProfile(p: pb.Profile): Profile {
+  return {
+    id: p.id,
+    name: p.name,
+    description: p.description,
+    icon: p.icon,
+    gameVersion: p.gameVersion,
+    loaderType: p.loaderType as any,
+    loaderVersion: p.loaderVersion,
+    gameDirectory: p.gameDirectory,
+    javaPath: '',
+    jvmArgs: p.jvmArgs,
+    memory: { min: p.memoryMin ?? 0, max: p.memoryMax ?? 0 },
+    gameArgs: p.gameArgs,
+    resolution: undefined,
+    fullscreen: false,
+    modpackId: p.modpackId,
+    modpackSource: p.modpackSource as any,
+    createdAt: p.createdAt ? new Date(p.createdAt * 1000).toISOString() as unknown as any : (undefined as any),
+    updatedAt: p.updatedAt ? new Date(p.updatedAt * 1000).toISOString() as unknown as any : (undefined as any),
+    lastPlayed: p.lastPlayed ? new Date(p.lastPlayed * 1000).toISOString() as unknown as any : (undefined as any),
+    totalPlayTime: p.totalPlayTime ?? 0,
+    authRequired: false,
+    spaEnabled: false,
+    serverAddress: '',
+  } as any;
 }

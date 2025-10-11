@@ -42,7 +42,15 @@ export const useDownloadStore = create<DownloadState>((set) => ({
   percent: 0,
   show: (versionId?: string) => set({ visible: true, versionId, error: undefined, startedAt: Date.now() }),
   hide: () => set({ visible: false }),
-  setProgress: (partial) => set(partial),
+  setProgress: (partial) => set((prev) => {
+    const patch: Partial<DownloadState> = {};
+    for (const [k, v] of Object.entries(partial)) {
+      if (v !== undefined) {
+        (patch as any)[k] = v;
+      }
+    }
+    return { ...prev, ...patch } as DownloadState;
+  }),
   reset: () => set({
     visible: false,
     versionId: undefined,

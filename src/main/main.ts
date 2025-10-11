@@ -1,6 +1,7 @@
 import { app, BrowserWindow } from 'electron';
 import * as path from 'path';
 import { registerIpcHandlers } from './ipc/handlers';
+import { initializeDownloadStreamBridge, shutdownDownloadStreamBridge } from './ipc/downloadStream';
 import { startBackend, stopBackend } from './backend/manager';
 
 // Set app name
@@ -68,6 +69,9 @@ async function initialize() {
     
     // Create window
     await createWindow();
+
+    // Initialize gRPC download stream bridge (global)
+    initializeDownloadStreamBridge();
   } catch (error) {
     console.error('Failed to initialize app:', error);
     app.quit();
@@ -95,6 +99,7 @@ app.on('activate', () => {
 });
 
 app.on('before-quit', async () => {
+  shutdownDownloadStreamBridge();
   await stopBackend();
 });
 

@@ -28,6 +28,9 @@
     "backend:build:all": "npm run backend:build:mac-universal && npm run backend:build:win-x64"
   },
   "dependencies": {
+    "@bufbuild/buf": "^1.58.0",
+    "@bufbuild/protobuf": "^2.9.0",
+    "@grpc/grpc-js": "^1.14.0",
     "@hookform/resolvers": "^3.3.3",
     "adm-zip": "^0.5.16",
     "axios": "^1.6.0",
@@ -47,7 +50,6 @@
     "zustand": "^4.4.7"
   },
   "devDependencies": {
-    "cross-env": "^7.0.3",
     "@types/adm-zip": "^0.5.7",
     "@types/fs-extra": "^11.0.4",
     "@types/node": "^20.10.5",
@@ -61,6 +63,7 @@
     "@vitest/ui": "^1.0.4",
     "autoprefixer": "^10.4.16",
     "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
     "electron": "^28.0.0",
     "electron-builder": "^24.9.1",
     "eslint": "^8.56.0",
@@ -112,7 +115,6 @@
       },
       "package.json"
     ],
-    
     "mac": {
       "category": "public.app-category.games",
       "icon": "build/icon.icns",

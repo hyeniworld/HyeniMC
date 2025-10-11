@@ -1,18 +1,12 @@
 package main
 
 import (
-	"fmt"
 	"log"
-	"net"
-	nethttp "net/http"
 	"os"
 	"path/filepath"
 
 	"hyenimc/backend/internal/grpc"
-	"hyenimc/backend/internal/http"
 	"hyenimc/backend/internal/services"
-
-	grpclib "google.golang.org/grpc"
 )
 
 func main() {
@@ -37,42 +31,10 @@ func main() {
 		log.Fatalf("failed to create profile service: %v", err)
 	}
 
-	// Create gRPC handlers
-	profileHandler := grpc.NewProfileHandler(profileService)
-	_ = profileHandler // Will be used when we add proto-generated servers
-
-	// Setup HTTP server (temporary, will be replaced by gRPC)
-	httpServer := http.NewServer(profileService)
-	
-	// Setup listener
+	// Start gRPC server (prints chosen address to stdout internally)
 	addr := os.Getenv("HYENIMC_ADDR")
-	if addr == "" {
-		addr = "127.0.0.1:0" // pick free port
+	if err := grpc.StartGRPCServer(addr, profileService); err != nil {
+		log.Fatalf("failed to start gRPC server: %v", err)
 	}
-
-	lis, err := net.Listen("tcp", addr)
-	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
-	}
-
-	// Print chosen address to stdout for Electron Main to capture
-	fmt.Println(lis.Addr().String())
-	log.Printf("HTTP server listening on %s", lis.Addr().String())
 	log.Printf("Data directory: %s", dataDir)
-
-	// Start HTTP server
-	if err := nethttp.Serve(lis, httpServer); err != nil {
-		log.Fatalf("failed to serve: %v", err)
-	}
-
-	// Setup gRPC server (for future use)
-	grpcServer := grpclib.NewServer()
-	_ = grpcServer
-
-	// TODO: register proto-generated services
-	// launcher.RegisterProfileServiceServer(grpcServer, profileHandler)
-	// launcher.RegisterVersionServiceServer(grpcServer, versionHandler)
-	// launcher.RegisterDownloadServiceServer(grpcServer, downloadHandler)
-	// launcher.RegisterInstanceServiceServer(grpcServer, instanceHandler)
-	// launcher.RegisterModServiceServer(grpcServer, modHandler)
 }

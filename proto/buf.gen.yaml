@@ -1,15 +1,14 @@
 version: v1
-deps: []
 plugins:
-  - name: go
+  - plugin: buf.build/protocolbuffers/go
     out: ../backend/gen
     opt:
       - paths=source_relative
-  - name: go-grpc
+  - plugin: buf.build/grpc/go
     out: ../backend/gen
     opt:
       - paths=source_relative
-  - name: ts-proto
+  - plugin: buf.build/community/stephenh-ts-proto
     out: ../src/main/gen
     opt:
       - env=both
