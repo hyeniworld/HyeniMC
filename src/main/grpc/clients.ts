@@ -14,6 +14,9 @@ import {
   DownloadServiceClient,
   type ProgressRequest,
   type ProgressEvent,
+  type DownloadRequest,
+  type DownloadStarted,
+  type DownloadCancel,
 } from '../gen/launcher/download';
 import type { ClientReadableStream } from '@grpc/grpc-js';
 import {
@@ -138,6 +141,23 @@ export const healthRpc = {
 export const downloadRpc = {
   publishProgress: (ev: ProgressEvent) =>
     promisify<ProgressEvent, { ok: boolean }>(ensureDownloadClient().publishProgress.bind(ensureDownloadClient()))(ev),
+  streamProgress: (
+    req: ProgressRequest,
+    onData: (ev: ProgressEvent) => void,
+    onError?: (err: any) => void,
+    onEnd?: () => void,
+  ): () => void => {
+    const client = ensureDownloadClient();
+    const stream: ClientReadableStream<ProgressEvent> = client.streamProgress(req);
+    stream.on('data', onData);
+    if (onError) stream.on('error', onError);
+    if (onEnd) stream.on('end', onEnd);
+    return () => { try { stream.cancel(); } catch {} };
+  },
+  startDownload: (req: DownloadRequest) =>
+    promisify<DownloadRequest, DownloadStarted>(ensureDownloadClient().startDownload.bind(ensureDownloadClient()))(req),
+  cancel: (req: DownloadCancel) =>
+    promisify<DownloadCancel, { ok: boolean }>(ensureDownloadClient().cancel.bind(ensureDownloadClient()))(req),
 };
 
 export const instanceRpc = {

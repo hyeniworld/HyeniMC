@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron';
+import { downloadRpc } from '../grpc/clients';
 import { IPC_CHANNELS } from '../../shared/constants';
 import { ModManager } from '../services/mod-manager';
 import { ModrinthAPI } from '../services/modrinth-api';
@@ -136,20 +137,38 @@ export function registerModHandlers(): void {
       if (!version || !version.downloadUrl) {
         throw new Error('Version not found or no download URL');
       }
-      
-      const { DownloadManager } = await import('../services/download-manager');
-      const downloadManager = new DownloadManager();
-      
-      // Download the mod file
-      const taskId = downloadManager.addTask(
-        version.downloadUrl,
-        `${modsDir}/${version.fileName}`,
-        version.sha1,
-        'sha1'
-      );
-      
-      await downloadManager.startAll();
-      
+
+      const destPath = `${modsDir}/${version.fileName}`;
+      const req: any = {
+        taskId: `mod-${version.id}`,
+        url: version.downloadUrl,
+        destPath,
+        profileId,
+        type: 'mod',
+        name: version.fileName,
+        maxRetries: 3,
+        concurrency: 1,
+      };
+      if (version.sha1) {
+        req.checksum = { algo: 'sha1', value: version.sha1 };
+      }
+
+      const started = await downloadRpc.startDownload(req);
+      await new Promise<void>((resolve, reject) => {
+        const cancel = downloadRpc.streamProgress(
+          { profileId } as any,
+          (ev) => {
+            if (ev.taskId !== started.taskId) return;
+            if (ev.status === 'completed') { cancel(); resolve(); }
+            else if (ev.status === 'failed' || ev.status === 'cancelled') { cancel(); reject(new Error(ev.error || '다운로드 실패')); }
+          },
+          (err) => {
+            if (err && ('' + err).includes('CANCELLED')) return;
+            if (err) reject(err);
+          }
+        );
+      });
+
       console.log(`[IPC Mod] Mod installed successfully: ${version.fileName}`);
       return { success: true, fileName: version.fileName };
     } catch (error) {

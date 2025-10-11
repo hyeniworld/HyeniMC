@@ -49,24 +49,26 @@ export function registerModpackHandlers(): void {
         }
       );
 
-      // Patch profile with detected loader/gameVersion
+      // Patch profile with detected loader/gameVersion via gRPC
       try {
-        const { IPC_CHANNELS: CHANNELS } = await import('../../shared/constants');
-        const axios = (await import('axios')).default;
-        const { getBackendAddress } = await import('../backend/manager');
-        const addr = getBackendAddress();
-        if (addr) {
-          const patchData: any = {};
-          if (result.gameVersion) patchData.gameVersion = result.gameVersion;
-          if (result.loaderType) patchData.loaderType = result.loaderType;
-          if (result.loaderVersion) patchData.loaderVersion = result.loaderVersion;
-          if (Object.keys(patchData).length > 0) {
-            await axios.patch(`http://${addr}/api/profiles/${profileId}`, patchData);
-            console.log('[IPC Modpack] Profile patched with loader info:', patchData);
-          }
+        const { profileRpc } = await import('../grpc/clients');
+        const patch: any = {
+          // repeated fields must be arrays (serializer iterates over them)
+          jvmArgs: [],
+          gameArgs: [],
+          // ensure int32 fields are valid numbers if marshaller inspects them
+          memoryMin: 0,
+          memoryMax: 0,
+        };
+        if (result.gameVersion) patch.gameVersion = result.gameVersion;
+        if (result.loaderType) patch.loaderType = result.loaderType;
+        if (result.loaderVersion) patch.loaderVersion = result.loaderVersion;
+        if (patch.gameVersion || patch.loaderType || patch.loaderVersion) {
+          await profileRpc.updateProfile({ id: profileId, patch } as any);
+          console.log('[IPC Modpack] Profile patched with loader info (gRPC):', patch);
         }
       } catch (e) {
-        console.warn('[IPC Modpack] Failed to patch profile after install:', e);
+        console.warn('[IPC Modpack] Failed to patch profile after install (gRPC):', e);
       }
 
       console.log('[IPC Modpack] Modpack installation complete');

@@ -7,6 +7,9 @@ service DownloadService {
   rpc StreamProgress(ProgressRequest) returns (stream ProgressEvent);
   // 메인 프로세스가 진행 이벤트를 퍼블리시 (브리지용)
   rpc PublishProgress(ProgressEvent) returns (Ack);
+  // 서버 주도 다운로드 시작/취소
+  rpc StartDownload(DownloadRequest) returns (DownloadStarted);
+  rpc Cancel(DownloadCancel) returns (Ack);
 }
 
 message ProgressRequest {
@@ -33,4 +36,30 @@ message ProgressEvent {
 
 message Ack {
   bool ok = 1;
+}
+
+// 서버 주도 다운로드 요청 (단일 파일)
+message DownloadRequest {
+  string task_id = 1;          // 호출자가 부여한 태스크 ID(없으면 서버가 생성)
+  string url = 2;              // 소스 URL (HTTP/HTTPS)
+  string dest_path = 3;        // 최종 목적지 경로(파일)
+  Checksum checksum = 4;       // 선택: 무결성 검증
+  int32 max_retries = 5;       // 기본 3
+  int32 concurrency = 6;       // 예약 필드(미사용)
+  string profile_id = 7;       // UI 용 태깅
+  string type = 8;             // UI 용 태깅(mod|asset|minecraft 등)
+  string name = 9;             // UI 용 표시 이름
+}
+
+message Checksum {
+  string algo = 1;   // sha1|sha256
+  string value = 2;  // hex
+}
+
+message DownloadStarted {
+  string task_id = 1;
+}
+
+message DownloadCancel {
+  string task_id = 1;
 }

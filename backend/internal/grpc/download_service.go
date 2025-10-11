@@ -2,21 +2,90 @@ package grpc
 
 import (
 	"context"
+	"crypto/sha1"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
 	pb "hyenimc/backend/gen/launcher"
 )
 
-// downloadServiceServer provides server-streaming progress events (skeleton)
+// checksumReq represents a checksum request
+type checksumReq interface {
+	GetAlgo() string
+	GetValue() string
+}
+
+// fileMeta represents file metadata
+type fileMeta struct {
+	Path     string `json:"path"`
+	Size     int64  `json:"size"`
+	Sha1     string `json:"sha1,omitempty"`
+	Sha256   string `json:"sha256,omitempty"`
+	Updated  int64  `json:"updated_at"`
+}
+
+// writeFileMeta writes file metadata to a sidecar file
+func writeFileMeta(dest string, c checksumReq) error {
+	fi, err := os.Stat(dest)
+	if err != nil {
+		return err
+	}
+	meta := fileMeta{Path: dest, Size: fi.Size(), Updated: time.Now().Unix()}
+	// prefer provided checksum; otherwise compute sha1
+	if c != nil && c.GetValue() != "" {
+		switch strings.ToLower(c.GetAlgo()) {
+		case "sha1":
+			meta.Sha1 = c.GetValue()
+		case "sha256":
+			meta.Sha256 = c.GetValue()
+		}
+	}
+	if meta.Sha1 == "" && meta.Sha256 == "" {
+		if h, err := computeSha1(dest); err == nil {
+			meta.Sha1 = h
+		}
+	}
+	b, err := json.MarshalIndent(&meta, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(dest+".meta.json", b, 0o644)
+}
+
+// computeSha1 computes the SHA1 checksum of a file
+func computeSha1(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha1.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// downloadServiceServer provides progress streaming and managed downloads
 type downloadServiceServer struct {
 	pb.UnimplementedDownloadServiceServer
-	mu   sync.RWMutex
-	subs map[chan *pb.ProgressEvent]struct{}
+	mu    sync.RWMutex
+	subs  map[chan *pb.ProgressEvent]struct{}
+	tasks map[string]context.CancelFunc
 }
 
 func NewDownloadServiceServer() pb.DownloadServiceServer {
-	return &downloadServiceServer{subs: make(map[chan *pb.ProgressEvent]struct{})}
+	return &downloadServiceServer{subs: make(map[chan *pb.ProgressEvent]struct{}), tasks: make(map[string]context.CancelFunc)}
 }
 
 func (s *downloadServiceServer) StreamProgress(req *pb.ProgressRequest, stream pb.DownloadService_StreamProgressServer) error {
@@ -32,7 +101,7 @@ func (s *downloadServiceServer) StreamProgress(req *pb.ProgressRequest, stream p
 		s.mu.Unlock()
 	}()
 
-	// Optional: initial heartbeat so clients know stream is alive
+	// Optional: initial heartbeat
 	_ = stream.Send(&pb.ProgressEvent{Status: "pending"})
 
 	ticker := time.NewTicker(20 * time.Second)
@@ -49,22 +118,215 @@ func (s *downloadServiceServer) StreamProgress(req *pb.ProgressRequest, stream p
 				return nil
 			}
 		case <-ticker.C:
-			// periodic heartbeat
 			_ = stream.Send(&pb.ProgressEvent{Status: "pending"})
 		}
 	}
 }
 
 func (s *downloadServiceServer) PublishProgress(ctx context.Context, ev *pb.ProgressEvent) (*pb.Ack, error) {
-	// Broadcast to all subscribers (non-blocking)
+	s.broadcast(ev)
+	return &pb.Ack{Ok: true}, nil
+}
+
+func (s *downloadServiceServer) broadcast(ev *pb.ProgressEvent) {
 	s.mu.RLock()
 	for ch := range s.subs {
 		select {
 		case ch <- ev:
 		default:
-			// drop if subscriber is slow
 		}
 	}
 	s.mu.RUnlock()
-	return &pb.Ack{Ok: true}, nil
+}
+
+func (s *downloadServiceServer) StartDownload(ctx context.Context, req *pb.DownloadRequest) (*pb.DownloadStarted, error) {
+	url := strings.TrimSpace(req.GetUrl())
+	dest := strings.TrimSpace(req.GetDestPath())
+	if url == "" || dest == "" {
+		return nil, fmt.Errorf("url and dest_path are required")
+	}
+	taskID := req.GetTaskId()
+	if taskID == "" {
+		taskID = fmt.Sprintf("dl-%d", time.Now().UnixNano())
+	}
+
+	dlCtx, cancel := context.WithCancel(context.Background())
+	s.mu.Lock()
+	if s.tasks == nil {
+		s.tasks = make(map[string]context.CancelFunc)
+	}
+	s.tasks[taskID] = cancel
+	s.mu.Unlock()
+
+	go func() {
+		defer func() {
+			s.mu.Lock()
+			delete(s.tasks, taskID)
+			s.mu.Unlock()
+		}()
+		started := time.Now()
+		evBase := &pb.ProgressEvent{TaskId: taskID, Type: req.GetType(), Name: req.GetName(), ProfileId: req.GetProfileId(), FileName: filepath.Base(dest)}
+		s.broadcast(&pb.ProgressEvent{TaskId: taskID, Status: "pending", Type: evBase.Type, Name: evBase.Name, ProfileId: evBase.ProfileId, FileName: evBase.FileName})
+		maxRetries := int(req.GetMaxRetries())
+		if maxRetries <= 0 {
+			maxRetries = 3
+		}
+		tmp := dest + ".part"
+		// ensure dir
+		_ = os.MkdirAll(filepath.Dir(dest), 0o755)
+
+		var total int64 = 0
+		var err error
+		for attempt := 0; attempt <= maxRetries; attempt++ {
+			err = s.downloadOnce(dlCtx, url, tmp, &total, func(downloaded int64) {
+				// emit progress
+				percent := int32(0)
+				if total > 0 {
+					percent = int32((downloaded * 100) / total)
+				}
+				s.broadcast(&pb.ProgressEvent{TaskId: taskID, Status: "downloading", Type: evBase.Type, Name: evBase.Name, ProfileId: evBase.ProfileId, FileName: evBase.FileName, Total: total, Downloaded: downloaded, Progress: percent})
+			})
+			if err == nil {
+				break
+			}
+			// backoff
+			select {
+			case <-dlCtx.Done():
+				err = context.Canceled
+				break
+			case <-time.After(time.Duration(1+attempt) * time.Second):
+			}
+		}
+		if err != nil {
+			s.broadcast(&pb.ProgressEvent{TaskId: taskID, Status: "failed", Error: err.Error(), Type: evBase.Type, Name: evBase.Name, ProfileId: evBase.ProfileId, FileName: evBase.FileName})
+			return
+		}
+		// verify checksum if provided
+		if c := req.GetChecksum(); c != nil && c.GetValue() != "" {
+			if verr := verifyChecksum(tmp, c.GetAlgo(), c.GetValue()); verr != nil {
+				_ = os.Remove(tmp)
+				s.broadcast(&pb.ProgressEvent{TaskId: taskID, Status: "failed", Error: fmt.Sprintf("checksum mismatch: %v", verr), Type: evBase.Type, Name: evBase.Name, ProfileId: evBase.ProfileId, FileName: evBase.FileName})
+				return
+			}
+		}
+		// atomic rename
+		if err := os.Rename(tmp, dest); err != nil {
+			s.broadcast(&pb.ProgressEvent{TaskId: taskID, Status: "failed", Error: fmt.Sprintf("finalize: %v", err), Type: evBase.Type, Name: evBase.Name, ProfileId: evBase.ProfileId, FileName: evBase.FileName})
+			return
+		}
+		// write sidecar metadata for integrity & cache bookkeeping
+		if err := writeFileMeta(dest, req.GetChecksum()); err != nil {
+			// non-fatal
+			fmt.Printf("[Download] write meta failed for %s: %v\n", dest, err)
+		}
+		s.broadcast(&pb.ProgressEvent{TaskId: taskID, Status: "completed", Progress: 100, Type: evBase.Type, Name: evBase.Name, ProfileId: evBase.ProfileId, FileName: evBase.FileName})
+		_ = started
+	}()
+
+	return &pb.DownloadStarted{TaskId: taskID}, nil
+}
+
+func (s *downloadServiceServer) Cancel(ctx context.Context, in *pb.DownloadCancel) (*pb.Ack, error) {
+	taskID := in.GetTaskId()
+	s.mu.Lock()
+	cancel, ok := s.tasks[taskID]
+	s.mu.Unlock()
+	if ok {
+		cancel()
+		return &pb.Ack{Ok: true}, nil
+	}
+	return &pb.Ack{Ok: false}, nil
+}
+
+// downloadOnce supports resume if tmp exists and server honors Range.
+func (s *downloadServiceServer) downloadOnce(ctx context.Context, url, tmp string, totalOut *int64, onProgress func(downloaded int64)) error {
+	// resume if possible
+	var downloaded int64 = 0
+	if fi, err := os.Stat(tmp); err == nil {
+		downloaded = fi.Size()
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	if downloaded > 0 {
+		req.Header.Set("Range", fmt.Sprintf("bytes=%d-", downloaded))
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
+		return fmt.Errorf("bad status: %s", resp.Status)
+	}
+	// compute total
+	if resp.ContentLength > 0 {
+		if resp.StatusCode == http.StatusPartialContent {
+			*totalOut = downloaded + resp.ContentLength
+		} else {
+			*totalOut = resp.ContentLength
+			downloaded = 0 // server ignored range
+		}
+	}
+	// open file
+	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if downloaded > 0 {
+		if _, err := f.Seek(downloaded, io.SeekStart); err != nil {
+			return err
+		}
+	}
+	buf := make([]byte, 1<<20) // 1MB buffer
+	for {
+		n, rerr := resp.Body.Read(buf)
+		if n > 0 {
+			if _, werr := f.Write(buf[:n]); werr != nil {
+				return werr
+			}
+			downloaded += int64(n)
+			onProgress(downloaded)
+		}
+		if rerr != nil {
+			if errors.Is(rerr, io.EOF) {
+				break
+			}
+			return rerr
+		}
+	}
+	return nil
+}
+
+func verifyChecksum(path, algo, wantHex string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	switch strings.ToLower(algo) {
+	case "sha1":
+		h := sha1.New()
+		if _, err := io.Copy(h, f); err != nil {
+			return err
+		}
+		got := hex.EncodeToString(h.Sum(nil))
+		if !strings.EqualFold(got, wantHex) {
+			return fmt.Errorf("sha1 mismatch: got %s", got)
+		}
+	case "sha256":
+		h := sha256.New()
+		if _, err := io.Copy(h, f); err != nil {
+			return err
+		}
+		got := hex.EncodeToString(h.Sum(nil))
+		if !strings.EqualFold(got, wantHex) {
+			return fmt.Errorf("sha256 mismatch: got %s", got)
+		}
+	default:
+		return fmt.Errorf("unsupported checksum algo: %s", algo)
+	}
+	return nil
 }

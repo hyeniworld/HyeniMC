@@ -1,5 +1,5 @@
 import { ModrinthAPI } from './modrinth-api';
-import { DownloadManager } from './download-manager';
+import { downloadRpc } from '../grpc/clients';
 import axios from 'axios';
 import * as path from 'path';
 import * as fs from 'fs/promises';
@@ -178,20 +178,42 @@ export class ModpackManager {
       await fs.mkdir(tempDir, { recursive: true });
       const modpackPath = path.join(tempDir, version.fileName);
 
-      const downloadManager = new DownloadManager();
-      const taskId = downloadManager.addTask(
-        version.downloadUrl,
-        modpackPath,
-        undefined,
-        'sha1'
-      );
-
-      await downloadManager.startAll((progress) => {
-        onProgress?.({
-          stage: 'downloading',
-          progress: progress.progress,
-          message: `모드팩 다운로드 중... ${progress.progress}%`,
-        });
+      const reqModpack: any = {
+        taskId: `modpack-${versionId}`,
+        url: version.downloadUrl,
+        destPath: modpackPath,
+        profileId,
+        type: 'modpack',
+        name: version.name,
+        maxRetries: 3,
+        concurrency: 1,
+      };
+      const started = await downloadRpc.startDownload(reqModpack);
+      await new Promise<void>((resolve, reject) => {
+        const cancel = downloadRpc.streamProgress(
+          { profileId } as any,
+          (ev) => {
+            if (ev.taskId !== started.taskId) return;
+            if (ev.status === 'downloading') {
+              onProgress?.({
+                stage: 'downloading',
+                progress: ev.progress,
+                message: `모드팩 다운로드 중... ${ev.progress}%`,
+              });
+            } else if (ev.status === 'completed') {
+              cancel();
+              resolve();
+            } else if (ev.status === 'failed' || ev.status === 'cancelled') {
+              cancel();
+              reject(new Error(ev.error || '다운로드 실패'));
+            }
+          },
+          // swallow CANCELLED on client when we call cancel()
+          (err) => {
+            if (err && ('' + err).includes('CANCELLED')) return;
+            if (err) reject(err);
+          }
+        );
       });
 
       // 2. 모드팩 압축 해제
@@ -238,10 +260,44 @@ export class ModpackManager {
         await fs.mkdir(path.dirname(destPath), { recursive: true });
 
         try {
-          const response = await axios.get(file.downloads?.[0], {
-            responseType: 'arraybuffer',
+          const url = file.downloads?.[0];
+          if (!url) throw new Error('download url missing');
+          const checksum = (file.hashes && (file.hashes.sha1 || file.hashes.sha256))
+            ? { algo: file.hashes.sha1 ? 'sha1' : 'sha256', value: (file.hashes.sha1 || file.hashes.sha256) }
+            : undefined;
+          const reqFile: any = {
+            taskId: `file-${i}-${Date.now()}`,
+            url,
+            destPath: destPath,
+            profileId,
+            type: 'mod',
+            name: path.basename(destPath),
+            maxRetries: 3,
+            concurrency: 1,
+          };
+          if (checksum) reqFile.checksum = checksum;
+          const started = await downloadRpc.startDownload(reqFile);
+          await new Promise<void>((resolve, reject) => {
+            const cancel = downloadRpc.streamProgress(
+              { profileId } as any,
+              (ev) => {
+                if (ev.taskId !== started.taskId) return;
+                if (ev.status === 'downloading') {
+                  // per-file progress mapped to overall progress already computed
+                } else if (ev.status === 'completed') {
+                  cancel();
+                  resolve();
+                } else if (ev.status === 'failed' || ev.status === 'cancelled') {
+                  cancel();
+                  reject(new Error(ev.error || '다운로드 실패'));
+                }
+              },
+              (err) => {
+                if (err && ('' + err).includes('CANCELLED')) return;
+                if (err) reject(err);
+              }
+            );
           });
-          await fs.writeFile(destPath, response.data);
         } catch (error) {
           console.error(`[ModpackManager] Failed to download ${relativePath}:`, error);
         }
