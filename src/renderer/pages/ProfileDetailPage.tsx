@@ -5,6 +5,7 @@ import { ModList } from '../components/mods/ModList';
 import { ResourcePackList } from '../components/resourcepacks/ResourcePackList';
 import { ShaderPackList } from '../components/shaderpacks/ShaderPackList';
 import { ProfileSettingsTab } from '../components/profiles/ProfileSettingsTab';
+import { useDownloadStore } from '../store/downloadStore';
 
 type TabType = 'overview' | 'mods' | 'resourcepacks' | 'shaderpacks' | 'settings';
 
@@ -17,6 +18,8 @@ export const ProfileDetailPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [isRunning, setIsRunning] = useState(false);
   const [isLaunching, setIsLaunching] = useState(false);
+  const showDownload = useDownloadStore(s => s.show);
+  const setDl = useDownloadStore(s => s.setProgress);
 
   useEffect(() => {
     if (profileId) {
@@ -93,6 +96,9 @@ export const ProfileDetailPage: React.FC = () => {
     }
 
     setIsLaunching(true);
+    // Immediately surface global download modal for feedback
+    showDownload(profileId);
+    setDl({ phase: 'precheck', percent: 0, message: '실행 준비 중...' });
 
     try {
       await window.electronAPI.profile.launch(profileId, selectedAccountId);

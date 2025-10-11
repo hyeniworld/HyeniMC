@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Play, Settings, Trash2, Plus, FolderOpen, Clock, Loader2 } from 'lucide-react';
 import { CreateProfileModal } from './CreateProfileModal';
-import { DownloadModal } from '../DownloadModal';
+import { useDownloadStore } from '../../store/downloadStore';
 import { useAccount } from '../../App';
 
 export function ProfileList() {
@@ -14,17 +14,8 @@ export function ProfileList() {
   const [runningProfiles, setRunningProfiles] = useState<Set<string>>(new Set());
   const [launchingProfiles, setLaunchingProfiles] = useState<Set<string>>(new Set());
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [downloadState, setDownloadState] = useState<{
-    isOpen: boolean;
-    versionId: string;
-    progress?: any;
-    status: 'downloading' | 'extracting' | 'error';
-    error?: string;
-  }>({
-    isOpen: false,
-    versionId: '',
-    status: 'downloading',
-  });
+  const showDownload = useDownloadStore(s => s.show);
+  const setDl = useDownloadStore(s => s.setProgress);
 
   useEffect(() => {
     loadProfiles();
@@ -113,82 +104,36 @@ export function ProfileList() {
       // Mark as launching
       setLaunchingProfiles(prev => new Set(prev).add(profileId));
 
-      // Show download modal
-      setDownloadState({
-        isOpen: true,
-        versionId: profile.gameVersion,
-        status: 'downloading',
-      });
-
-      // Listen for download progress
-      const cleanup = window.electronAPI.on('download:progress', (data: any) => {
-        setDownloadState(prev => ({
-          ...prev,
-          progress: data,
-        }));
-      });
-
-      // Listen for game started
-      const cleanupStarted = window.electronAPI.on('game:started', () => {
-        setDownloadState({
-          isOpen: false,
-          versionId: '',
-          status: 'downloading',
-        });
-      });
+      // Trigger global download modal immediately
+      showDownload(profile.id);
+      setDl({ phase: 'precheck', percent: 0, message: '실행 준비 중...' });
 
       try {
         // Pass accountId to launch
         await window.electronAPI.profile.launch(profileId, selectedAccountId);
         
-        // Close modal after 2 seconds if game started successfully
-        setTimeout(() => {
-          setDownloadState({
-            isOpen: false,
-            versionId: '',
-            status: 'downloading',
-          });
-        }, 2000);
+        // global modal will auto-hide on game:started via hook
       } catch (err) {
-        setDownloadState(prev => ({
-          ...prev,
-          status: 'error',
-          error: err instanceof Error ? err.message : '알 수 없는 오류',
-        }));
+        setDl({ error: err instanceof Error ? err.message : '알 수 없는 오류' });
         
         // Remove from launching on error
         setLaunchingProfiles(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(profileId);
-          return newSet;
+          const ns = new Set(prev);
+          return ns;
         });
-        
-        // Auto close after 5 seconds on error
-        setTimeout(() => {
-          setDownloadState({
-            isOpen: false,
-            versionId: '',
-            status: 'downloading',
-          });
-        }, 5000);
       } finally {
-        cleanup();
-        cleanupStarted();
+        // no local listeners to cleanup (global hook handles events)
       }
-    } catch (err) {
+  } catch (err) {
       console.error('Failed to launch profile:', err);
       // Remove from launching on error
       setLaunchingProfiles(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(profileId);
-        return newSet;
+        const ns = new Set(prev);
+        ns.delete(profileId);
+        return ns;
       });
-      // Close modal on error
-      setDownloadState({
-        isOpen: false,
-        versionId: '',
-        status: 'downloading',
-      });
+      // Surface error
+      setDl({ error: err instanceof Error ? err.message : '알 수 없는 오류' });
     }
   };
 
@@ -399,15 +344,6 @@ export function ProfileList() {
           onSuccess={handleCreateSuccess}
         />
       )}
-
-      {/* Download Modal */}
-      <DownloadModal
-        isOpen={downloadState.isOpen}
-        versionId={downloadState.versionId}
-        progress={downloadState.progress}
-        status={downloadState.status}
-        error={downloadState.error}
-      />
     </div>
   );
 }

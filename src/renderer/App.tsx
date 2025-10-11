@@ -4,6 +4,8 @@ import { ProfileList } from './components/profiles/ProfileList';
 import { ProfileDetailPage } from './pages/ProfileDetailPage';
 import { AccountManager } from './components/accounts/AccountManager';
 import { Sparkles } from 'lucide-react';
+import { GlobalDownloadModal } from './components/common/GlobalDownloadModal';
+import { useDownloadProgress } from './hooks/useDownloadProgress';
 
 // Global account context
 interface AccountContextType {
@@ -20,6 +22,8 @@ export const useAccount = () => useContext(AccountContext);
 
 function App() {
   const [selectedAccountId, setSelectedAccountId] = useState<string | undefined>();
+  // Init global download progress listeners
+  useDownloadProgress();
 
   return (
     <AccountContext.Provider value={{ selectedAccountId, setSelectedAccountId }}>
@@ -29,6 +33,8 @@ function App() {
           <Route path="/profile/:profileId" element={<ProfileDetailPage />} />
         </Routes>
       </HashRouter>
+      {/* Global Download/Install Modal (rich) */}
+      <GlobalDownloadModal />
     </AccountContext.Provider>
   );
 }
