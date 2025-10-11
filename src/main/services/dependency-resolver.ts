@@ -43,9 +43,8 @@ export class DependencyResolver {
     const processedMods = new Set<string>();
 
     try {
-      // Get the version details
-      const versions = await this.modrinthAPI.getModVersions(versionId);
-      const version = versions.find(v => v.id === versionId);
+      // Get the version details correctly by versionId
+      const version = await this.modrinthAPI.getVersion(versionId);
       
       if (!version || !version.dependencies) {
         return { dependencies, issues };

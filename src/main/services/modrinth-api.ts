@@ -24,6 +24,45 @@ export class ModrinthAPI {
   }
 
   /**
+   * 단일 버전 상세 조회 (의존성 포함)
+   */
+  async getVersion(versionId: string): Promise<ModVersion | null> {
+    try {
+      console.log(`[Modrinth] Fetching version ${versionId}`);
+
+      const response = await this.client.get(`/version/${versionId}`);
+      const ver = response.data;
+
+      if (!ver) return null;
+
+      const version: ModVersion = {
+        id: ver.id,
+        versionNumber: ver.version_number,
+        name: ver.name,
+        changelog: ver.changelog,
+        gameVersions: ver.game_versions || [],
+        loaders: ver.loaders || [],
+        downloadUrl: ver.files?.[0]?.url,
+        fileName: ver.files?.[0]?.filename,
+        fileSize: ver.files?.[0]?.size,
+        sha1: ver.files?.[0]?.hashes?.sha1,
+        sha512: ver.files?.[0]?.hashes?.sha512,
+        dependencies: ver.dependencies?.map((dep: any) => ({
+          modId: dep.project_id,
+          type: dep.dependency_type,
+          versionRange: dep.version_id,
+        })) || [],
+        publishedAt: new Date(ver.date_published),
+      };
+
+      return version;
+    } catch (error) {
+      console.error('[Modrinth] Failed to fetch version:', error);
+      return null;
+    }
+  }
+
+  /**
    * 모드 검색
    */
   async searchMods(
