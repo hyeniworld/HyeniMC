@@ -26,6 +26,95 @@ type loaderServiceServer struct {
     cache map[string]cacheEntry
 }
 
+// minimal profile model to pull libraries
+type profileLibrary struct {
+    Name string `json:"name"`
+    URL  string `json:"url,omitempty"`
+}
+type profileJSON struct {
+    Libraries []profileLibrary `json:"libraries"`
+}
+
+func mavenCoordsToPath(name string) (groupPath, artifact, version, fileName string, ok bool) {
+    parts := strings.Split(name, ":")
+    if len(parts) < 3 { return "", "", "", "", false }
+    group := parts[0]
+    artifact = parts[1]
+    version = parts[2]
+    groupPath = strings.ReplaceAll(group, ".", "/")
+    fileName = fmt.Sprintf("%s-%s.jar", artifact, version)
+    return
+}
+
+func downloadLibrary(ctx context.Context, baseURL, groupPath, artifact, version, fileName, dest string) error {
+    url := fmt.Sprintf("%s%s/%s/%s/%s", baseURL, strings.TrimSuffix(ifEmpty(baseURL, ""), "/"), "", "", "")
+    // baseURL may or may not include trailing '/'
+    if !strings.HasSuffix(baseURL, "/") { baseURL += "/" }
+    url = fmt.Sprintf("%s%s/%s/%s/%s", baseURL, groupPath, artifact, version, fileName)
+    cctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+    defer cancel()
+    req, err := http.NewRequestWithContext(cctx, http.MethodGet, url, nil)
+    if err != nil { return err }
+    resp, err := http.DefaultClient.Do(req)
+    if err != nil { return err }
+    defer resp.Body.Close()
+    if resp.StatusCode != http.StatusOK { return fmt.Errorf("library status: %s", resp.Status) }
+    if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil { return err }
+    f, err := os.Create(dest)
+    if err != nil { return err }
+    if _, err := io.Copy(f, resp.Body); err != nil { _ = f.Close(); return err }
+    return f.Close()
+}
+
+func ifEmpty[T ~string](v T, def T) T { if v == "" { return def }; return v }
+
+// InstallStream streams coarse-grained install progress updates to the client.
+func (s *loaderServiceServer) InstallStream(req *pb.InstallRequest, stream pb.LoaderService_InstallStreamServer) error {
+    lt := strings.ToLower(strings.TrimSpace(req.GetLoaderType()))
+    gv := strings.TrimSpace(req.GetGameVersion())
+    lv := strings.TrimSpace(req.GetLoaderVersion())
+    inst := strings.TrimSpace(req.GetInstanceDir())
+    if lt == "" || gv == "" || lv == "" || inst == "" {
+        return status.Error(codes.InvalidArgument, "loader_type, game_version, loader_version, instance_dir are required")
+    }
+
+    send := func(msg string, cur, total int32, vid string) error {
+        percent := int32(0)
+        if total > 0 && cur >= 0 {
+            percent = int32((int(cur) * 100) / int(total))
+        }
+        return stream.Send(&pb.InstallProgress{Message: msg, Current: cur, Total: total, Percent: percent, VersionId: vid})
+    }
+
+    switch lt {
+    case "fabric":
+        vid := fmt.Sprintf("fabric-loader-%s-%s", lv, gv)
+        if err := send("Preparing Fabric install...", 0, 3, vid); err != nil { return err }
+        if err := send("Downloading Fabric profile...", 1, 3, vid); err != nil { return err }
+        if _, err := s.Install(stream.Context(), req); err != nil { return err }
+        if err := send("Finalizing Fabric install...", 2, 3, vid); err != nil { return err }
+        return send("Completed", 3, 3, vid)
+    case "neoforge":
+        vid := fmt.Sprintf("neoforge-%s", lv)
+        if err := send("Preparing NeoForge install...", 0, 4, vid); err != nil { return err }
+        if err := send("Downloading NeoForge installer...", 1, 4, vid); err != nil { return err }
+        if _, err := s.Install(stream.Context(), req); err != nil { return err }
+        if err := send("Finalizing NeoForge install...", 3, 4, vid); err != nil { return err }
+        return send("Completed", 4, 4, vid)
+    case "quilt":
+        vid := fmt.Sprintf("quilt-loader-%s-%s", lv, gv)
+        if err := send("Preparing Quilt install...", 0, 3, vid); err != nil { return err }
+        if err := send("Downloading Quilt profile...", 1, 3, vid); err != nil { return err }
+        if _, err := s.Install(stream.Context(), req); err != nil { return err }
+        if err := send("Finalizing Quilt install...", 2, 3, vid); err != nil { return err }
+        return send("Completed", 3, 3, vid)
+    case "forge":
+        return status.Error(codes.Unimplemented, "Forge install not implemented (deprecated)")
+    default:
+        return status.Error(codes.InvalidArgument, "unknown loader_type")
+    }
+}
+
 // NeoForge: use maven API to list versions and infer MC compatibility from leading major.minor in version string
 // API: https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/neoforge
 type neoForgeResponse struct {
@@ -363,11 +452,29 @@ func (s *loaderServiceServer) Install(ctx context.Context, req *pb.InstallReques
         if resp.StatusCode != http.StatusOK {
             return nil, status.Errorf(codes.Unavailable, "fabric profile status: %s", resp.Status)
         }
-        // Write file
-        f, err := os.Create(profilePath)
-        if err != nil { return nil, status.Errorf(codes.Internal, "create profile: %v", err) }
-        if _, err := io.Copy(f, resp.Body); err != nil { _ = f.Close(); return nil, status.Errorf(codes.Internal, "write profile: %v", err) }
-        if err := f.Close(); err != nil { return nil, status.Errorf(codes.Internal, "close profile: %v", err) }
+        // Read, save and parse profile JSON
+        body, err := io.ReadAll(resp.Body)
+        if err != nil { return nil, status.Errorf(codes.Internal, "read profile: %v", err) }
+        if err := os.WriteFile(profilePath, body, 0o644); err != nil { return nil, status.Errorf(codes.Internal, "write profile: %v", err) }
+        var prof profileJSON
+        _ = json.Unmarshal(body, &prof)
+
+        // Download libraries to shared libraries dir: <userData>/shared/libraries
+        instancesDir := filepath.Dir(inst)
+        userDataDir := filepath.Dir(instancesDir)
+        librariesDir := filepath.Join(userDataDir, "shared", "libraries")
+        for _, lib := range prof.Libraries {
+            gp, art, ver, file, ok := mavenCoordsToPath(lib.Name)
+            if !ok { continue }
+            base := lib.URL
+            if base == "" { base = "https://maven.fabricmc.net/" }
+            dest := filepath.Join(librariesDir, gp, art, ver, file)
+            if _, err := os.Stat(dest); err == nil { continue }
+            if err := downloadLibrary(ctx, base, gp, art, ver, file, dest); err != nil {
+                // log and continue; not fatal (launcher may fetch later)
+                fmt.Printf("[Install] fabric library download failed %s:%s:%s: %v\n", gp, art, ver, err)
+            }
+        }
 
         return &pb.InstallResponse{Success: true, VersionId: versionId}, nil
     case "neoforge":
@@ -451,10 +558,27 @@ func (s *loaderServiceServer) Install(ctx context.Context, req *pb.InstallReques
         if resp.StatusCode != http.StatusOK {
             return nil, status.Errorf(codes.Unavailable, "quilt profile status: %s", resp.Status)
         }
-        f, err := os.Create(profilePath)
-        if err != nil { return nil, status.Errorf(codes.Internal, "create profile: %v", err) }
-        if _, err := io.Copy(f, resp.Body); err != nil { _ = f.Close(); return nil, status.Errorf(codes.Internal, "write profile: %v", err) }
-        if err := f.Close(); err != nil { return nil, status.Errorf(codes.Internal, "close profile: %v", err) }
+        // Read, save and parse profile JSON
+        body, err := io.ReadAll(resp.Body)
+        if err != nil { return nil, status.Errorf(codes.Internal, "read profile: %v", err) }
+        if err := os.WriteFile(profilePath, body, 0o644); err != nil { return nil, status.Errorf(codes.Internal, "write profile: %v", err) }
+        var prof profileJSON
+        _ = json.Unmarshal(body, &prof)
+        // Download libraries to shared libraries dir: <userData>/shared/libraries
+        instancesDir := filepath.Dir(inst)
+        userDataDir := filepath.Dir(instancesDir)
+        librariesDir := filepath.Join(userDataDir, "shared", "libraries")
+        for _, lib := range prof.Libraries {
+            gp, art, ver, file, ok := mavenCoordsToPath(lib.Name)
+            if !ok { continue }
+            base := lib.URL
+            if base == "" { base = "https://maven.quiltmc.org/repository/release/" }
+            dest := filepath.Join(librariesDir, gp, art, ver, file)
+            if _, err := os.Stat(dest); err == nil { continue }
+            if err := downloadLibrary(ctx, base, gp, art, ver, file, dest); err != nil {
+                fmt.Printf("[Install] quilt library download failed %s:%s:%s: %v\n", gp, art, ver, err)
+            }
+        }
         return &pb.InstallResponse{Success: true, VersionId: versionId}, nil
     case "forge":
         return nil, status.Error(codes.Unimplemented, "Forge install not implemented (deprecated)")

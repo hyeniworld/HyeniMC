@@ -90,21 +90,58 @@ export function registerLoaderHandlers(): void {
         
         const mainWindow = BrowserWindow.fromWebContents(event.sender);
         
-        // Try gRPC install first
+        // Try gRPC streaming install first
         try {
-          const res = await loaderRpc.install({
-            loaderType,
-            gameVersion: minecraftVersion,
-            loaderVersion,
-            instanceDir: gameDir,
-          } as any);
-          const versionId = res.versionId || '';
+          let lastVersionId = '';
+          await new Promise<void>((resolve, reject) => {
+            const cancel = loaderRpc.streamInstall(
+              {
+                loaderType,
+                gameVersion: minecraftVersion,
+                loaderVersion,
+                instanceDir: gameDir,
+              } as any,
+              (ev) => {
+                lastVersionId = ev.versionId || lastVersionId;
+                if (mainWindow) {
+                  mainWindow.webContents.send('loader:install-progress', {
+                    loaderType,
+                    message: ev.message,
+                    current: ev.current,
+                    total: ev.total,
+                    progress: ev.percent,
+                  });
+                }
+              },
+              (err) => {
+                cancel?.();
+                reject(err);
+              },
+              () => resolve()
+            );
+          });
+          const versionId = lastVersionId || (loaderType === 'fabric' ? `fabric-loader-${loaderVersion}-${minecraftVersion}` : loaderType === 'quilt' ? `quilt-loader-${loaderVersion}-${minecraftVersion}` : loaderType === 'neoforge' ? `neoforge-${loaderVersion}` : '');
           if (versionId) {
-            console.log(`[IPC Loader] gRPC install completed: ${versionId}`);
+            console.log(`[IPC Loader] gRPC streaming install completed: ${versionId}`);
             return { success: true, versionId };
           }
         } catch (e) {
-          console.warn('[IPC Loader] gRPC install failed, falling back to TS manager:', (e as Error).message);
+          console.warn('[IPC Loader] gRPC streaming install failed, trying unary install:', (e as Error).message);
+          try {
+            const res = await loaderRpc.install({
+              loaderType,
+              gameVersion: minecraftVersion,
+              loaderVersion,
+              instanceDir: gameDir,
+            } as any);
+            const versionId = res.versionId || '';
+            if (versionId) {
+              console.log(`[IPC Loader] gRPC install completed: ${versionId}`);
+              return { success: true, versionId };
+            }
+          } catch (e2) {
+            console.warn('[IPC Loader] gRPC unary install failed, falling back to TS manager:', (e2 as Error).message);
+          }
         }
 
         // Fallback: TS manager with progress events

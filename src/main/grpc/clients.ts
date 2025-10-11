@@ -43,6 +43,7 @@ import {
   type CheckInstalledResponse as LoaderCheckInstalledResponse,
   type InstallRequest as LoaderInstallRequest,
   type InstallResponse as LoaderInstallResponse,
+  type InstallProgress as LoaderInstallProgress,
 } from '../gen/launcher/loader';
 
 let profileClient: ProfileServiceClient | null = null;
@@ -111,6 +112,21 @@ export const loaderRpc = {
     promisify<LoaderCheckInstalledRequest, LoaderCheckInstalledResponse>(ensureLoaderClient().checkInstalled.bind(ensureLoaderClient()))(req),
   install: (req: LoaderInstallRequest) =>
     promisify<LoaderInstallRequest, LoaderInstallResponse>(ensureLoaderClient().install.bind(ensureLoaderClient()))(req),
+  streamInstall: (
+    req: LoaderInstallRequest,
+    onData: (ev: LoaderInstallProgress) => void,
+    onError?: (err: any) => void,
+    onEnd?: () => void,
+  ): (() => void) => {
+    const client = ensureLoaderClient();
+    const stream: ClientReadableStream<LoaderInstallProgress> = (client as any).installStream(req);
+    stream.on('data', onData);
+    if (onError) stream.on('error', onError);
+    if (onEnd) stream.on('end', onEnd);
+    return () => {
+      try { stream.cancel(); } catch {}
+    };
+  },
 };
 
 export const healthRpc = {

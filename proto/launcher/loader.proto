@@ -8,6 +8,7 @@ service LoaderService {
   rpc GetRecommended(GetRecommendedRequest) returns (GetRecommendedResponse);
   rpc CheckInstalled(CheckInstalledRequest) returns (CheckInstalledResponse);
   rpc Install(InstallRequest) returns (InstallResponse);
+  rpc InstallStream(InstallRequest) returns (stream InstallProgress);
 }
 
 message GetVersionsRequest { string loader_type = 1; string game_version = 2; bool include_unstable = 3; }
@@ -21,3 +22,5 @@ message CheckInstalledResponse { bool installed = 1; }
 
 message InstallRequest { string loader_type = 1; string game_version = 2; string loader_version = 3; string instance_dir = 4; }
 message InstallResponse { bool success = 1; string version_id = 2; }
+
+message InstallProgress { string message = 1; int32 current = 2; int32 total = 3; int32 percent = 4; string version_id = 5; }
