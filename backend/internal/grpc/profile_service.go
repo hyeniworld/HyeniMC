@@ -92,11 +92,14 @@ func (s *profileServiceServer) UpdateProfile(ctx context.Context, req *pb.Update
 			}
 			updates["gameArgs"] = arr
 		}
-		if patch.MemoryMin != 0 {
+		// Always update memory/java/resolution if provided (0/empty = use global settings)
+		if req.GetPatch() != nil {
 			updates["minMemory"] = float64(patch.MemoryMin)
-		}
-		if patch.MemoryMax != 0 {
 			updates["maxMemory"] = float64(patch.MemoryMax)
+			updates["javaPath"] = patch.JavaPath
+			updates["resolutionWidth"] = float64(patch.ResolutionWidth)
+			updates["resolutionHeight"] = float64(patch.ResolutionHeight)
+			updates["fullscreen"] = patch.Fullscreen
 		}
 	}
 
@@ -120,23 +123,27 @@ func toPbProfile(p *domain.Profile) *pb.Profile {
 		lastPlayed = p.LastPlayed.Unix()
 	}
 	return &pb.Profile{
-		Id:            p.ID,
-		Name:          p.Name,
-		Description:   p.Description,
-		Icon:          p.Icon,
-		GameVersion:   p.GameVersion,
-		LoaderType:    p.LoaderType,
-		LoaderVersion: p.LoaderVersion,
-		GameDirectory: p.GameDirectory,
-		JvmArgs:       p.JvmArgs,
-		MemoryMin:     p.Memory.Min,
-		MemoryMax:     p.Memory.Max,
-		GameArgs:      p.GameArgs,
-		ModpackId:     p.ModpackID,
-		ModpackSource: p.ModpackSource,
-		CreatedAt:     p.CreatedAt.Unix(),
-		UpdatedAt:     p.UpdatedAt.Unix(),
-		LastPlayed:    lastPlayed,
-		TotalPlayTime: p.TotalPlayTime,
+		Id:               p.ID,
+		Name:             p.Name,
+		Description:      p.Description,
+		Icon:             p.Icon,
+		GameVersion:      p.GameVersion,
+		LoaderType:       p.LoaderType,
+		LoaderVersion:    p.LoaderVersion,
+		GameDirectory:    p.GameDirectory,
+		JvmArgs:          p.JvmArgs,
+		MemoryMin:        p.Memory.Min,
+		MemoryMax:        p.Memory.Max,
+		GameArgs:         p.GameArgs,
+		ModpackId:        p.ModpackID,
+		ModpackSource:    p.ModpackSource,
+		CreatedAt:        p.CreatedAt.Unix(),
+		UpdatedAt:        p.UpdatedAt.Unix(),
+		LastPlayed:       lastPlayed,
+		TotalPlayTime:    p.TotalPlayTime,
+		JavaPath:         p.JavaPath,
+		ResolutionWidth:  p.Resolution.Width,
+		ResolutionHeight: p.Resolution.Height,
+		Fullscreen:       p.Fullscreen,
 	}
 }

@@ -15,12 +15,17 @@ interface JavaInstallation {
 }
 
 export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProps) {
+  // Global settings
+  const [globalSettings, setGlobalSettings] = useState<any>(null);
+  
   // Memory settings
-  const [minMemory, setMinMemory] = useState(profile?.memory?.min || 512);
+  const [useGlobalMemory, setUseGlobalMemory] = useState(!profile?.memory?.min && !profile?.memory?.max);
+  const [minMemory, setMinMemory] = useState(profile?.memory?.min || 1024);
   const [maxMemory, setMaxMemory] = useState(profile?.memory?.max || 4096);
   const [systemMemory] = useState(16384); // TODO: Get from system
   
   // Java settings
+  const [useGlobalJava, setUseGlobalJava] = useState(!profile?.javaPath);
   const [javaInstallations, setJavaInstallations] = useState<JavaInstallation[]>([]);
   const [selectedJava, setSelectedJava] = useState<string>(profile?.javaPath || '');
   const [loadingJava, setLoadingJava] = useState(true);
@@ -28,7 +33,8 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
   // JVM arguments
   const [jvmArgs, setJvmArgs] = useState(profile?.jvmArgs?.join(' ') || '');
   
-  // Window settings
+  // Window settings - fullscreen is part of resolution global setting
+  const [useGlobalResolution, setUseGlobalResolution] = useState(!profile?.resolution?.width && !profile?.resolution?.height);
   const [windowWidth, setWindowWidth] = useState(profile?.resolution?.width || 854);
   const [windowHeight, setWindowHeight] = useState(profile?.resolution?.height || 480);
   const [fullscreen, setFullscreen] = useState(profile?.fullscreen || false);
@@ -42,22 +48,72 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    loadGlobalSettings();
+    loadJavaInstallations();
+  }, []);
+
+  // Initialize from profile (only when profile ID changes)
+  useEffect(() => {
     if (profile) {
-      setMinMemory(profile.memory?.min || 512);
+      console.log('[ProfileSettings] Profile ID changed, reinitializing:', profile.id);
+      console.log('[ProfileSettings] Profile data:', {
+        resolution: profile.resolution,
+        fullscreen: profile.fullscreen,
+      });
+      
+      const hasCustomMemory = profile.memory?.min > 0 || profile.memory?.max > 0;
+      setUseGlobalMemory(!hasCustomMemory);
+      setMinMemory(profile.memory?.min || 1024);
       setMaxMemory(profile.memory?.max || 4096);
+      
+      setUseGlobalJava(!profile.javaPath);
       setSelectedJava(profile.javaPath || '');
-      setJvmArgs(profile.jvmArgs?.join(' ') || '');
+      
+      // Resolution includes fullscreen
+      const hasCustomResolution = profile.resolution?.width > 0 || profile.resolution?.height > 0;
+      console.log('[ProfileSettings] hasCustomResolution:', hasCustomResolution, 'setting useGlobalResolution to:', !hasCustomResolution);
+      setUseGlobalResolution(!hasCustomResolution);
       setWindowWidth(profile.resolution?.width || 854);
       setWindowHeight(profile.resolution?.height || 480);
-      setFullscreen(profile.fullscreen || false);
+      setFullscreen(profile.fullscreen !== undefined && profile.fullscreen !== null ? profile.fullscreen : false);
+      
+      setJvmArgs(profile.jvmArgs?.join(' ') || '');
       setGameDir(profile.gameDirectory || '');
       setIcon(profile.icon || '🎮');
     }
-  }, [profile]);
+  }, [profile?.id]);
 
+  // Only update when global settings first load
   useEffect(() => {
-    loadJavaInstallations();
-  }, []);
+    if (globalSettings && profile) {
+      // Only apply global defaults if using global settings
+      const hasCustomMemory = profile.memory?.min > 0 || profile.memory?.max > 0;
+      if (!hasCustomMemory) {
+        setMinMemory(globalSettings.java?.memory_min || 1024);
+        setMaxMemory(globalSettings.java?.memory_max || 4096);
+      }
+      
+      if (!profile.javaPath) {
+        setSelectedJava(globalSettings.java?.java_path || '');
+      }
+      
+      const hasCustomResolution = profile.resolution?.width > 0 || profile.resolution?.height > 0;
+      if (!hasCustomResolution) {
+        setWindowWidth(globalSettings.resolution?.width || 854);
+        setWindowHeight(globalSettings.resolution?.height || 480);
+        setFullscreen(globalSettings.resolution?.fullscreen || false);
+      }
+    }
+  }, [globalSettings]);
+
+  const loadGlobalSettings = async () => {
+    try {
+      const settings = await window.electronAPI.settings.get();
+      setGlobalSettings(settings);
+    } catch (error) {
+      console.error('Failed to load global settings:', error);
+    }
+  };
 
   const loadJavaInstallations = async () => {
     try {
@@ -85,21 +141,55 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
     }
   };
 
+  // Handle checkbox changes - update values to global settings immediately
+  const handleUseGlobalMemoryChange = (checked: boolean) => {
+    setUseGlobalMemory(checked);
+    if (checked && globalSettings) {
+      setMinMemory(globalSettings.java?.memory_min || 1024);
+      setMaxMemory(globalSettings.java?.memory_max || 4096);
+    }
+  };
+
+  const handleUseGlobalJavaChange = (checked: boolean) => {
+    setUseGlobalJava(checked);
+    if (checked && globalSettings) {
+      setSelectedJava(globalSettings.java?.java_path || '');
+    }
+  };
+
+  const handleUseGlobalResolutionChange = (checked: boolean) => {
+    console.log('[ProfileSettings] Resolution checkbox changed to:', checked);
+    setUseGlobalResolution(checked);
+    if (checked && globalSettings) {
+      setWindowWidth(globalSettings.resolution?.width || 854);
+      setWindowHeight(globalSettings.resolution?.height || 480);
+      setFullscreen(globalSettings.resolution?.fullscreen || false);
+    }
+  };
+
   const handleSave = async () => {
+    console.log('[ProfileSettings] Save button clicked');
+    console.log('[ProfileSettings] Current state:', {
+      useGlobalResolution,
+      windowWidth,
+      windowHeight,
+      fullscreen,
+    });
     setSaving(true);
     try {
-      const updates = {
+      const updates: any = {
         memory: {
-          min: minMemory,
-          max: maxMemory,
+          min: useGlobalMemory ? 0 : minMemory,  // 0 = use global settings
+          max: useGlobalMemory ? 0 : maxMemory,
         },
-        javaPath: selectedJava,
+        javaPath: useGlobalJava ? '' : selectedJava,  // empty = use global settings
         jvmArgs: jvmArgs.trim() ? jvmArgs.trim().split(/\s+/) : [],
         resolution: {
-          width: windowWidth,
-          height: windowHeight,
+          width: useGlobalResolution ? 0 : windowWidth,  // 0 = use global settings
+          height: useGlobalResolution ? 0 : windowHeight,
         },
-        fullscreen,
+        // Always send fullscreen (resolution=0,0 means use global including fullscreen)
+        fullscreen: fullscreen,
         gameDirectory: gameDir,
         icon,
       };
@@ -171,18 +261,40 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
           메모리 설정
         </h3>
         
-        {/* System Info */}
-        <div className="bg-gray-900/50 rounded-lg p-4 mb-4 flex items-start gap-3">
-          <Info className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
-          <div className="text-sm">
-            <p className="text-gray-300 font-medium mb-1">시스템 메모리: {formatMemory(systemMemory)}</p>
-            <p className="text-gray-400 text-xs">
-              권장: 최소 512MB, 최대 {formatMemory(Math.floor(systemMemory * 0.7))} (시스템 메모리의 70%)
-            </p>
+        {/* Use Global Settings Checkbox */}
+        <label className="flex items-center gap-3 mb-4 cursor-pointer group">
+          <input
+            type="checkbox"
+            checked={useGlobalMemory}
+            onChange={(e) => handleUseGlobalMemoryChange(e.target.checked)}
+            className="w-5 h-5 rounded border-gray-600 text-purple-500 focus:ring-purple-500 focus:ring-offset-gray-900"
+          />
+          <div>
+            <span className="text-gray-200 group-hover:text-white transition">전역 설정 사용</span>
+            {useGlobalMemory && globalSettings && (
+              <div className="text-xs text-gray-400 mt-0.5">
+                전역: {formatMemory(globalSettings.java?.memory_min || 1024)} ~ {formatMemory(globalSettings.java?.memory_max || 4096)}
+              </div>
+            )}
           </div>
-        </div>
+        </label>
+        
+        {!useGlobalMemory && (
+          <>
+            {/* System Info */}
+            <div className="bg-gray-900/50 rounded-lg p-4 mb-4 flex items-start gap-3">
+              <Info className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
+              <div className="text-sm">
+                <p className="text-gray-300 font-medium mb-1">시스템 메모리: {formatMemory(systemMemory)}</p>
+                <p className="text-gray-400 text-xs">
+                  권장: 최소 512MB, 최대 {formatMemory(Math.floor(systemMemory * 0.7))} (시스템 메모리의 70%)
+                </p>
+              </div>
+            </div>
+          </>
+        )}
 
-        <div className="space-y-6">
+        <div className={`space-y-6 ${useGlobalMemory ? 'opacity-40 pointer-events-none' : ''}`}>
           {/* Min Memory Slider */}
           <div>
             <div className="flex items-center justify-between mb-2">
@@ -275,6 +387,25 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
           </button>
         </div>
 
+        {/* Use Global Java Checkbox */}
+        <label className="flex items-center gap-3 mb-4 cursor-pointer group">
+          <input
+            type="checkbox"
+            checked={useGlobalJava}
+            onChange={(e) => handleUseGlobalJavaChange(e.target.checked)}
+            className="w-5 h-5 rounded border-gray-600 text-purple-500 focus:ring-purple-500 focus:ring-offset-gray-900"
+          />
+          <div>
+            <span className="text-gray-200 group-hover:text-white transition">전역 설정 사용</span>
+            {useGlobalJava && globalSettings?.java?.java_path && (
+              <div className="text-xs text-gray-400 mt-0.5 truncate">
+                전역: {globalSettings.java.java_path}
+              </div>
+            )}
+          </div>
+        </label>
+
+        <div className={useGlobalJava ? 'opacity-40 pointer-events-none' : ''}>
         {loadingJava ? (
           <div className="text-center py-8 text-gray-400">
             Java 설치 경로를 감지하는 중...
@@ -329,6 +460,7 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
             ))}
           </div>
         )}
+        </div>
       </div>
 
       {/* JVM Arguments */}
@@ -357,6 +489,25 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
         </h3>
         
         <div className="space-y-4">
+          {/* Use Global Resolution Checkbox (includes fullscreen) */}
+          <label className="flex items-center gap-3 cursor-pointer group">
+            <input
+              type="checkbox"
+              checked={useGlobalResolution}
+              onChange={(e) => handleUseGlobalResolutionChange(e.target.checked)}
+              className="w-5 h-5 rounded border-gray-600 text-purple-500 focus:ring-purple-500 focus:ring-offset-gray-900"
+            />
+            <div>
+              <span className="text-gray-200 group-hover:text-white transition">전역 창 설정 사용</span>
+              {useGlobalResolution && globalSettings && (
+                <div className="text-xs text-gray-400 mt-0.5">
+                  전역: {globalSettings.resolution?.width || 854} × {globalSettings.resolution?.height || 480}, {globalSettings.resolution?.fullscreen ? '전체화면' : '창 모드'}
+                </div>
+              )}
+            </div>
+          </label>
+
+          <div className={useGlobalResolution ? 'opacity-40 pointer-events-none' : ''}>
           {/* Fullscreen Toggle */}
           <label className="flex items-center justify-between p-4 bg-gray-900/50 rounded-lg cursor-pointer hover:bg-gray-900/70 transition-colors">
             <div>
@@ -371,64 +522,61 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
             />
           </label>
 
-          {!fullscreen && (
-            <>
-              {/* Resolution Presets */}
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  해상도 프리셋
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {resolutionPresets.map((preset) => (
-                    <button
-                      key={preset.label}
-                      onClick={() => {
-                        setWindowWidth(preset.width);
-                        setWindowHeight(preset.height);
-                      }}
-                      className={`p-3 rounded-lg text-sm font-medium transition-all ${
-                        windowWidth === preset.width && windowHeight === preset.height
-                          ? 'bg-purple-500/20 border-2 border-purple-500 text-purple-300'
-                          : 'bg-gray-800 border border-gray-700 text-gray-300 hover:border-gray-600'
-                      }`}
-                    >
-                      {preset.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+          {/* Resolution Presets */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              해상도 프리셋
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {resolutionPresets.map((preset) => (
+                <button
+                  key={preset.label}
+                  onClick={() => {
+                    setWindowWidth(preset.width);
+                    setWindowHeight(preset.height);
+                  }}
+                  className={`p-3 rounded-lg text-sm font-medium transition-all ${
+                    windowWidth === preset.width && windowHeight === preset.height
+                      ? 'bg-purple-500/20 border-2 border-purple-500 text-purple-300'
+                      : 'bg-gray-800 border border-gray-700 text-gray-300 hover:border-gray-600'
+                  }`}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          </div>
 
-              {/* Custom Resolution */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    너비 (px)
-                  </label>
-                  <input
-                    type="number"
-                    value={windowWidth}
-                    onChange={(e) => setWindowWidth(Number(e.target.value))}
-                    min="640"
-                    max="7680"
-                    className="input"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    높이 (px)
-                  </label>
-                  <input
-                    type="number"
-                    value={windowHeight}
-                    onChange={(e) => setWindowHeight(Number(e.target.value))}
-                    min="480"
-                    max="4320"
-                    className="input"
-                  />
-                </div>
-              </div>
-            </>
-          )}
+          {/* Custom Resolution */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                너비 (px)
+              </label>
+              <input
+                type="number"
+                value={windowWidth}
+                onChange={(e) => setWindowWidth(Number(e.target.value))}
+                min="640"
+                max="7680"
+                className="input"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                높이 (px)
+              </label>
+              <input
+                type="number"
+                value={windowHeight}
+                onChange={(e) => setWindowHeight(Number(e.target.value))}
+                min="480"
+                max="4320"
+                className="input"
+              />
+            </div>
+          </div>
+          </div>
         </div>
       </div>
 

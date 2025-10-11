@@ -95,6 +95,10 @@ export function registerProfileHandlers(): void {
         updatedAt: 0,
         lastPlayed: 0,
         totalPlayTime: data.totalPlayTime ?? 0,
+        javaPath: data.javaPath ?? '',
+        resolutionWidth: data.resolution?.width ?? 0,
+        resolutionHeight: data.resolution?.height ?? 0,
+        fullscreen: data.fullscreen ?? false,
       };
       const res = await profileRpc.updateProfile({ id, patch });
       console.log(`[IPC Profile] Profile updated successfully:`);
@@ -364,29 +368,48 @@ export function registerProfileHandlers(): void {
       }
 
       // Get global settings for fallback
+      const { settingsRpc } = await import('../grpc/clients');
       let globalSettings: any = null;
       try {
-        globalSettings = await (await import('../grpc/clients')).settingsRpc.getSettings();
-        console.log('[IPC Profile] Loaded global settings for fallback');
+        const res = await settingsRpc.getSettings();
+        globalSettings = res.settings;
+        console.log('[IPC Profile] Loaded global settings');
       } catch (error) {
-        console.warn('[IPC Profile] Failed to load global settings, using hardcoded defaults:', error);
+        console.warn('[IPC Profile] Failed to load global settings, using defaults:', error);
       }
       
-      // Get memory settings from profile, fallback to global settings, then hardcoded defaults
-      // 0 or undefined means inherit from global settings
+      // Resolve settings: profile overrides global settings
+      // 0 or empty = inherit from global settings
       const minMemory = (profile.memory?.min && profile.memory.min > 0) 
         ? profile.memory.min 
-        : (globalSettings?.settings?.java?.memoryMin || 1024);
+        : (globalSettings?.java?.memoryMin || 1024);
+      
       const maxMemory = (profile.memory?.max && profile.memory.max > 0)
         ? profile.memory.max
-        : (globalSettings?.settings?.java?.memoryMax || 4096);
+        : (globalSettings?.java?.memoryMax || 4096);
       
-      console.log(`[IPC Profile] Memory settings: min=${minMemory}MB, max=${maxMemory}MB (profile: ${profile.memory?.min}/${profile.memory?.max}, global: ${globalSettings?.settings?.java?.memoryMin}/${globalSettings?.settings?.java?.memoryMax})`);
-      
-      // Use custom Java path if set, fallback to global settings, otherwise use detected Java
       const javaPathToUse = (profile.javaPath && profile.javaPath.trim() !== '')
         ? profile.javaPath
-        : (globalSettings?.settings?.java?.javaPath || java.path);
+        : (globalSettings?.java?.javaPath || java.path);
+      
+      // Resolve resolution: profile overrides global settings
+      // If resolution is 0,0, use global settings (including fullscreen)
+      const useGlobalResolution = profile.resolution?.width === 0 && profile.resolution?.height === 0;
+      
+      const resolutionWidth = useGlobalResolution
+        ? (globalSettings?.resolution?.width || 854)
+        : (profile.resolution?.width || 854);
+      
+      const resolutionHeight = useGlobalResolution
+        ? (globalSettings?.resolution?.height || 480)
+        : (profile.resolution?.height || 480);
+      
+      // Fullscreen: use global if resolution is global
+      const fullscreenToUse = useGlobalResolution
+        ? (globalSettings?.resolution?.fullscreen || false)
+        : profile.fullscreen;
+      
+      console.log(`[IPC Profile] Resolved config: Java=${javaPathToUse}, Memory=${minMemory}-${maxMemory}MB, Resolution=${resolutionWidth}x${resolutionHeight}, Fullscreen=${fullscreenToUse}, UseGlobalResolution=${useGlobalResolution}`);
 
       // Launch game using IPC
       const launchOptions = {
@@ -400,16 +423,19 @@ export function registerProfileHandlers(): void {
         uuid,
         accessToken,
         userType,
-        resolution: profile.resolution,
-        fullscreen: profile.fullscreen,
+        resolution: {
+          width: resolutionWidth,
+          height: resolutionHeight,
+        },
+        fullscreen: fullscreenToUse,
       };
 
       console.log('[IPC Profile] Launching game with options:');
       console.log(`  - Version: ${actualVersionId}`);
       console.log(`  - Java Path: ${javaPathToUse}`);
       console.log(`  - Memory: ${minMemory}MB - ${maxMemory}MB`);
-      console.log(`  - Resolution: ${profile.resolution?.width || 854}x${profile.resolution?.height || 480}`);
-      console.log(`  - Fullscreen: ${profile.fullscreen || false}`);
+      console.log(`  - Resolution: ${resolutionWidth}x${resolutionHeight}`);
+      console.log(`  - Fullscreen: ${fullscreenToUse}`);
       console.log(`  - Username: ${username}`);
       console.log(`  - UUID: ${uuid}`);
       console.log(`  - User Type: ${userType}`);
@@ -464,12 +490,15 @@ function fromPbProfile(p: pb.Profile): Profile {
     loaderType: p.loaderType as any,
     loaderVersion: p.loaderVersion,
     gameDirectory: p.gameDirectory,
-    javaPath: '',
+    javaPath: p.javaPath || '',
     jvmArgs: p.jvmArgs,
     memory: { min: p.memoryMin ?? 0, max: p.memoryMax ?? 0 },
     gameArgs: p.gameArgs,
-    resolution: undefined,
-    fullscreen: false,
+    resolution: { 
+      width: p.resolutionWidth ?? 0, 
+      height: p.resolutionHeight ?? 0 
+    },
+    fullscreen: p.fullscreen,
     modpackId: p.modpackId,
     modpackSource: p.modpackSource as any,
     createdAt: p.createdAt ? new Date(p.createdAt * 1000).toISOString() as unknown as any : (undefined as any),

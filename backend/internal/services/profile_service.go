@@ -7,28 +7,24 @@ import (
 	"strings"
 	"time"
 
-	"hyenimc/backend/internal/domain"
-	"hyenimc/backend/internal/repo"
-
 	"github.com/google/uuid"
+
+	"hyenimc/backend/internal/domain"
+	"hyenimc/backend/internal/profile"
 )
 
 // ProfileService implements profile management business logic
 type ProfileService struct {
-	repo    *repo.ProfileRepository
+	repo    *profile.Repository
 	dataDir string
 }
 
-// NewProfileService creates a new profile service
-func NewProfileService(dataDir string) (*ProfileService, error) {
-	repo, err := repo.NewProfileRepository(dataDir)
-	if err != nil {
-		return nil, err
-	}
+// NewProfileService creates a new profile service (using SQLite)
+func NewProfileService(repo *profile.Repository, dataDir string) *ProfileService {
 	return &ProfileService{
 		repo:    repo,
 		dataDir: dataDir,
-	}, nil
+	}
 }
 
 // CreateProfile creates a new profile
@@ -145,7 +141,7 @@ func (s *ProfileService) UpdateProfile(ctx context.Context, id string, updates m
 		profile.GameArgs = args
 	}
 	
-	// Handle resolution settings
+	// Handle resolution settings (both nested and flat formats)
 	if resolution, ok := updates["resolution"].(map[string]interface{}); ok {
 		if width, ok := resolution["width"].(float64); ok {
 			profile.Resolution.Width = int32(width)
@@ -153,6 +149,13 @@ func (s *ProfileService) UpdateProfile(ctx context.Context, id string, updates m
 		if height, ok := resolution["height"].(float64); ok {
 			profile.Resolution.Height = int32(height)
 		}
+	}
+	// Also check flat format (from gRPC)
+	if resWidth, ok := updates["resolutionWidth"].(float64); ok {
+		profile.Resolution.Width = int32(resWidth)
+	}
+	if resHeight, ok := updates["resolutionHeight"].(float64); ok {
+		profile.Resolution.Height = int32(resHeight)
 	}
 	
 	// Handle fullscreen setting

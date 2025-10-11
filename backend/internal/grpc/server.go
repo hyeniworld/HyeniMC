@@ -8,13 +8,14 @@ import (
 
 	pb "hyenimc/backend/gen/launcher"
 	"hyenimc/backend/internal/services"
+	"hyenimc/backend/internal/settings"
 
 	grpclib "google.golang.org/grpc"
 )
 
 // StartGRPCServer starts the gRPC server, prints the chosen address to stdout, and serves forever.
 // If addr is empty, it will use 127.0.0.1:0 to pick a free port.
-func StartGRPCServer(addr string, profileSvc *services.ProfileService) error {
+func StartGRPCServer(addr string, profileSvc *services.ProfileService, settingsSvc *settings.Service) error {
 	if addr == "" {
 		addr = "127.0.0.1:0"
 	}
@@ -39,7 +40,7 @@ func StartGRPCServer(addr string, profileSvc *services.ProfileService) error {
 	pb.RegisterHealthServiceServer(server, NewHealthServiceServer())
 	pb.RegisterLoaderServiceServer(server, NewLoaderServiceServer())
 	pb.RegisterAssetServiceServer(server, NewAssetServiceServer())
-	pb.RegisterSettingsServiceServer(server, NewSettingsServiceServer())
+	pb.RegisterSettingsServiceServer(server, NewSettingsServiceServer(settingsSvc))
 
 	if err := server.Serve(lis); err != nil {
 		return fmt.Errorf("failed to serve gRPC: %w", err)

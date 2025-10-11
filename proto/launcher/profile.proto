@@ -29,6 +29,10 @@ message Profile {
   int64 updated_at = 16;
   int64 last_played = 17;
   int64 total_play_time = 18;
+  string java_path = 19;
+  int32 resolution_width = 20;
+  int32 resolution_height = 21;
+  bool fullscreen = 22;
 }
 
 message CreateProfileRequest {

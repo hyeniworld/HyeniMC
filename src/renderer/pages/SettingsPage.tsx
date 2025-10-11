@@ -91,29 +91,9 @@ export function SettingsPage() {
   const onSave = async () => {
     setSaving(true);
     try {
-      // Clean up settings: remove empty strings and convert to numbers
-      const cleanSettings = JSON.parse(JSON.stringify(settings));
-      if (cleanSettings.download) {
-        if (cleanSettings.download.request_timeout_ms === '') cleanSettings.download.request_timeout_ms = 3000;
-        if (cleanSettings.download.max_retries === '') cleanSettings.download.max_retries = 5;
-        if (cleanSettings.download.max_parallel === '') cleanSettings.download.max_parallel = 10;
-      }
-      if (cleanSettings.java) {
-        if (cleanSettings.java.memory_min === '') cleanSettings.java.memory_min = 1024;
-        if (cleanSettings.java.memory_max === '') cleanSettings.java.memory_max = 4096;
-      }
-      if (cleanSettings.resolution) {
-        if (cleanSettings.resolution.width === '') cleanSettings.resolution.width = 854;
-        if (cleanSettings.resolution.height === '') cleanSettings.resolution.height = 480;
-      }
-      if (cleanSettings.cache) {
-        if (cleanSettings.cache.max_size_gb === '') cleanSettings.cache.max_size_gb = 10;
-        if (cleanSettings.cache.ttl_days === '') cleanSettings.cache.ttl_days = 30;
-      }
-      
-      await window.electronAPI.settings.update(cleanSettings);
-      setOriginal(cleanSettings);
-      setSettings(cleanSettings);
+      // Backend will handle defaults, just send as-is
+      await window.electronAPI.settings.update(settings);
+      setOriginal(settings);
     } finally {
       setSaving(false);
     }
