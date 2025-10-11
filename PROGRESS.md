@@ -415,6 +415,37 @@ npm run dev
   - [ ] 다운로드/로그 이벤트 스키마 확정 및 `DownloadModal.tsx`·`useDownloadStore` 연동 검증
   - [ ] Windows 빌드 확인: `backend/bin/hyenimc-backend.exe` 포함 및 `manager.ts` 경로 검증
 
+### gRPC 전환 1단계 진행상황 (2025-10-11)
+
+- **[완료]** `DownloadService` 구현 및 적용
+- **[완료]** 모드팩(.mrpack) 설치 경로 gRPC 전환, 개별 모드 설치 gRPC 전환
+- **[완료]** 에셋 프리페치용 `AssetService.PrefetchAssets` 추가 및 연동 준비
+- **[완료]** 스트림 `CANCELLED` 소음 무시 처리로 안정화
+- **[진행 예정]** 리소스팩/셰이더팩 URL 설치 경로 gRPC 전환(로컬 파일 설치는 유지)
+- **[진행 예정]** SettingService 도입(전역 설정), 런처 메인에서 gRPC 클라이언트 연결
+
+### 전역(전체) 설정 설계 및 상속 규칙
+
+- **[목표]** 프로필이 미지정한 항목은 전역 설정을 기본값으로 상속하여 사용
+- **[SettingsService 스키마]**
+  - `GlobalSettings`
+    - `DownloadSettings`: `request_timeout_ms(기본 3000)`, `max_retries(기본 5)`, `max_parallel(기본 10)`
+    - `JavaSettings`: `java_path`, `memory_min`, `memory_max`
+    - `ResolutionSettings`: `width`, `height`, `fullscreen`
+    - `CacheSettings`: `enabled`, `max_size_gb`, `ttl_days`
+  - RPC: `GetSettings`, `UpdateSettings`, `ResetCache`
+- **[상속 적용 지점]**
+  - 게임 실행 직전, 메인 프로세스에서 `settingsRpc.getSettings()` 호출 후 프로필 값과 병합하여 `LaunchOptions` 생성
+  - 예) `profile.memoryMin ?? global.java.memory_min`, `profile.width ?? global.resolution.width`
+
+### 작업 순서 정리
+
+1) gRPC 전환 마무리
+   - 리소스팩/셰이더팩 URL 설치 gRPC 전환
+   - SettingsService gRPC 추가 및 메인에서 사용
+2) 캐시/무결성/다운로드 고급화(공유 캐시 인덱스, TTL, 리셋)
+3) UI/설정 페이지(전역 설정 편집, 캐시 리셋 버튼 등)
+
 - **[완료 기준]**
   - 런처에서 프로필 생성→권장 로더 자동 설치→모드/모드팩 설치·업데이트→게임 실행·로그 스트리밍 전 과정을 gRPC 기반으로 안정적으로 수행하며, 대형 모드팩 기준 중단복구·무결성 검증을 통과합니다.
 

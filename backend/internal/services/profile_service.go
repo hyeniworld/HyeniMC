@@ -44,7 +44,8 @@ func (s *ProfileService) CreateProfile(ctx context.Context, req *domain.CreatePr
 		return nil, fmt.Errorf("loader type is required")
 	}
 
-	// Create profile
+	// Create profile with empty memory settings
+	// Memory will inherit from global settings at launch time
 	profile := &domain.Profile{
 		ID:            uuid.New().String(),
 		Name:          req.Name,
@@ -56,8 +57,8 @@ func (s *ProfileService) CreateProfile(ctx context.Context, req *domain.CreatePr
 		GameDirectory: filepath.Join(s.dataDir, "instances", sanitizeName(req.Name)),
 		JvmArgs:       []string{},
 		Memory: domain.Memory{
-			Min: 2048,
-			Max: 4096,
+			Min: 0, // 0 means inherit from global settings
+			Max: 0, // 0 means inherit from global settings
 		},
 		GameArgs:      []string{},
 		CreatedAt:     time.Now(),

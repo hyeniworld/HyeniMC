@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
 
 	pb "hyenimc/backend/gen/launcher"
 	"hyenimc/backend/internal/services"
@@ -25,6 +26,7 @@ func StartGRPCServer(addr string, profileSvc *services.ProfileService) error {
 
 	// Print the chosen address for Electron Main to capture via stdout
 	fmt.Println(lis.Addr().String())
+	os.Stdout.Sync() // Ensure stdout is flushed immediately
 	log.Printf("gRPC server listening on %s", lis.Addr().String())
 
 	server := grpclib.NewServer()
@@ -36,6 +38,8 @@ func StartGRPCServer(addr string, profileSvc *services.ProfileService) error {
 	pb.RegisterVersionServiceServer(server, NewVersionServiceServer())
 	pb.RegisterHealthServiceServer(server, NewHealthServiceServer())
 	pb.RegisterLoaderServiceServer(server, NewLoaderServiceServer())
+	pb.RegisterAssetServiceServer(server, NewAssetServiceServer())
+	pb.RegisterSettingsServiceServer(server, NewSettingsServiceServer())
 
 	if err := server.Serve(lis); err != nil {
 		return fmt.Errorf("failed to serve gRPC: %w", err)

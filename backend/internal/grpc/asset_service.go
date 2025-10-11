@@ -36,7 +36,10 @@ func (s *assetServiceServer) PrefetchAssets(ctx context.Context, req *pb.Prefetc
         return nil, fmt.Errorf("assets_index_url and base_dir are required")
     }
     maxPar := int(req.GetMaxParallel())
-    if maxPar <= 0 { maxPar = 4 }
+    if maxPar <= 0 {
+        maxPar = int(currentDownloadSettings().GetMaxParallel())
+        if maxPar <= 0 { maxPar = 10 }
+    }
 
     // fetch index json
     cctx, cancel := context.WithTimeout(ctx, 60*time.Second)

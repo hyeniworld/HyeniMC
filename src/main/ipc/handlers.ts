@@ -11,6 +11,7 @@ import { registerModHandlers } from './mod';
 import { registerModpackHandlers } from './modpack';
 import { registerResourcePackHandlers } from './resourcepack';
 import { registerShaderPackHandlers } from './shaderpack';
+import { registerSettingsHandlers } from './settings';
 
 /**
  * Register all IPC handlers
@@ -30,6 +31,7 @@ export function registerIpcHandlers(): void {
   registerModpackHandlers();
   registerResourcePackHandlers();
   registerShaderPackHandlers();
+  registerSettingsHandlers();
 
   console.log('[IPC] IPC handlers registered');
 }

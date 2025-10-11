@@ -1,10 +1,11 @@
 import React, { useState, createContext, useContext } from 'react';
-import { HashRouter, Routes, Route } from 'react-router-dom';
+import { HashRouter, Routes, Route, Link } from 'react-router-dom';
 import { ProfileList } from './components/profiles/ProfileList';
 import { ProfileDetailPage } from './pages/ProfileDetailPage';
 import { AccountManager } from './components/accounts/AccountManager';
 import { Sparkles } from 'lucide-react';
 import { GlobalDownloadModal } from './components/common/GlobalDownloadModal';
+import { SettingsPage } from './pages/SettingsPage';
 import { useDownloadProgress } from './hooks/useDownloadProgress';
 
 // Global account context
@@ -31,6 +32,7 @@ function App() {
         <Routes>
           <Route path="/" element={<MainLayout />} />
           <Route path="/profile/:profileId" element={<ProfileDetailPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </HashRouter>
       {/* Global Download/Install Modal (rich) */}
@@ -65,6 +67,7 @@ function MainLayout() {
                 selectedAccountId={selectedAccountId}
                 onAccountChange={setSelectedAccountId}
               />
+              <Link to="/settings" className="text-sm px-3 py-1 bg-gray-800/60 hover:bg-gray-800 border border-gray-700 rounded-md">설정</Link>
               <span className="text-sm text-gray-400 px-3 py-1 bg-gray-800/50 rounded-full border border-gray-700">
                 v0.1.0
               </span>

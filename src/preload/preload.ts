@@ -23,6 +23,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     launch: (id: string, accountId?: string): Promise<void> => 
       ipcRenderer.invoke(IPC_CHANNELS.PROFILE_LAUNCH, id, accountId),
   },
+
+  // Settings APIs
+  settings: {
+    get: (): Promise<any> => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET),
+    update: (settings: any): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_UPDATE, settings),
+  },
   
   // Account APIs
   account: {
@@ -93,6 +99,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   system: {
     getPath: (name: string): Promise<string> =>
       ipcRenderer.invoke('system:getPath', name),
+    getMemory: (): Promise<number> =>
+      ipcRenderer.invoke('system:getMemory'),
   },
 
   // Game APIs
@@ -255,6 +263,7 @@ declare global {
       };
       system: {
         getPath: (name: string) => Promise<string>;
+        getMemory: () => Promise<number>;
       };
       game: {
         stop: (versionId: string) => Promise<{ success: boolean }>;
@@ -288,6 +297,10 @@ declare global {
         enable: (profileId: string, fileName: string, isDirectory: boolean) => Promise<{ success: boolean }>;
         disable: (profileId: string, fileName: string, isDirectory: boolean) => Promise<{ success: boolean }>;
         delete: (profileId: string, fileName: string, isDirectory: boolean) => Promise<{ success: boolean }>;
+      };
+      settings: {
+        get: () => Promise<any>;
+        update: (settings: any) => Promise<{ ok: boolean }>;
       };
       modpack: {
         search: (query: string, gameVersion?: string) => Promise<any[]>;

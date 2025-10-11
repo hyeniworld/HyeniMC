@@ -1,4 +1,5 @@
 import { ipcMain, shell, app } from 'electron';
+import * as os from 'os';
 
 /**
  * Register shell-related IPC handlers
@@ -40,6 +41,19 @@ export function registerShellHandlers(): void {
     } catch (error) {
       console.error('[System] Failed to get path:', error);
       throw error;
+    }
+  });
+
+  // Get system memory in MB
+  ipcMain.handle('system:getMemory', async () => {
+    try {
+      const totalMemory = os.totalmem();
+      const memoryInMB = Math.floor(totalMemory / (1024 * 1024));
+      console.log('[System] Total memory:', memoryInMB, 'MB');
+      return memoryInMB;
+    } catch (error) {
+      console.error('[System] Failed to get memory:', error);
+      return 16384; // Default 16GB
     }
   });
 

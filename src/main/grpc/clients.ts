@@ -33,6 +33,13 @@ import {
 } from '../gen/launcher/instance';
 import { HealthServiceClient, type HealthStatus } from '../gen/launcher/health';
 import {
+  SettingsServiceClient,
+  type GetSettingsRequest,
+  type GetSettingsResponse,
+  type UpdateSettingsRequest,
+  type UpdateSettingsResponse,
+} from '../gen/launcher/settings';
+import {
   VersionServiceClient,
   type ListMinecraftVersionsRequest,
   type ListMinecraftVersionsResponse,
@@ -62,11 +69,21 @@ let versionClient: VersionServiceClient | null = null;
 let loaderClient: LoaderServiceClient | null = null;
 let lastAddr: string | null = null;
 let assetClient: AssetServiceClient | null = null;
+let settingsClient: SettingsServiceClient | null = null;
 
 function ensureAddr(): string {
   const addr = getBackendAddress();
   if (!addr) throw new Error('Backend server is not running');
   return addr;
+}
+
+function ensureSettingsClient(): SettingsServiceClient {
+  const addr = ensureAddr();
+  if (!settingsClient || lastAddr !== addr) {
+    settingsClient = new SettingsServiceClient(addr, credentials.createInsecure());
+    lastAddr = addr;
+  }
+  return settingsClient;
 }
 
 function ensureAssetClient(): AssetServiceClient {
@@ -120,6 +137,13 @@ export function streamState(
     try { stream.cancel(); } catch {}
   };
 }
+
+export const settingsRpc = {
+  getSettings: () =>
+    promisify<GetSettingsRequest, GetSettingsResponse>(ensureSettingsClient().getSettings.bind(ensureSettingsClient()))({} as any),
+  updateSettings: (req: UpdateSettingsRequest) =>
+    promisify<UpdateSettingsRequest, UpdateSettingsResponse>(ensureSettingsClient().updateSettings.bind(ensureSettingsClient()))(req),
+};
 
 export const loaderRpc = {
   getVersions: (req: LoaderGetVersionsRequest) =>

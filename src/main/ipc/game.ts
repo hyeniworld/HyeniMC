@@ -91,6 +91,19 @@ export function registerGameHandlers(): void {
       console.log(`[IPC Game] Launching game: ${options.versionId}`);
       const launcher = getGameLauncher();
       const mainWindow = BrowserWindow.fromWebContents(event.sender);
+      try {
+        const { settingsRpc } = await import('../grpc/clients');
+        const res = await settingsRpc.getSettings();
+        const gs: any = res?.settings || {};
+        const java: any = gs.java || {};
+        const resol: any = gs.resolution || {};
+        if (!(options as any).javaPath && java.javaPath) (options as any).javaPath = java.javaPath;
+        if (!(options as any).memoryMin && typeof java.memoryMin === 'number') (options as any).memoryMin = java.memoryMin;
+        if (!(options as any).memoryMax && typeof java.memoryMax === 'number') (options as any).memoryMax = java.memoryMax;
+        if (!(options as any).width && typeof resol.width === 'number') (options as any).width = resol.width;
+        if (!(options as any).height && typeof resol.height === 'number') (options as any).height = resol.height;
+        if ((options as any).fullscreen === undefined && typeof resol.fullscreen === 'boolean') (options as any).fullscreen = resol.fullscreen;
+      } catch {}
       
       const gameProcess = await launcher.launch(
         options,

@@ -1,0 +1,46 @@
+syntax = "proto3";
+package launcher;
+option go_package = "hyenimc/backend/gen/launcher;launcher";
+
+service SettingsService {
+  rpc GetSettings(GetSettingsRequest) returns (GetSettingsResponse);
+  rpc UpdateSettings(UpdateSettingsRequest) returns (UpdateSettingsResponse);
+  rpc ResetCache(ResetCacheRequest) returns (UpdateSettingsResponse);
+}
+
+message GetSettingsRequest {}
+message UpdateSettingsRequest { GlobalSettings settings = 1; }
+message GetSettingsResponse { GlobalSettings settings = 1; }
+message UpdateSettingsResponse { bool ok = 1; }
+message ResetCacheRequest {}
+
+message GlobalSettings {
+  DownloadSettings download = 1;
+  JavaSettings java = 2;
+  ResolutionSettings resolution = 3;
+  CacheSettings cache = 4;
+}
+
+message DownloadSettings {
+  int32 request_timeout_ms = 1; // default 3000
+  int32 max_retries = 2;        // default 5
+  int32 max_parallel = 3;       // default 10
+}
+
+message JavaSettings {
+  string java_path = 1;
+  int32 memory_min = 2;
+  int32 memory_max = 3;
+}
+
+message ResolutionSettings {
+  int32 width = 1;
+  int32 height = 2;
+  bool fullscreen = 3;
+}
+
+message CacheSettings {
+  bool enabled = 1;      // default true
+  int32 max_size_gb = 2; // default 10
+  int32 ttl_days = 3;    // default 30
+}

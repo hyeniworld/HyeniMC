@@ -363,12 +363,30 @@ export function registerProfileHandlers(): void {
         }
       }
 
-      // Get memory settings from profile (with defaults)
-      const minMemory = profile.memory?.min || 512;
-      const maxMemory = profile.memory?.max || 4096;
+      // Get global settings for fallback
+      let globalSettings: any = null;
+      try {
+        globalSettings = await (await import('../grpc/clients')).settingsRpc.getSettings();
+        console.log('[IPC Profile] Loaded global settings for fallback');
+      } catch (error) {
+        console.warn('[IPC Profile] Failed to load global settings, using hardcoded defaults:', error);
+      }
       
-      // Use custom Java path if set, otherwise use detected Java
-      const javaPathToUse = profile.javaPath || java.path;
+      // Get memory settings from profile, fallback to global settings, then hardcoded defaults
+      // 0 or undefined means inherit from global settings
+      const minMemory = (profile.memory?.min && profile.memory.min > 0) 
+        ? profile.memory.min 
+        : (globalSettings?.settings?.java?.memoryMin || 1024);
+      const maxMemory = (profile.memory?.max && profile.memory.max > 0)
+        ? profile.memory.max
+        : (globalSettings?.settings?.java?.memoryMax || 4096);
+      
+      console.log(`[IPC Profile] Memory settings: min=${minMemory}MB, max=${maxMemory}MB (profile: ${profile.memory?.min}/${profile.memory?.max}, global: ${globalSettings?.settings?.java?.memoryMin}/${globalSettings?.settings?.java?.memoryMax})`);
+      
+      // Use custom Java path if set, fallback to global settings, otherwise use detected Java
+      const javaPathToUse = (profile.javaPath && profile.javaPath.trim() !== '')
+        ? profile.javaPath
+        : (globalSettings?.settings?.java?.javaPath || java.path);
 
       // Launch game using IPC
       const launchOptions = {
