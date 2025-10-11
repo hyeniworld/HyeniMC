@@ -2,6 +2,7 @@ import { app, BrowserWindow } from 'electron';
 import * as path from 'path';
 import { registerIpcHandlers } from './ipc/handlers';
 import { initializeDownloadStreamBridge, shutdownDownloadStreamBridge } from './ipc/downloadStream';
+import { initializeInstanceLogBridge, shutdownInstanceLogBridge } from './ipc/instanceStream';
 import { startBackend, stopBackend } from './backend/manager';
 
 // Set app name
@@ -72,6 +73,8 @@ async function initialize() {
 
     // Initialize gRPC download stream bridge (global)
     initializeDownloadStreamBridge();
+    // Initialize gRPC instance log stream bridge (global)
+    initializeInstanceLogBridge();
   } catch (error) {
     console.error('Failed to initialize app:', error);
     app.quit();
@@ -100,6 +103,7 @@ app.on('activate', () => {
 
 app.on('before-quit', async () => {
   shutdownDownloadStreamBridge();
+  shutdownInstanceLogBridge();
   await stopBackend();
 });
 

@@ -1,11 +1,15 @@
 syntax = "proto3";
 package launcher;
 option go_package = "hyenimc/backend/gen/launcher;launcher";
+import "launcher/download.proto";
 
 service InstanceService {
   rpc Launch(LaunchRequest) returns (LaunchResponse);
   rpc Stop(StopRequest) returns (StopResponse);
   rpc StreamLogs(LogsRequest) returns (stream LogLine);
+  rpc PublishLog(LogLine) returns (Ack);
+  rpc StreamState(StateRequest) returns (stream StateEvent);
+  rpc PublishState(StateEvent) returns (Ack);
 }
 
 message LaunchRequest {
@@ -30,4 +34,12 @@ message StopRequest { string profile_id = 1; }
 message StopResponse { bool success = 1; }
 
 message LogsRequest { string profile_id = 1; }
-message LogLine { int64 timestamp = 1; string level = 2; string message = 3; string source = 4; }
+message LogLine { int64 timestamp = 1; string level = 2; string message = 3; string source = 4; string profile_id = 5; }
+
+message StateRequest { string profile_id = 1; }
+message StateEvent {
+  string profile_id = 1;
+  string state = 2; // started|stopped|crashed
+  int32 pid = 3;
+  int32 exit_code = 4; // when stopped/crashed
+}

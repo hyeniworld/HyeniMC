@@ -10,6 +10,9 @@ import (
 )
 
 func main() {
+    // Route standard logger to stdout (default is stderr)
+    log.SetOutput(os.Stdout)
+
 	// Get data directory from environment or use default
 	dataDir := os.Getenv("HYENIMC_DATA_DIR")
 	if dataDir == "" {

@@ -16,9 +16,17 @@ import {
   type ProgressEvent,
 } from '../gen/launcher/download';
 import type { ClientReadableStream } from '@grpc/grpc-js';
+import {
+  InstanceServiceClient,
+  type LogsRequest,
+  type LogLine,
+  type StateRequest,
+  type StateEvent,
+} from '../gen/launcher/instance';
 
 let profileClient: ProfileServiceClient | null = null;
 let downloadClient: DownloadServiceClient | null = null;
+let instanceClient: InstanceServiceClient | null = null;
 let lastAddr: string | null = null;
 
 function ensureAddr(): string {
@@ -27,10 +35,49 @@ function ensureAddr(): string {
   return addr;
 }
 
+export function streamState(
+  req: StateRequest,
+  onData: (ev: StateEvent) => void,
+  onError?: (err: any) => void,
+  onEnd?: () => void,
+): () => void {
+  const client = ensureInstanceClient();
+  const stream: ClientReadableStream<StateEvent> = client.streamState(req);
+  stream.on('data', onData);
+  if (onError) stream.on('error', onError);
+  if (onEnd) stream.on('end', onEnd);
+  return () => {
+    try { stream.cancel(); } catch {}
+  };
+}
+
 export const downloadRpc = {
   publishProgress: (ev: ProgressEvent) =>
     promisify<ProgressEvent, { ok: boolean }>(ensureDownloadClient().publishProgress.bind(ensureDownloadClient()))(ev),
 };
+
+export const instanceRpc = {
+  publishLog: (line: LogLine) =>
+    promisify<LogLine, { ok: boolean }>(ensureInstanceClient().publishLog.bind(ensureInstanceClient()))(line),
+  publishState: (ev: StateEvent) =>
+    promisify<StateEvent, { ok: boolean }>(ensureInstanceClient().publishState.bind(ensureInstanceClient()))(ev),
+};
+
+export function streamLogs(
+  req: LogsRequest,
+  onData: (line: LogLine) => void,
+  onError?: (err: any) => void,
+  onEnd?: () => void,
+): () => void {
+  const client = ensureInstanceClient();
+  const stream: ClientReadableStream<LogLine> = client.streamLogs(req);
+  stream.on('data', onData);
+  if (onError) stream.on('error', onError);
+  if (onEnd) stream.on('end', onEnd);
+  return () => {
+    try { stream.cancel(); } catch {}
+  };
+}
 
 function ensureProfileClient(): ProfileServiceClient {
   const addr = ensureAddr();
@@ -48,6 +95,15 @@ function ensureDownloadClient(): DownloadServiceClient {
     lastAddr = addr;
   }
   return downloadClient;
+}
+
+function ensureInstanceClient(): InstanceServiceClient {
+  const addr = ensureAddr();
+  if (!instanceClient || lastAddr !== addr) {
+    instanceClient = new InstanceServiceClient(addr, credentials.createInsecure());
+    lastAddr = addr;
+  }
+  return instanceClient;
 }
 
 function promisify<Req, Res>(

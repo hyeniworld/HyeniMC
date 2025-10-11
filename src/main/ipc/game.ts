@@ -102,6 +102,19 @@ export function registerGameHandlers(): void {
               line: log,
             });
           }
+          // Publish to gRPC InstanceService so other subscribers can receive logs
+          (async () => {
+            try {
+              const { instanceRpc } = await import('../grpc/clients');
+              await instanceRpc.publishLog({
+                timestamp: Date.now() as any,
+                level: 'INFO',
+                message: String(log),
+                source: 'game',
+                profileId: options.profileId as any,
+              } as any);
+            } catch {}
+          })();
         },
         (code) => {
           // Notify game exit
@@ -111,6 +124,18 @@ export function registerGameHandlers(): void {
               code,
             });
           }
+          // Publish state: stopped
+          (async () => {
+            try {
+              const { instanceRpc } = await import('../grpc/clients');
+              await instanceRpc.publishState({
+                profileId: options.profileId as any,
+                state: 'stopped' as any,
+                pid: (gameProcess?.process?.pid as any) || 0,
+                exitCode: code as any,
+              } as any);
+            } catch {}
+          })();
         }
       );
       
@@ -120,6 +145,17 @@ export function registerGameHandlers(): void {
           versionId: options.versionId,
         });
       }
+      // Publish state: started
+      (async () => {
+        try {
+          const { instanceRpc } = await import('../grpc/clients');
+          await instanceRpc.publishState({
+            profileId: options.profileId as any,
+            state: 'started' as any,
+            pid: (gameProcess?.process?.pid as any) || 0,
+          } as any);
+        } catch {}
+      })();
       
       console.log(`[IPC Game] Game launched: ${options.versionId}`);
       return { success: true, pid: gameProcess.process.pid };
