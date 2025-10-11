@@ -177,8 +177,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke(IPC_CHANNELS.MODPACK_VALIDATE_FILE, filePath),
     extractMetadata: (filePath: string): Promise<any> =>
       ipcRenderer.invoke(IPC_CHANNELS.MODPACK_EXTRACT_METADATA, filePath),
-    importFile: (filePath: string, profileName: string, instanceDir: string): Promise<{ success: boolean }> =>
-      ipcRenderer.invoke(IPC_CHANNELS.MODPACK_IMPORT_FILE, filePath, profileName, instanceDir),
+    importFile: (filePath: string, profileId: string): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.MODPACK_IMPORT_FILE, filePath, profileId),
     selectFile: (): Promise<string | null> =>
       ipcRenderer.invoke(IPC_CHANNELS.MODPACK_SELECT_FILE),
   },
@@ -247,7 +247,7 @@ declare global {
         getVersions: (loaderType: string, minecraftVersion?: string, includeUnstable?: boolean) => Promise<any>;
         getRecommended: (loaderType: string, minecraftVersion: string) => Promise<any>;
         install: (loaderType: string, minecraftVersion: string, loaderVersion: string) => Promise<any>;
-        checkInstalled: (loaderType: string, minecraftVersion: string, loaderVersion: string) => Promise<any>;
+        checkInstalled: (loaderType: string, minecraftVersion: string, loaderVersion: string, profileId?: string) => Promise<any>;
       };
       shell: {
         openPath: (path: string) => Promise<string>;
@@ -295,7 +295,7 @@ declare global {
         install: (profileId: string, versionId: string) => Promise<{ success: boolean }>;
         validateFile: (filePath: string) => Promise<any>;
         extractMetadata: (filePath: string) => Promise<any>;
-        importFile: (filePath: string, profileName: string, instanceDir: string) => Promise<{ success: boolean }>;
+        importFile: (filePath: string, profileId: string) => Promise<{ success: boolean }>;
         selectFile: () => Promise<string | null>;
       };
       on: (channel: string, callback: (...args: any[]) => void) => () => void;

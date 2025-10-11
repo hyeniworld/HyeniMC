@@ -160,6 +160,9 @@ export class ModpackManager {
     const tempDir = path.join(instanceDir, '.temp_modpack');
     
     try {
+      // Ensure instance directory exists (pre-create)
+      await fs.mkdir(instanceDir, { recursive: true });
+
       // 1. 모드팩 파일 다운로드
       onProgress?.({
         stage: 'downloading',
@@ -210,15 +213,12 @@ export class ModpackManager {
       console.log(`[ModpackManager] Game version: ${manifest.dependencies?.minecraft}`);
       console.log(`[ModpackManager] Mods to install: ${manifest.files?.length || 0}`);
 
-      // 4. 모드 설치
+      // 4. 모드 및 리소스 설치
       onProgress?.({
         stage: 'installing_mods',
         progress: 0,
         message: '모드 다운로드 중...',
       });
-
-      const modsDir = path.join(instanceDir, 'mods');
-      await fs.mkdir(modsDir, { recursive: true });
 
       const files = manifest.files || [];
       for (let i = 0; i < files.length; i++) {
@@ -231,17 +231,19 @@ export class ModpackManager {
           message: `모드 다운로드 중... (${i + 1}/${files.length})`,
         });
 
-        // 파일 다운로드
-        const fileName = path.basename(file.path);
-        const filePath = path.join(modsDir, fileName);
+        // 파일 다운로드 대상 경로: manifest의 경로 구조를 유지
+        // Modrinth spec: file.path는 인스턴스 루트 기준 상대 경로일 수 있음
+        const relativePath = normalizeRelativePath(file.path);
+        const destPath = path.join(instanceDir, relativePath);
+        await fs.mkdir(path.dirname(destPath), { recursive: true });
 
         try {
-          const response = await axios.get(file.downloads[0], {
+          const response = await axios.get(file.downloads?.[0], {
             responseType: 'arraybuffer',
           });
-          await fs.writeFile(filePath, response.data);
+          await fs.writeFile(destPath, response.data);
         } catch (error) {
-          console.error(`[ModpackManager] Failed to download ${fileName}:`, error);
+          console.error(`[ModpackManager] Failed to download ${relativePath}:`, error);
         }
       }
 
@@ -252,13 +254,20 @@ export class ModpackManager {
         message: 'Overrides 적용 중...',
       });
 
-      const overridesDir = path.join(tempDir, 'overrides');
-      try {
-        const overridesStat = await fs.stat(overridesDir);
-        if (overridesStat.isDirectory()) {
-          await this.copyDirectory(overridesDir, instanceDir);
-        }
-      } catch (error) {
+      // Support both 'overrides' and 'client-overrides' per Modrinth spec
+      const overrideCandidates = ['overrides', 'client-overrides'];
+      let appliedOverride = false;
+      for (const name of overrideCandidates) {
+        const dir = path.join(tempDir, name);
+        try {
+          const stat = await fs.stat(dir);
+          if (stat.isDirectory()) {
+            await this.copyDirectory(dir, instanceDir);
+            appliedOverride = true;
+          }
+        } catch {}
+      }
+      if (!appliedOverride) {
         console.log('[ModpackManager] No overrides directory found');
       }
 
@@ -720,15 +729,15 @@ export class ModpackManager {
     const indexPath = path.join(tempDir, 'modrinth.index.json');
     const manifest = JSON.parse(await fs.readFile(indexPath, 'utf-8'));
 
-    // 모드 다운로드
+    // 인스턴스 디렉터리 선생성
+    await fs.mkdir(instanceDir, { recursive: true });
+
+    // 모드/리소스 다운로드
     onProgress?.({
       stage: 'installing_mods',
       progress: 30,
       message: '모드 다운로드 중...',
     });
-
-    const modsDir = path.join(instanceDir, 'mods');
-    await fs.mkdir(modsDir, { recursive: true });
 
     const files = manifest.files || [];
     for (let i = 0; i < files.length; i++) {
@@ -741,16 +750,17 @@ export class ModpackManager {
         message: `모드 다운로드 중... (${i + 1}/${files.length})`,
       });
 
-      const fileName = path.basename(file.path);
-      const filePath = path.join(modsDir, fileName);
+      const relativePath = normalizeRelativePath(file.path);
+      const filePath = path.join(instanceDir, relativePath);
+      await fs.mkdir(path.dirname(filePath), { recursive: true });
 
       try {
-        const response = await axios.get(file.downloads[0], {
+        const response = await axios.get(file.downloads?.[0], {
           responseType: 'arraybuffer',
         });
         await fs.writeFile(filePath, response.data);
       } catch (error) {
-        console.error(`[ModpackManager] Failed to download ${fileName}:`, error);
+        console.error(`[ModpackManager] Failed to download ${relativePath}:`, error);
       }
     }
 
@@ -761,13 +771,20 @@ export class ModpackManager {
       message: 'Overrides 적용 중...',
     });
 
-    const overridesDir = path.join(tempDir, 'overrides');
-    try {
-      const overridesStat = await fs.stat(overridesDir);
-      if (overridesStat.isDirectory()) {
-        await this.copyDirectory(overridesDir, instanceDir);
-      }
-    } catch (error) {
+    // overrides / client-overrides 지원
+    const overrideCandidates = ['overrides', 'client-overrides'];
+    let appliedOverride = false;
+    for (const name of overrideCandidates) {
+      const dir = path.join(tempDir, name);
+      try {
+        const stat = await fs.stat(dir);
+        if (stat.isDirectory()) {
+          await this.copyDirectory(dir, instanceDir);
+          appliedOverride = true;
+        }
+      } catch {}
+    }
+    if (!appliedOverride) {
       console.log('[ModpackManager] No overrides directory found');
     }
   }
@@ -882,4 +899,15 @@ export class ModpackManager {
       }
     }
   }
+}
+
+/**
+ * Normalize relative paths from manifests to prevent leading separators
+ * and strip optional leading 'minecraft/' used by some pack formats.
+ */
+function normalizeRelativePath(p: string): string {
+  let rp = p.replace(/^[\\/]+/, '');
+  if (rp.startsWith('minecraft/')) rp = rp.substring('minecraft/'.length);
+  if (rp.startsWith('minecraft\\')) rp = rp.substring('minecraft\\'.length);
+  return rp;
 }

@@ -101,15 +101,16 @@ export function registerModpackHandlers(): void {
     }
   });
 
-  // Import modpack from file
+  // Import modpack from file (compute instanceDir from profileId)
   ipcMain.handle(
     IPC_CHANNELS.MODPACK_IMPORT_FILE,
-    async (event, filePath: string, profileName: string, instanceDir: string) => {
+    async (event, filePath: string, profileId: string) => {
       try {
         console.log(`[IPC Modpack] Importing modpack from file: ${filePath}`);
-        console.log(`[IPC Modpack] Profile: ${profileName}, Instance: ${instanceDir}`);
+        const instanceDir = getProfileInstanceDir(profileId);
+        console.log(`[IPC Modpack] Profile: ${profileId}, Instance: ${instanceDir}`);
 
-        await modpackManager.importModpackFromFile(filePath, profileName, instanceDir, (progress) => {
+        await modpackManager.importModpackFromFile(filePath, profileId, instanceDir, (progress) => {
           // Send progress updates to renderer
           event.sender.send('modpack:import-progress', progress);
         });

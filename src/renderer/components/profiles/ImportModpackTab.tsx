@@ -144,18 +144,13 @@ export function ImportModpackTab({ onSuccess }: ImportModpackTabProps) {
       const profile = await window.electronAPI.profile.create(profileData);
       console.log('[ImportModpackTab] Profile created:', profile);
 
-      // 2. Get profile's instance directory
-      // The backend should provide this, but we'll construct it
-      // Format: ~/.hyenimc/profiles/{profile-id}/
-      const instanceDir = profile.gameDir || profile.instanceDir || '';
-
-      // 3. Listen for progress
+      // 2. Listen for progress
       const cleanupProgress = window.electronAPI.on('modpack:import-progress', (data: any) => {
         setProgress(data);
       });
 
-      // 4. Import modpack into profile
-      await window.electronAPI.modpack.importFile(selectedFile, profileName, instanceDir);
+      // 3. Import modpack into profile (instanceDir is computed on main by profileId)
+      await window.electronAPI.modpack.importFile(selectedFile, profile.id);
 
       cleanupProgress();
       onSuccess();
