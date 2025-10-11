@@ -82,10 +82,19 @@ type downloadServiceServer struct {
 	mu    sync.RWMutex
 	subs  map[chan *pb.ProgressEvent]struct{}
 	tasks map[string]context.CancelFunc
+	dlSem chan struct{}
 }
 
 func NewDownloadServiceServer() pb.DownloadServiceServer {
-	return &downloadServiceServer{subs: make(map[chan *pb.ProgressEvent]struct{}), tasks: make(map[string]context.CancelFunc)}
+	sz := currentDownloadSettings().GetMaxParallel()
+	if sz <= 0 {
+		sz = 10
+	}
+	return &downloadServiceServer{
+		subs:  make(map[chan *pb.ProgressEvent]struct{}),
+		tasks: make(map[string]context.CancelFunc),
+		dlSem: make(chan struct{}, sz),
+	}
 }
 
 func (s *downloadServiceServer) StreamProgress(req *pb.ProgressRequest, stream pb.DownloadService_StreamProgressServer) error {
@@ -159,7 +168,10 @@ func (s *downloadServiceServer) StartDownload(ctx context.Context, req *pb.Downl
 	s.mu.Unlock()
 
 	go func() {
+		// global concurrency guard
+		s.dlSem <- struct{}{}
 		defer func() {
+			<-s.dlSem
 			s.mu.Lock()
 			delete(s.tasks, taskID)
 			s.mu.Unlock()
@@ -169,7 +181,14 @@ func (s *downloadServiceServer) StartDownload(ctx context.Context, req *pb.Downl
 		s.broadcast(&pb.ProgressEvent{TaskId: taskID, Status: "pending", Type: evBase.Type, Name: evBase.Name, ProfileId: evBase.ProfileId, FileName: evBase.FileName})
 		maxRetries := int(req.GetMaxRetries())
 		if maxRetries <= 0 {
-			maxRetries = 3
+			maxRetries = int(currentDownloadSettings().GetMaxRetries())
+			if maxRetries <= 0 {
+				maxRetries = 5
+			}
+		}
+		timeoutMs := int(currentDownloadSettings().GetRequestTimeoutMs())
+		if timeoutMs <= 0 {
+			timeoutMs = 3000
 		}
 		tmp := dest + ".part"
 		// ensure dir
@@ -178,7 +197,7 @@ func (s *downloadServiceServer) StartDownload(ctx context.Context, req *pb.Downl
 		var total int64 = 0
 		var err error
 		for attempt := 0; attempt <= maxRetries; attempt++ {
-			err = s.downloadOnce(dlCtx, url, tmp, &total, func(downloaded int64) {
+			err = s.downloadOnce(dlCtx, url, tmp, &total, timeoutMs, func(downloaded int64) {
 				// emit progress
 				percent := int32(0)
 				if total > 0 {
@@ -239,13 +258,20 @@ func (s *downloadServiceServer) Cancel(ctx context.Context, in *pb.DownloadCance
 }
 
 // downloadOnce supports resume if tmp exists and server honors Range.
-func (s *downloadServiceServer) downloadOnce(ctx context.Context, url, tmp string, totalOut *int64, onProgress func(downloaded int64)) error {
-	// resume if possible
-	var downloaded int64 = 0
-	if fi, err := os.Stat(tmp); err == nil {
-		downloaded = fi.Size()
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+func (s *downloadServiceServer) downloadOnce(ctx context.Context, url, tmp string, totalOut *int64, timeoutMs int, onProgress func(downloaded int64)) error {
+    // resume if possible
+    var downloaded int64 = 0
+    if fi, err := os.Stat(tmp); err == nil {
+        downloaded = fi.Size()
+    }
+    // apply per-attempt timeout so a single stall won't block others
+    toCtx := ctx
+    if timeoutMs > 0 {
+        var cancel context.CancelFunc
+        toCtx, cancel = context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
+        defer cancel()
+    }
+    req, err := http.NewRequestWithContext(toCtx, http.MethodGet, url, nil)
 	if err != nil {
 		return err
 	}

@@ -1,4 +1,5 @@
 import { ipcMain, dialog } from 'electron';
+import { downloadRpc } from '../grpc/clients';
 import { IPC_CHANNELS } from '../../shared/constants';
 import { ResourcePackManager } from '../services/resourcepack-manager';
 import { getProfileInstanceDir } from '../utils/paths';
@@ -23,6 +24,51 @@ export function registerResourcePackHandlers(): void {
       }));
     } catch (error) {
       console.error('[IPC ResourcePack] Failed to list resource packs:', error);
+      throw error;
+    }
+  });
+
+  // Install a resource pack from URL
+  ipcMain.handle(IPC_CHANNELS.RESOURCEPACK_INSTALL_URL, async (_event, profileId: string, url: string, suggestedFileName?: string, checksum?: { algo: 'sha1'|'sha256'; value: string }) => {
+    try {
+      const gameDir = getProfileInstanceDir(profileId);
+      const destDir = `${gameDir}/resourcepacks`;
+      const fs = await import('fs/promises');
+      await fs.mkdir(destDir, { recursive: true });
+
+      const fileName = suggestedFileName || decodeURIComponent(new URL(url).pathname.split('/').pop() || 'resourcepack.zip');
+      const destPath = `${destDir}/${fileName}`;
+
+      const req: any = {
+        taskId: `resourcepack-${Date.now()}`,
+        url,
+        destPath,
+        profileId,
+        type: 'resourcepack',
+        name: fileName,
+        maxRetries: 3,
+      };
+      if (checksum?.value) req.checksum = { algo: checksum.algo, value: checksum.value };
+
+      const started = await downloadRpc.startDownload(req);
+      await new Promise<void>((resolve, reject) => {
+        const cancel = downloadRpc.streamProgress(
+          { profileId } as any,
+          (ev) => {
+            if (ev.taskId !== started.taskId) return;
+            if (ev.status === 'completed') { cancel(); resolve(); }
+            else if (ev.status === 'failed' || ev.status === 'cancelled') { cancel(); reject(new Error(ev.error || '다운로드 실패')); }
+          },
+          (err) => {
+            if (err && ('' + err).includes('CANCELLED')) return;
+            if (err) reject(err);
+          }
+        );
+      });
+
+      return { success: true, fileName };
+    } catch (error) {
+      console.error('[IPC ResourcePack] Failed to install pack from URL:', error);
       throw error;
     }
   });

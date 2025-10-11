@@ -18,6 +18,11 @@ import {
   type DownloadStarted,
   type DownloadCancel,
 } from '../gen/launcher/download';
+import {
+  AssetServiceClient,
+  type PrefetchAssetsRequest,
+  type PrefetchAssetsResponse,
+} from '../gen/launcher/asset';
 import type { ClientReadableStream } from '@grpc/grpc-js';
 import {
   InstanceServiceClient,
@@ -56,11 +61,21 @@ let healthClient: HealthServiceClient | null = null;
 let versionClient: VersionServiceClient | null = null;
 let loaderClient: LoaderServiceClient | null = null;
 let lastAddr: string | null = null;
+let assetClient: AssetServiceClient | null = null;
 
 function ensureAddr(): string {
   const addr = getBackendAddress();
   if (!addr) throw new Error('Backend server is not running');
   return addr;
+}
+
+function ensureAssetClient(): AssetServiceClient {
+  const addr = ensureAddr();
+  if (!assetClient || lastAddr !== addr) {
+    assetClient = new AssetServiceClient(addr, credentials.createInsecure());
+    lastAddr = addr;
+  }
+  return assetClient;
 }
 
 function ensureLoaderClient(): LoaderServiceClient {

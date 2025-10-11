@@ -1,0 +1,21 @@
+syntax = "proto3";
+package launcher;
+option go_package = "hyenimc/backend/gen/launcher;launcher";
+
+service AssetService {
+  // Prefetch Minecraft assets using an asset index URL (from Mojang manifest)
+  rpc PrefetchAssets(PrefetchAssetsRequest) returns (PrefetchAssetsResponse);
+}
+
+message PrefetchAssetsRequest {
+  string assets_index_url = 1;  // e.g. https://launchermeta.mojang.com/v1/packages/<hash>/1.21.json
+  string base_dir = 2;          // absolute base dir to store assets (e.g. <userData>/shared/assets)
+  string profile_id = 3;        // optional tag for bookkeeping/UI
+  int32 max_parallel = 4;       // default 4
+}
+
+message PrefetchAssetsResponse {
+  int32 total = 1;
+  int32 downloaded = 2;
+  int32 skipped = 3;
+}
