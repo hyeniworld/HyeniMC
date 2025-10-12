@@ -47,6 +47,9 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
   // Icon
   const [icon, setIcon] = useState(profile?.icon || '🎮');
   
+  // Server address (for HyeniHelper auth)
+  const [serverAddress, setServerAddress] = useState(profile?.serverAddress || '');
+  
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -75,6 +78,7 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
       setJvmArgs(profile.jvmArgs?.join(' ') || '');
       setGameDir(profile.gameDirectory || '');
       setIcon(profile.icon || '🎮');
+      setServerAddress(profile.serverAddress || '');
     }
   }, [profile?.id]);
 
@@ -179,6 +183,7 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
         fullscreen: fullscreen,
         gameDirectory: gameDir,
         icon,
+        serverAddress: serverAddress.trim(),
       };
       await window.electronAPI.profile.update(profile.id, updates);
       
@@ -562,6 +567,32 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
             </div>
           </div>
           </div>
+        </div>
+      </div>
+
+      {/* Server Address (HyeniHelper Integration) */}
+      <div className="card border-2 border-hyeni-pink-500/30 bg-gradient-to-br from-hyeni-pink-900/10 to-transparent">
+        <h3 className="text-lg font-semibold text-gray-200 mb-4 flex items-center gap-2">
+          🌟 혜니월드 서버 설정
+        </h3>
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-2">
+            서버 주소
+          </label>
+          <input
+            type="text"
+            value={serverAddress}
+            onChange={(e) => setServerAddress(e.target.value)}
+            placeholder="예: play.hyeniworld.com"
+            className="input w-full"
+          />
+          <p className="text-xs text-gray-400 mt-2">
+            💡 <strong>디스코드 인증 연동:</strong> 이 주소를 설정하면 디스코드에서 인증 링크를 클릭할 때<br/>
+            HyeniHelper 모드 설정이 자동으로 업데이트됩니다.
+          </p>
+          <p className="text-xs text-hyeni-pink-400 mt-1">
+            ✨ 혜니월드 서버에 접속하려면 먼저 <strong>HyeniHelper 모드</strong>를 설치하세요!
+          </p>
         </div>
       </div>
 

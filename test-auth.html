@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HyeniMC 인증 테스트</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      max-width: 800px;
+      margin: 50px auto;
+      padding: 20px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #fff;
+    }
+    .card {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border-radius: 16px;
+      padding: 32px;
+      box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+    }
+    h1 {
+      margin-top: 0;
+      font-size: 32px;
+    }
+    .description {
+      background: rgba(255, 255, 255, 0.1);
+      padding: 16px;
+      border-radius: 8px;
+      margin: 20px 0;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    .auth-link {
+      display: inline-block;
+      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      color: white;
+      padding: 16px 32px;
+      text-decoration: none;
+      border-radius: 12px;
+      font-size: 18px;
+      font-weight: bold;
+      margin: 20px 0;
+      transition: transform 0.2s, box-shadow 0.2s;
+      box-shadow: 0 4px 15px 0 rgba(245, 87, 108, 0.4);
+    }
+    .auth-link:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px 0 rgba(245, 87, 108, 0.6);
+    }
+    .info {
+      background: rgba(52, 211, 153, 0.2);
+      border-left: 4px solid #10b981;
+      padding: 12px;
+      margin: 16px 0;
+      border-radius: 4px;
+    }
+    .warning {
+      background: rgba(251, 191, 36, 0.2);
+      border-left: 4px solid #f59e0b;
+      padding: 12px;
+      margin: 16px 0;
+      border-radius: 4px;
+    }
+    .code {
+      background: rgba(0, 0, 0, 0.3);
+      padding: 12px;
+      border-radius: 8px;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      overflow-x: auto;
+      margin: 12px 0;
+    }
+    ol {
+      line-height: 2;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>🎮 HyeniMC 인증 테스트</h1>
+    
+    <div class="description">
+      <strong>이 페이지는 혜니헬퍼 인증 시스템을 테스트하기 위한 페이지입니다.</strong>
+      <br><br>
+      디스코드 봇에서 생성된 인증 링크와 동일한 방식으로 작동합니다.
+    </div>
+
+    <div class="info">
+      <strong>✅ 사전 준비 사항:</strong>
+      <ol>
+        <li>HyeniMC 런처 실행</li>
+        <li>프로필 생성 (Fabric/Quilt/NeoForge)</li>
+        <li>프로필 설정에서 <strong>서버 주소</strong>를 <code>play.hyeniworld.com</code>으로 설정</li>
+        <li><strong>HyeniHelper 모드</strong>를 mods 폴더에 설치</li>
+      </ol>
+    </div>
+
+    <div class="warning">
+      <strong>⚠️ 주의:</strong> 아래 링크를 클릭하기 전에 반드시 런처를 실행하고 프로필 설정을 완료해주세요!
+    </div>
+
+    <center>
+      <a href="hyenimc://auth?token=test-token-12345&server=play.hyeniworld.com" class="auth-link">
+        🌟 혜니월드 인증하기 (단일 서버)
+      </a>
+      <br><br>
+      <a href="hyenimc://auth?token=test-token-multi-67890&server=play.hyeniworld.com,test.hyeniworld.com,dev.hyeniworld.com" class="auth-link" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+        🌟 혜니월드 인증하기 (여러 서버)
+      </a>
+      <br><br>
+      <a href="hyenimc://auth?token=test-token-global-99999" class="auth-link" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+        🌍 혜니월드 인증하기 (모든 프로필)
+      </a>
+    </center>
+
+    <div class="code">
+      <strong>테스트 링크 정보 (단일):</strong><br>
+      • Protocol: hyenimc://auth<br>
+      • Token: test-token-12345<br>
+      • Server: play.hyeniworld.com
+    </div>
+
+    <div class="code">
+      <strong>테스트 링크 정보 (여러 서버):</strong><br>
+      • Protocol: hyenimc://auth<br>
+      • Token: test-token-multi-67890<br>
+      • Servers: play.hyeniworld.com, test.hyeniworld.com, dev.hyeniworld.com<br>
+      <br>
+      💡 콤마로 구분된 여러 서버 주소를 지원합니다!<br>
+      각 서버 주소와 일치하는 모든 프로필에 동일한 토큰이 적용됩니다.
+    </div>
+
+    <div class="code">
+      <strong>테스트 링크 정보 (모든 프로필):</strong><br>
+      • Protocol: hyenimc://auth<br>
+      • Token: test-token-global-99999<br>
+      • Server: (없음 - 모든 프로필 대상)<br>
+      <br>
+      🌍 서버 파라미터가 없으면 모든 프로필을 대상으로 합니다!<br>
+      <strong>특징:</strong><br>
+      - servers.dat 확인 안 함 (서버 주소 무관)<br>
+      - HyeniHelper 모드가 있는 모든 프로필 검색<br>
+      - config 파일이 없거나 token이 비어있을 때만 작성<br>
+      - 이미 토큰이 설정된 프로필은 건너뜀 (덮어쓰지 않음)
+    </div>
+
+    <div class="info">
+      <strong>🎯 예상 동작:</strong>
+      <br><br>
+      <strong>📍 서버 주소 있을 때 (첫 번째, 두 번째 버튼):</strong>
+      <ol>
+        <li>마인크래프트 servers.dat에서 해당 서버 주소 확인</li>
+        <li>매칭되는 프로필에서 HyeniHelper 모드 검색</li>
+        <li>config 파일을 <strong>무조건 덮어쓰기</strong></li>
+      </ol>
+      <br>
+      <strong>🌍 서버 주소 없을 때 (세 번째 버튼):</strong>
+      <ol>
+        <li>모든 프로필에서 HyeniHelper 모드 검색</li>
+        <li>config 파일이 없거나 token이 비어있는 경우에만 작성</li>
+        <li>이미 토큰이 있는 프로필은 건너뜀 (보호)</li>
+      </ol>
+    </div>
+
+    <div class="description">
+      <strong>📝 생성되는 config 파일 예시:</strong>
+      <div class="code">
+// config/hyenihelper-config.json
+{
+  "token": "test-token-12345",
+  "enabled": true,
+  "timeoutSeconds": 10,
+  "serverStatusPort": 4444,
+  "authPort": 35565,
+  "serverStatusInterval": 180
+}
+      </div>
+    </div>
+
+    <div class="warning">
+      <strong>🐛 문제 해결:</strong><br>
+      • 런처가 실행되지 않으면 → Windows 레지스트리 또는 macOS CFBundleURLTypes 확인<br>
+      • 인증 실패 메시지가 뜨면 → 프로필 설정에서 서버 주소 확인<br>
+      • HyeniHelper를 찾을 수 없다고 나오면 → mods 폴더에 모드 파일 확인
+    </div>
+  </div>
+</body>
+</html>

@@ -151,4 +151,8 @@ export const IPC_EVENTS = {
   
   // File Watcher Events
   FILE_CHANGED: 'file:changed',
+  
+  // Auth Events (Protocol Handler)
+  AUTH_SUCCESS: 'auth:success',
+  AUTH_ERROR: 'auth:error',
 } as const;

@@ -1,4 +1,4 @@
-import React, { useState, createContext, useContext } from 'react';
+import React, { useState, createContext, useContext, useEffect } from 'react';
 import { HashRouter, Routes, Route, Link, Outlet } from 'react-router-dom';
 import { ProfileList } from './components/profiles/ProfileList';
 import { ProfileDetailPage } from './pages/ProfileDetailPage';
@@ -7,7 +7,7 @@ import { Sparkles } from 'lucide-react';
 import { GlobalDownloadModal } from './components/common/GlobalDownloadModal';
 import { SettingsPage } from './pages/SettingsPage';
 import { useDownloadProgress } from './hooks/useDownloadProgress';
-import { ToastProvider } from './contexts/ToastContext';
+import { ToastProvider, useToast } from './contexts/ToastContext';
 import { HyeniDecorations } from './components/common/HyeniDecorations';
 
 // Global account context
@@ -49,6 +49,33 @@ function App() {
 
 function MainLayout() {
   const { selectedAccountId, setSelectedAccountId } = useAccount();
+  const toast = useToast();
+
+  // Listen for authentication events
+  useEffect(() => {
+    // Auth success
+    const unsubSuccess = window.electronAPI.on('auth:success', (data: any) => {
+      console.log('[App] Auth success:', data);
+      toast.success(
+        '✨ 혜니월드 인증 완료!',
+        `${data.servers} 서버 인증이 완료되었습니다. (${data.profileCount}개 프로필)\n\nHyeniHelper 설정이 자동으로 업데이트되었습니다.`
+      );
+    });
+
+    // Auth error
+    const unsubError = window.electronAPI.on('auth:error', (data: any) => {
+      console.error('[App] Auth error:', data);
+      toast.error(
+        '❌ 인증 실패',
+        data.message
+      );
+    });
+
+    return () => {
+      unsubSuccess();
+      unsubError();
+    };
+  }, [toast]);
 
   return (
     <div className="h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 text-white flex flex-col overflow-hidden">

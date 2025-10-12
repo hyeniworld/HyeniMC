@@ -6,9 +6,14 @@ import { initializeInstanceLogBridge, shutdownInstanceLogBridge } from './ipc/in
 import { initializeInstanceStateBridge, shutdownInstanceStateBridge } from './ipc/instanceState';
 import { startBackend, stopBackend } from './backend/manager';
 import { fileWatcher } from './services/file-watcher';
+import { registerCustomProtocol } from './protocol/register';
+import { setupProtocolHandler, handleProtocolUrl } from './protocol/handler';
 
 // Set app name
 app.setName('HyeniMC');
+
+// Register custom URL protocol (hyenimc://)
+registerCustomProtocol();
 
 // Prevent multiple instances
 const gotTheLock = app.requestSingleInstanceLock();
@@ -17,7 +22,16 @@ if (!gotTheLock) {
   app.quit();
 } else {
   app.on('second-instance', (event, commandLine, workingDirectory) => {
-    // Someone tried to run a second instance, focus our window instead
+    console.log('[Main] Second instance detected, command line:', commandLine);
+    
+    // Check for protocol URL in command line (Windows)
+    const url = commandLine.find(arg => arg.startsWith('hyenimc://'));
+    if (url && mainWindow) {
+      console.log('[Main] Protocol URL from second instance:', url);
+      handleProtocolUrl(url, mainWindow);
+    }
+    
+    // Focus existing window
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
@@ -91,12 +105,29 @@ async function initialize() {
     // Create window
     await createWindow();
 
+    // Setup protocol handler (for macOS open-url event)
+    setupProtocolHandler(mainWindow);
+
     // Initialize gRPC download stream bridge (global)
     initializeDownloadStreamBridge();
     // Initialize gRPC instance log stream bridge (global)
     initializeInstanceLogBridge();
     // Initialize gRPC instance state stream bridge (global)
     initializeInstanceStateBridge();
+
+    // Handle protocol URL from Windows startup
+    if (process.platform === 'win32' && process.argv.length > 1) {
+      const url = process.argv.find(arg => arg.startsWith('hyenimc://'));
+      if (url && mainWindow) {
+        console.log('[Main] Windows startup URL:', url);
+        // Wait for window to be ready
+        setTimeout(() => {
+          if (mainWindow) {
+            handleProtocolUrl(url, mainWindow);
+          }
+        }, 1000);
+      }
+    }
   } catch (error) {
     console.error('Failed to initialize app:', error);
     app.quit();
