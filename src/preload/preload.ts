@@ -148,6 +148,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke(IPC_CHANNELS.MOD_INSTALL_DEPENDENCIES, profileId, dependencies),
     checkUpdates: (profileId: string, gameVersion: string, loaderType: string): Promise<any[]> =>
       ipcRenderer.invoke(IPC_CHANNELS.MOD_CHECK_UPDATES, profileId, gameVersion, loaderType),
+    updateMod: (profileId: string, modId: string, versionId: string, source: 'modrinth' | 'curseforge'): Promise<{ success: boolean; fileName: string }> =>
+      ipcRenderer.invoke('mod:update-single', profileId, modId, versionId, source),
     update: (profileId: string, update: any): Promise<{ success: boolean }> =>
       ipcRenderer.invoke(IPC_CHANNELS.MOD_UPDATE, profileId, update),
     updateAll: (profileId: string, updates: any[]): Promise<any> =>

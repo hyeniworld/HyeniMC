@@ -2,6 +2,20 @@ import React, { useState, useEffect } from 'react';
 import { Plus, RefreshCw } from 'lucide-react';
 import { ModSearchModal } from './ModSearchModal';
 
+interface ModUpdateInfo {
+  modId: string;
+  modName: string;
+  fileName: string;
+  currentVersion: string;
+  latestVersion: string;
+  latestVersionId: string;
+  changelog?: string;
+  required: boolean;
+  downloadUrl: string;
+  fileSize: number;
+  source: 'modrinth' | 'curseforge';
+}
+
 interface Mod {
   id: string;
   name: string;
@@ -14,6 +28,9 @@ interface Mod {
   source?: 'modrinth' | 'curseforge' | 'local';
   sourceModId?: string;
   sourceFileId?: string;
+  // 업데이트 정보
+  hasUpdate?: boolean;
+  updateInfo?: ModUpdateInfo;
 }
 
 interface ModListProps {
@@ -26,7 +43,8 @@ export const ModList: React.FC<ModListProps> = ({ profileId }) => {
   const [filter, setFilter] = useState('');
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [profile, setProfile] = useState<any>(null);
-  const [updates, setUpdates] = useState<any[]>([]);
+  const [updates, setUpdates] = useState<ModUpdateInfo[]>([]);
+  const [updatingModIds, setUpdatingModIds] = useState<Set<string>>(new Set());
   const [checkingUpdates, setCheckingUpdates] = useState(false);
   const [updatingMods, setUpdatingMods] = useState(false);
 
@@ -136,6 +154,19 @@ export const ModList: React.FC<ModListProps> = ({ profileId }) => {
       );
       setUpdates(foundUpdates);
       
+      // 모드 목록에 업데이트 정보 병합
+      setMods(prev => prev.map(mod => {
+        const updateInfo = foundUpdates.find((u: ModUpdateInfo) => u.fileName === mod.fileName);
+        if (updateInfo) {
+          return {
+            ...mod,
+            hasUpdate: true,
+            updateInfo
+          };
+        }
+        return { ...mod, hasUpdate: false, updateInfo: undefined };
+      }));
+      
       if (foundUpdates.length === 0) {
         alert('모든 모드가 최신 버전입니다!');
       } else {
@@ -146,6 +177,42 @@ export const ModList: React.FC<ModListProps> = ({ profileId }) => {
       alert('업데이트 확인에 실패했습니다.');
     } finally {
       setCheckingUpdates(false);
+    }
+  };
+
+  const handleUpdateSingle = async (mod: Mod) => {
+    if (!mod.updateInfo) return;
+
+    if (!confirm(`${mod.name}을(를) ${mod.updateInfo.latestVersion}(으)로 업데이트하시겠습니까?`)) {
+      return;
+    }
+
+    setUpdatingModIds(prev => new Set(prev).add(mod.fileName));
+    try {
+      // 개별 업데이트 API 호출
+      await window.electronAPI.mod.updateMod(
+        profileId,
+        mod.updateInfo.modId,
+        mod.updateInfo.latestVersionId,
+        mod.updateInfo.source
+      );
+
+      alert(`${mod.name} 업데이트 완료!`);
+      
+      // 업데이트 목록에서 제거
+      setUpdates(prev => prev.filter(u => u.fileName !== mod.fileName));
+      
+      // 모드 목록 새로고침
+      await loadMods();
+    } catch (error) {
+      console.error('Failed to update mod:', error);
+      alert(`${mod.name} 업데이트 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
+    } finally {
+      setUpdatingModIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(mod.fileName);
+        return newSet;
+      });
     }
   };
 
@@ -273,6 +340,11 @@ export const ModList: React.FC<ModListProps> = ({ profileId }) => {
                     <span className="text-sm text-gray-500 dark:text-gray-400">
                       v{mod.version}
                     </span>
+                    {mod.hasUpdate && mod.updateInfo && (
+                      <span className="text-xs text-gray-400 dark:text-gray-500">
+                        → v{mod.updateInfo.latestVersion}
+                      </span>
+                    )}
                     <span className="px-2 py-0.5 text-xs rounded bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">
                       {mod.loader}
                     </span>
@@ -285,6 +357,11 @@ export const ModList: React.FC<ModListProps> = ({ profileId }) => {
                         }`}
                       >
                         {mod.source === 'curseforge' ? '🟠 CF' : '🟢 MR'}
+                      </span>
+                    )}
+                    {mod.hasUpdate && (
+                      <span className="px-2 py-1 bg-green-500/20 text-green-600 dark:text-green-400 text-xs font-medium rounded border border-green-500/50 animate-pulse">
+                        ✨ 업데이트 가능
                       </span>
                     )}
                   </div>
@@ -301,6 +378,23 @@ export const ModList: React.FC<ModListProps> = ({ profileId }) => {
                 </div>
 
                 <div className="flex items-center gap-2 ml-4">
+                  {/* 업데이트 버튼 (업데이트 가능할 때만 표시) */}
+                  {mod.hasUpdate && mod.updateInfo && (
+                    <button
+                      onClick={() => handleUpdateSingle(mod)}
+                      disabled={updatingModIds.has(mod.fileName)}
+                      className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                    >
+                      {updatingModIds.has(mod.fileName) ? (
+                        <>
+                          <RefreshCw className="w-3 h-3 animate-spin" />
+                          업데이트 중...
+                        </>
+                      ) : (
+                        <>⬆ 업데이트</>
+                      )}
+                    </button>
+                  )}
                   <button
                     onClick={() => toggleMod(mod.fileName, mod.enabled)}
                     className={`px-3 py-1 rounded text-sm font-medium transition-colors ${

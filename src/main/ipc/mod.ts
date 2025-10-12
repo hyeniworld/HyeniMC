@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron';
+import { promises as fs } from 'fs';
 import { downloadRpc, modRpc } from '../grpc/clients';
 import { IPC_CHANNELS } from '../../shared/constants';
 import { ModManager } from '../services/mod-manager';
@@ -456,7 +457,88 @@ export function registerModHandlers(): void {
     }
   });
 
-  // Update a single mod
+  // Update a single mod (개별 업데이트)
+  ipcMain.handle('mod:update-single', async (_event, profileId: string, modId: string, versionId: string, source: 'modrinth' | 'curseforge') => {
+    try {
+      console.log(`[IPC Mod] Updating single mod: ${modId} -> ${versionId} (${source})`);
+      const gameDir = getProfileInstanceDir(profileId);
+      
+      // Get version info
+      let version: any;
+      if (source === 'curseforge') {
+        const versions = await curseforgeAPI.getModVersions(modId, undefined, undefined);
+        version = versions.find(v => v.id === versionId) || versions[0];
+        if (!version) {
+          throw new Error('Version not found');
+        }
+      } else {
+        version = await modrinthAPI.getVersion(versionId);
+      }
+      
+      if (!version) {
+        throw new Error('Version not found');
+      }
+      
+      // Prepare download
+      const modsDir = `${gameDir}/mods`;
+      const destPath = `${modsDir}/${version.fileName}`;
+      
+      const downloadUrl = version.downloadUrl || version.files?.[0]?.url;
+      if (!downloadUrl) {
+        throw new Error('Download URL not found');
+      }
+      
+      // Download (same as install)
+      const req: any = {
+        taskId: `mod-update-${versionId}`,
+        url: downloadUrl,
+        destPath,
+        profileId,
+        type: 'mod',
+        name: version.fileName,
+        maxRetries: 3,
+        concurrency: 1,
+      };
+      if (version.sha1 || version.files?.[0]?.hashes?.sha1) {
+        req.checksum = { algo: 'sha1', value: version.sha1 || version.files?.[0]?.hashes?.sha1 };
+      }
+
+      const started = await downloadRpc.startDownload(req);
+      await new Promise<void>((resolve, reject) => {
+        const cancel = downloadRpc.streamProgress(
+          { profileId } as any,
+          (ev) => {
+            if (ev.taskId !== started.taskId) return;
+            if (ev.status === 'completed') { cancel(); resolve(); }
+            else if (ev.status === 'failed' || ev.status === 'cancelled') { cancel(); reject(new Error(ev.error || '다운로드 실패')); }
+          },
+          (err) => {
+            if (err && ('' + err).includes('CANCELLED')) return;
+            if (err) reject(err);
+          }
+        );
+      });
+      
+      // Save metadata
+      const metaPath = `${destPath}.meta.json`;
+      const metadata = {
+        source,
+        sourceModId: modId,
+        sourceFileId: versionId,
+        installedAt: new Date().toISOString(),
+      };
+      await fs.writeFile(metaPath, JSON.stringify(metadata, null, 2));
+      console.log(`[IPC Mod] Saved metadata: ${metaPath}`);
+      
+      console.log(`[IPC Mod] Successfully updated mod to ${version.fileName}`);
+      return { success: true, fileName: version.fileName };
+    } catch (error) {
+      console.error('[IPC Mod] Failed to update mod:', error);
+      throw error;
+    }
+  });
+
+  // Update a single mod (legacy)
   ipcMain.handle(IPC_CHANNELS.MOD_UPDATE, async (_event, profileId: string, update: any) => {
     try {
       console.log(`[IPC Mod] Updating mod: ${update.modName}`);
