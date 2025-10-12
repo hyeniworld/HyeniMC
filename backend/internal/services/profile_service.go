@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -68,6 +69,18 @@ func (s *ProfileService) CreateProfile(ctx context.Context, req *domain.CreatePr
 		CreatedAt:     time.Now(),
 		UpdatedAt:     time.Now(),
 		TotalPlayTime: 0,
+	}
+
+	// Create game directory (and subdirectories) if they don't exist
+	if err := os.MkdirAll(gameDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create game directory: %w", err)
+	}
+
+	// Create essential subdirectories
+	for _, subdir := range []string{"mods", "config", "resourcepacks", "shaderpacks", "saves"} {
+		if err := os.MkdirAll(filepath.Join(gameDir, subdir), 0755); err != nil {
+			return nil, fmt.Errorf("failed to create %s directory: %w", subdir, err)
+		}
 	}
 
 	// Save profile
