@@ -208,12 +208,40 @@ func (s *downloadServiceServer) StartDownload(ctx context.Context, req *pb.Downl
 			if err == nil {
 				break
 			}
-			// backoff
+			
+			// Check if error is retryable
+			if !isRetryableError(err) {
+				// Permanent error (404, 403, etc) - fail immediately
+				break
+			}
+			
+			// Last attempt - no need to wait
+			if attempt >= maxRetries {
+				break
+			}
+			
+			// Exponential backoff: 1s, 2s, 4s, 8s, 16s, max 30s
+			backoffDelay := time.Duration(1<<uint(attempt)) * time.Second
+			maxBackoff := 30 * time.Second
+			if backoffDelay > maxBackoff {
+				backoffDelay = maxBackoff
+			}
+			
+			s.broadcast(&pb.ProgressEvent{
+				TaskId:    taskID,
+				Status:    "retrying",
+				Error:     fmt.Sprintf("Attempt %d/%d failed: %v. Retrying in %v...", attempt+1, maxRetries+1, err, backoffDelay),
+				Type:      evBase.Type,
+				Name:      evBase.Name,
+				ProfileId: evBase.ProfileId,
+				FileName:  evBase.FileName,
+			})
+			
 			select {
 			case <-dlCtx.Done():
 				err = context.Canceled
-				break
-			case <-time.After(time.Duration(1+attempt) * time.Second):
+				attempt = maxRetries + 1 // Force exit from retry loop
+			case <-time.After(backoffDelay):
 			}
 		}
 		if err != nil {
@@ -255,6 +283,54 @@ func (s *downloadServiceServer) Cancel(ctx context.Context, in *pb.DownloadCance
 		return &pb.Ack{Ok: true}, nil
 	}
 	return &pb.Ack{Ok: false}, nil
+}
+
+// isRetryableError determines if an error should trigger a retry
+func isRetryableError(err error) bool {
+	if err == nil {
+		return false
+	}
+	
+	errStr := err.Error()
+	
+	// Network errors are retryable
+	if strings.Contains(errStr, "connection refused") ||
+		strings.Contains(errStr, "connection reset") ||
+		strings.Contains(errStr, "timeout") ||
+		strings.Contains(errStr, "temporary failure") ||
+		strings.Contains(errStr, "no such host") ||
+		strings.Contains(errStr, "EOF") {
+		return true
+	}
+	
+	// HTTP 5xx errors are retryable (server issues)
+	if strings.Contains(errStr, "503") || // Service Unavailable
+		strings.Contains(errStr, "502") || // Bad Gateway
+		strings.Contains(errStr, "504") || // Gateway Timeout
+		strings.Contains(errStr, "500") {  // Internal Server Error
+		return true
+	}
+	
+	// HTTP 429 (Rate Limit) is retryable
+	if strings.Contains(errStr, "429") {
+		return true
+	}
+	
+	// Permanent errors (DO NOT retry)
+	if strings.Contains(errStr, "404") || // Not Found
+		strings.Contains(errStr, "403") || // Forbidden
+		strings.Contains(errStr, "401") || // Unauthorized
+		strings.Contains(errStr, "410") {  // Gone
+		return false
+	}
+	
+	// Context errors are not retryable
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	
+	// Default: retry for unknown errors (conservative approach)
+	return true
 }
 
 // downloadOnce supports resume if tmp exists and server honors Range.
