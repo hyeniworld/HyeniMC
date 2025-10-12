@@ -102,8 +102,8 @@ export class ModUpdater {
   /**
    * 설치된 모드들의 업데이트 확인
    * 
-   * 참고: 현재는 Modrinth에서 가져온 모드만 업데이트 확인 가능
-   * 로컬 모드는 소스 정보가 없어서 업데이트를 확인할 수 없음
+   * Modrinth와 CurseForge 모드 모두 지원
+   * 소스 메타데이터가 있는 모드만 업데이트 확인 가능
    */
   async checkUpdates(
     gameDir: string,
@@ -118,8 +118,6 @@ export class ModUpdater {
 
       console.log(`[ModUpdater] Checking updates for ${installedMods.length} mods`);
 
-      // TODO: 이상적으로는 설치 시점의 메타데이터(Project ID/Version ID)를 저장해 직접 참조해야 함.
-      // 현재는 파일명 슬러그를 우선 시도하고, 실패 시 이름 검색으로 폴백합니다.
       for (const mod of installedMods) {
         if (!mod.enabled) {
           console.log(`[ModUpdater] Skipping disabled mod: ${mod.name}`);
@@ -127,56 +125,65 @@ export class ModUpdater {
         }
 
         try {
-          // 프로젝트 식별: 파일명/이름을 기반으로 ID 또는 슬러그 해석 (네오포지 케이스 보완)
-          const projectIdOrSlug = await this.resolveProjectId(
-            mod.name,
-            mod.fileName,
-            gameVersion,
-            loaderType
-          );
-          if (!projectIdOrSlug) {
-            console.log(`[ModUpdater] Could not resolve project for: ${mod.name}`);
+          // Check source metadata (from .meta.json file)
+          const source = (mod as any).source || 'local';
+          const sourceModId = (mod as any).sourceModId;
+          const sourceFileId = (mod as any).sourceFileId;
+
+          // CurseForge mods with metadata
+          if (source === 'curseforge' && sourceModId && sourceFileId) {
+            const update = await this.checkCurseForgeUpdate(
+              mod,
+              sourceModId,
+              sourceFileId,
+              gameVersion,
+              loaderType
+            );
+            if (update) {
+              updates.push(update);
+            }
             continue;
           }
 
-          // 최신 버전 가져오기
-          const versions = await this.modrinthAPI.getModVersions(
-            projectIdOrSlug,
-            gameVersion,
-            loaderType as any
-          );
-
-          if (versions.length === 0) {
-            console.log(`[ModUpdater] No compatible versions for: ${mod.name}`);
+          // Modrinth mods with metadata
+          if (source === 'modrinth' && sourceModId) {
+            const update = await this.checkModrinthUpdate(
+              mod,
+              sourceModId,
+              sourceFileId,
+              gameVersion,
+              loaderType
+            );
+            if (update) {
+              updates.push(update);
+            }
             continue;
           }
 
-          const latestVersion = versions[0];
+          // Legacy: Try to resolve mod via filename/name search (Modrinth only)
+          if (source === 'local' || source === 'modrinth') {
+            console.log(`[ModUpdater] No metadata for ${mod.name}, trying legacy resolution`);
+            const projectIdOrSlug = await this.resolveProjectId(
+              mod.name,
+              mod.fileName,
+              gameVersion,
+              loaderType
+            );
+            if (!projectIdOrSlug) {
+              console.log(`[ModUpdater] Could not resolve project for: ${mod.name}`);
+              continue;
+            }
 
-          // 현재 버전 추정: ModManager가 파싱한 값 우선, 없으면 파일명에서 추출
-          const slugForVersion = this.normalizeSlug(this.extractModSlug(mod.fileName));
-          const currentVersion = mod.version || this.extractVersionFromFileName(mod.fileName, slugForVersion);
-
-          // 동일 파일명은 업데이트 불필요로 간주 (해시 비교까지는 미구현)
-          const isSameFileName = !!latestVersion.fileName && mod.fileName === latestVersion.fileName;
-          const needsUpdate = !isSameFileName && this.isNewerVersion(latestVersion.versionNumber, currentVersion);
-
-          if (needsUpdate) {
-            updates.push({
-              modId: projectIdOrSlug,
-              modName: mod.name,
-              fileName: mod.fileName,
-              currentVersion,
-              latestVersion: latestVersion.versionNumber,
-              latestVersionId: latestVersion.id,
-              changelog: latestVersion.changelog,
-              required: false,
-              downloadUrl: latestVersion.downloadUrl!,
-              fileSize: latestVersion.fileSize!,
-              source: 'modrinth',  // TODO: Get from mod metadata when available
-            });
-
-            console.log(`[ModUpdater] Update available: ${mod.name} ${currentVersion} -> ${latestVersion.versionNumber}`);
+            const update = await this.checkModrinthUpdate(
+              mod,
+              projectIdOrSlug,
+              undefined,
+              gameVersion,
+              loaderType
+            );
+            if (update) {
+              updates.push(update);
+            }
           }
         } catch (error) {
           console.error(`[ModUpdater] Failed to check update for ${mod.name}:`, error);
@@ -192,6 +199,134 @@ export class ModUpdater {
   }
 
   /**
+   * Check update for a Modrinth mod
+   */
+  private async checkModrinthUpdate(
+    mod: any,
+    projectId: string,
+    currentFileId: string | undefined,
+    gameVersion: string,
+    loaderType: string
+  ): Promise<ModUpdateInfo | null> {
+    try {
+      const versions = await this.modrinthAPI.getModVersions(
+        projectId,
+        gameVersion,
+        loaderType as any
+      );
+
+      if (versions.length === 0) {
+        console.log(`[ModUpdater] No compatible Modrinth versions for: ${mod.name}`);
+        return null;
+      }
+
+      const latestVersion = versions[0];
+
+      // If we have current file ID, compare directly
+      if (currentFileId && currentFileId === latestVersion.id) {
+        return null; // Already latest
+      }
+
+      // Otherwise compare versions
+      const slugForVersion = this.normalizeSlug(this.extractModSlug(mod.fileName));
+      const currentVersion = mod.version || this.extractVersionFromFileName(mod.fileName, slugForVersion);
+      const isSameFileName = !!latestVersion.fileName && mod.fileName === latestVersion.fileName;
+      const needsUpdate = !isSameFileName && this.isNewerVersion(latestVersion.versionNumber, currentVersion);
+
+      if (needsUpdate) {
+        console.log(`[ModUpdater] Modrinth update available: ${mod.name} ${currentVersion} -> ${latestVersion.versionNumber}`);
+        return {
+          modId: projectId,
+          modName: mod.name,
+          fileName: mod.fileName,
+          currentVersion,
+          latestVersion: latestVersion.versionNumber,
+          latestVersionId: latestVersion.id,
+          changelog: latestVersion.changelog,
+          required: false,
+          downloadUrl: latestVersion.downloadUrl!,
+          fileSize: latestVersion.fileSize!,
+          source: 'modrinth',
+        };
+      }
+
+      return null;
+    } catch (error) {
+      console.error(`[ModUpdater] Failed to check Modrinth update for ${mod.name}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Check update for a CurseForge mod
+   */
+  private async checkCurseForgeUpdate(
+    mod: any,
+    modId: string,
+    currentFileId: string,
+    gameVersion: string,
+    loaderType: string
+  ): Promise<ModUpdateInfo | null> {
+    try {
+      const versions = await this.curseforgeAPI.getModVersions(modId);
+
+      if (versions.length === 0) {
+        console.log(`[ModUpdater] No CurseForge versions for: ${mod.name}`);
+        return null;
+      }
+
+      // Filter by game version and loader
+      const compatibleVersions = versions.filter(v => {
+        const matchesGameVersion = v.gameVersions?.includes(gameVersion);
+        const matchesLoader = 
+          (loaderType === 'neoforge' && v.loaders?.includes('neoforge')) ||
+          (loaderType === 'forge' && v.loaders?.includes('forge')) ||
+          (loaderType === 'fabric' && v.loaders?.includes('fabric')) ||
+          (loaderType === 'quilt' && v.loaders?.includes('quilt'));
+        return matchesGameVersion && matchesLoader;
+      });
+
+      if (compatibleVersions.length === 0) {
+        console.log(`[ModUpdater] No compatible CurseForge versions for: ${mod.name}`);
+        return null;
+      }
+
+      const latestVersion = compatibleVersions[0];
+
+      // Compare file IDs
+      if (currentFileId === latestVersion.id) {
+        return null; // Already latest
+      }
+
+      // Check if actually newer
+      const currentVersion = mod.version || 'unknown';
+      const needsUpdate = this.isNewerVersion(latestVersion.versionNumber, currentVersion);
+
+      if (needsUpdate) {
+        console.log(`[ModUpdater] CurseForge update available: ${mod.name} ${currentVersion} -> ${latestVersion.versionNumber}`);
+        return {
+          modId: modId,
+          modName: mod.name,
+          fileName: mod.fileName,
+          currentVersion,
+          latestVersion: latestVersion.versionNumber,
+          latestVersionId: latestVersion.id,
+          changelog: latestVersion.changelog,
+          required: false,
+          downloadUrl: latestVersion.downloadUrl!,
+          fileSize: latestVersion.fileSize!,
+          source: 'curseforge',
+        };
+      }
+
+      return null;
+    } catch (error) {
+      console.error(`[ModUpdater] Failed to check CurseForge update for ${mod.name}:`, error);
+      return null;
+    }
+  }
+
+  /**
    * 모드 업데이트 실행
    */
   async updateMod(
@@ -203,7 +338,7 @@ export class ModUpdater {
       const modsDir = `${gameDir}/mods`;
       const modManager = new ModManager();
 
-      console.log(`[ModUpdater] Updating ${update.modName}...`);
+      console.log(`[ModUpdater] Updating ${update.modName} from ${update.source}...`);
 
       // 기존 모드 파일 삭제
       await modManager.deleteMod(gameDir, update.fileName);
@@ -212,9 +347,15 @@ export class ModUpdater {
       const { DownloadManager } = await import('./download-manager');
       const downloadManager = new DownloadManager();
 
-      // Get latest version details
-      const versions = await this.modrinthAPI.getModVersions(update.modId);
-      const version = versions.find(v => v.id === update.latestVersionId);
+      // Get latest version details based on source
+      let version;
+      if (update.source === 'curseforge') {
+        const versions = await this.curseforgeAPI.getModVersions(update.modId);
+        version = versions.find(v => v.id === update.latestVersionId);
+      } else {
+        const versions = await this.modrinthAPI.getModVersions(update.modId);
+        version = versions.find(v => v.id === update.latestVersionId);
+      }
 
       if (!version || !version.downloadUrl) {
         throw new Error('Download URL not found');
@@ -230,6 +371,22 @@ export class ModUpdater {
       await downloadManager.startAll((progress) => {
         onProgress?.(progress.progress);
       });
+
+      // Save source metadata for the updated mod
+      try {
+        const fs = await import('fs/promises');
+        const metaPath = `${modsDir}/${version.fileName}.meta.json`;
+        const metadata = {
+          source: update.source,
+          sourceModId: update.modId,
+          sourceFileId: update.latestVersionId,
+          installedAt: new Date().toISOString(),
+        };
+        await fs.writeFile(metaPath, JSON.stringify(metadata, null, 2));
+        console.log(`[ModUpdater] Saved metadata for updated mod: ${metaPath}`);
+      } catch (metaError) {
+        console.error('[ModUpdater] Failed to save metadata:', metaError);
+      }
 
       console.log(`[ModUpdater] Successfully updated ${update.modName}`);
     } catch (error) {

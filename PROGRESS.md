@@ -707,6 +707,33 @@ type Mod struct {
   - `Get()`, `ListByProfile()`: 새 필드 읽기
 - **상태**: ✅ 구현 완료
 
+### ✅ Phase 6: CurseForge 업데이트 체크 (완료)
+
+#### 6.1 NULL 값 처리 버그 수정
+- **파일**: `backend/internal/cache/mod_repository.go`
+- **변경사항**:
+  - `sql.NullString` 사용하여 NULL 안전 처리
+  - `Get()`, `ListByProfile()`, `GetByFileName()` 수정
+  - 기존 모드(메타데이터 없음) 호환성 보장
+- **상태**: ✅ 구현 완료
+
+#### 6.2 ModUpdater CurseForge 지원
+- **파일**: `src/main/services/mod-updater.ts`
+- **변경사항**:
+  - `checkUpdates()`: 소스 메타데이터 기반 업데이트 체크
+  - `checkCurseForgeUpdate()`: CurseForge 전용 업데이트 확인
+  - `checkModrinthUpdate()`: Modrinth 전용 업데이트 확인 (분리)
+  - 게임 버전 및 로더 필터링
+- **상태**: ✅ 구현 완료
+
+#### 6.3 업데이트 실행 멀티 소스 지원
+- **파일**: `src/main/services/mod-updater.ts`
+- **변경사항**:
+  - `updateMod()`: CurseForge/Modrinth 소스별 처리
+  - 업데이트 후 메타데이터 자동 저장
+  - 다운로드 URL 소스별 조회
+- **상태**: ✅ 구현 완료
+
 ### 📊 CurseForge 통합 진행률
 
 | Phase | 상태 | 완료율 |
@@ -717,15 +744,52 @@ type Mod struct {
 | Phase 4.3: CurseForge 모드 설치 | ✅ 완료 | 100% |
 | Phase 4.4: 의존성 및 업데이트 | ✅ 완료 | 100% |
 | **Phase 5: 메타데이터 저장** | **✅ 완료** | **100%** |
+| **Phase 6: CurseForge 업데이트 체크** | **✅ 완료** | **100%** |
 | | | |
-| Phase 4.1-4.2: UI 개선 | ⏳ 다음 | 0% |
-| Phase 6: CurseForge 업데이트 체크 | ⏳ 다음 | 0% |
-| Phase 7: 모드팩 지원 | ⏳ 선택 | 0% |
+| **전체 핵심 기능** | **✅ 완료** | **100%** |
+| | | |
+| Phase 7: UI 개선 | ⏳ 선택 | 0% |
+| Phase 8: 모드팩 지원 | ⏳ 선택 | 0% |
+
+### 🎉 멀티 소스 런처 완성!
+
+#### ✅ 완료된 기능
+
+| 기능 | Modrinth | CurseForge | 상태 |
+|------|----------|------------|------|
+| 검색 | ✅ | ✅ | 완료 |
+| 상세 조회 | ✅ | ✅ | 완료 |
+| 버전 조회 | ✅ | ✅ | 완료 |
+| 모드 설치 | ✅ | ✅ | 완료 |
+| 의존성 체크 | ✅ | ✅ | 완료 |
+| 의존성 설치 | ✅ | ✅ | 완료 |
+| 메타데이터 저장 | ✅ | ✅ | 완료 |
+| **업데이트 확인** | ✅ | **✅** | **완료!** |
+| **업데이트 실행** | ✅ | **✅** | **완료!** |
+
+#### 🔧 기술 구현
+
+**백엔드 (Go)**:
+- DB 마이그레이션 14: `source_mod_id`, `source_file_id` 컬럼
+- NULL 안전 처리: `sql.NullString`
+- 자동 메타데이터 로드
+
+**프론트엔드 (TypeScript)**:
+- `.meta.json` 파일 생성 (설치/업데이트 시)
+- ModUpdater: 소스별 업데이트 체크
+- CurseForge/Modrinth 통합 처리
+
+**데이터 흐름**:
+```
+모드 설치 → .meta.json 생성 → Go 백엔드 읽기 → DB 저장 → 업데이트 체크 활용
+```
+
+---
 
 ### 🚀 다음 단계 옵션
 
-#### 옵션 1: UI/UX 개선 (사용자 경험 향상)
-**목적**: 사용자가 CurseForge를 더 쉽게 사용할 수 있도록
+#### 옵션 1: UI/UX 개선 (사용자 경험 향상) ⭐ 추천
+**목적**: 사용자가 소스를 쉽게 구분하고 선택할 수 있도록
 
 **작업 내용**:
 - 검색 모달에 소스 선택 UI 개선
