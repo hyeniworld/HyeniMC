@@ -51,6 +51,12 @@ func StartGRPCServer(addr string, db *sql.DB, dataDir string, profileSvc *servic
 
 	server := grpclib.NewServer()
 
+	// Get CurseForge API key from environment (optional)
+	curseforgeAPIKey := os.Getenv("CURSEFORGE_API_KEY")
+	if curseforgeAPIKey == "" {
+		log.Printf("Warning: CurseForge API key not set. CurseForge features will be disabled.")
+	}
+
 	// Register services
 	pb.RegisterProfileServiceServer(server, NewProfileServiceServer(profileSvc))
 	pb.RegisterDownloadServiceServer(server, NewDownloadServiceServer())
@@ -61,6 +67,7 @@ func StartGRPCServer(addr string, db *sql.DB, dataDir string, profileSvc *servic
 	pb.RegisterAssetServiceServer(server, NewAssetServiceServer())
 	pb.RegisterSettingsServiceServer(server, NewSettingsServiceServer(settingsSvc))
 	pb.RegisterModServiceServer(server, NewModServiceServer(db, dataDir))
+	pb.RegisterCacheServiceServer(server, NewCacheServiceServer(db, curseforgeAPIKey))
 
 	if err := server.Serve(lis); err != nil {
 		return fmt.Errorf("failed to serve gRPC: %w", err)

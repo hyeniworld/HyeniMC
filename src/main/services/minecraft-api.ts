@@ -1,4 +1,4 @@
-import axios from 'axios';
+import { cacheRpc } from '../grpc/clients';
 
 export interface MinecraftVersionManifest {
   latest: {
@@ -14,22 +14,19 @@ export interface MinecraftVersionManifest {
   }>;
 }
 
-const VERSION_MANIFEST_URL = 'https://piston-meta.mojang.com/mc/game/version_manifest_v2.json';
-
 /**
- * Fetch Minecraft version list from Mojang API
+ * Fetch Minecraft version list (cached via gRPC)
+ * @param forceRefresh - Force refresh from API (bypass cache)
  */
-export async function fetchMinecraftVersions(): Promise<string[]> {
+export async function fetchMinecraftVersions(forceRefresh = false): Promise<string[]> {
   try {
-    const response = await axios.get<MinecraftVersionManifest>(VERSION_MANIFEST_URL);
-    const manifest = response.data;
+    const response = await cacheRpc.getMinecraftVersions({
+      forceRefresh,
+      releasesOnly: true,
+    });
 
-    // Filter only release versions (no snapshots)
-    const releaseVersions = manifest.versions
-      .filter(v => v.type === 'release')
-      .map(v => v.id);
-
-    return releaseVersions;
+    // Convert gRPC response to version IDs
+    return response.versions.map(v => v.id);
   } catch (error) {
     console.error('[Minecraft API] Failed to fetch versions:', error);
     // Return fallback versions if API fails
@@ -45,12 +42,13 @@ export async function fetchMinecraftVersions(): Promise<string[]> {
 }
 
 /**
- * Get latest Minecraft version
+ * Get latest Minecraft version (cached via gRPC)
+ * @param forceRefresh - Force refresh from API (bypass cache)
  */
-export async function getLatestMinecraftVersion(): Promise<string> {
+export async function getLatestMinecraftVersion(forceRefresh = false): Promise<string> {
   try {
-    const response = await axios.get<MinecraftVersionManifest>(VERSION_MANIFEST_URL);
-    return response.data.latest.release;
+    const response = await cacheRpc.getLatestMinecraftVersion({ forceRefresh });
+    return response.version;
   } catch (error) {
     console.error('[Minecraft API] Failed to fetch latest version:', error);
     return '1.21.4';

@@ -1,0 +1,239 @@
+syntax = "proto3";
+package launcher;
+option go_package = "hyenimc/backend/gen/launcher;launcher";
+
+// CacheService provides cached API responses for various data sources
+service CacheService {
+  // Minecraft versions
+  rpc GetMinecraftVersions(GetMinecraftVersionsRequest) returns (GetMinecraftVersionsResponse);
+  rpc GetLatestMinecraftVersion(GetLatestMinecraftVersionRequest) returns (GetLatestMinecraftVersionResponse);
+  
+  // Loader versions
+  rpc GetFabricVersions(GetLoaderVersionsRequest) returns (GetLoaderVersionsResponse);
+  rpc GetNeoForgeVersions(GetLoaderVersionsRequest) returns (GetLoaderVersionsResponse);
+  rpc GetQuiltVersions(GetLoaderVersionsRequest) returns (GetLoaderVersionsResponse);
+  
+  // Modrinth API (cached)
+  rpc SearchModrinthMods(SearchModrinthRequest) returns (SearchModrinthResponse);
+  rpc GetModrinthProject(GetModrinthProjectRequest) returns (GetModrinthProjectResponse);
+  rpc GetModrinthVersions(GetModrinthVersionsRequest) returns (GetModrinthVersionsResponse);
+  rpc GetModrinthCategories(GetModrinthCategoriesRequest) returns (GetModrinthCategoriesResponse);
+  
+  // CurseForge API (cached)
+  rpc SearchCurseForgeMods(SearchCurseForgeRequest) returns (SearchCurseForgeResponse);
+  rpc GetCurseForgeMod(GetCurseForgeModRequest) returns (GetCurseForgeModResponse);
+  rpc GetCurseForgeFiles(GetCurseForgeFilesRequest) returns (GetCurseForgeFilesResponse);
+  
+  // Java installations
+  rpc GetJavaInstallations(GetJavaInstallationsRequest) returns (GetJavaInstallationsResponse);
+  rpc RefreshJavaInstallations(RefreshJavaInstallationsRequest) returns (RefreshJavaInstallationsResponse);
+  
+  // Profile statistics
+  rpc GetProfileStats(GetProfileStatsRequest) returns (GetProfileStatsResponse);
+  rpc RecordProfileLaunch(RecordProfileLaunchRequest) returns (RecordProfileLaunchResponse);
+  rpc RecordProfilePlayTime(RecordProfilePlayTimeRequest) returns (RecordProfilePlayTimeResponse);
+  rpc RecordProfileCrash(RecordProfileCrashRequest) returns (RecordProfileCrashResponse);
+  
+  // Cache management
+  rpc InvalidateCache(InvalidateCacheRequest) returns (InvalidateCacheResponse);
+  rpc ClearExpiredCache(ClearExpiredCacheRequest) returns (ClearExpiredCacheResponse);
+}
+
+// Minecraft Versions
+message GetMinecraftVersionsRequest {
+  bool force_refresh = 1;
+  bool releases_only = 2;
+}
+
+message GetMinecraftVersionsResponse {
+  string latest_release = 1;
+  string latest_snapshot = 2;
+  repeated MinecraftVersionInfo versions = 3;
+}
+
+message MinecraftVersionInfo {
+  string id = 1;
+  string type = 2; // release, snapshot, old_beta, old_alpha
+  int64 release_time = 3;
+}
+
+message GetLatestMinecraftVersionRequest {
+  bool force_refresh = 1;
+}
+
+message GetLatestMinecraftVersionResponse {
+  string version = 1;
+}
+
+// Loader Versions
+message GetLoaderVersionsRequest {
+  bool force_refresh = 1;
+}
+
+message GetLoaderVersionsResponse {
+  repeated LoaderVersionInfo versions = 1;
+}
+
+message LoaderVersionInfo {
+  string version = 1;
+  bool stable = 2;
+  int32 build_number = 3;
+  string maven_coords = 4;
+}
+
+// Modrinth API
+message SearchModrinthRequest {
+  string query = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+  string facets = 4; // JSON string
+  bool force_refresh = 5;
+}
+
+message SearchModrinthResponse {
+  string json_data = 1; // Raw JSON response
+}
+
+message GetModrinthProjectRequest {
+  string project_id = 1;
+  bool force_refresh = 2;
+}
+
+message GetModrinthProjectResponse {
+  string json_data = 1; // Raw JSON response
+}
+
+message GetModrinthVersionsRequest {
+  string project_id = 1;
+  string game_version = 2;
+  string loaders = 3; // JSON array string
+  bool force_refresh = 4;
+}
+
+message GetModrinthVersionsResponse {
+  string json_data = 1; // Raw JSON response
+}
+
+message GetModrinthCategoriesRequest {
+  bool force_refresh = 1;
+}
+
+message GetModrinthCategoriesResponse {
+  string json_data = 1; // Raw JSON response
+}
+
+// CurseForge API
+message SearchCurseForgeRequest {
+  string query = 1;
+  string game_version = 2;
+  int32 mod_loader_type = 3;
+  int32 page_size = 4;
+  int32 index = 5;
+  bool force_refresh = 6;
+}
+
+message SearchCurseForgeResponse {
+  string json_data = 1; // Raw JSON response
+}
+
+message GetCurseForgeModRequest {
+  string mod_id = 1;
+  bool force_refresh = 2;
+}
+
+message GetCurseForgeModResponse {
+  string json_data = 1; // Raw JSON response
+}
+
+message GetCurseForgeFilesRequest {
+  string mod_id = 1;
+  string game_version = 2;
+  int32 mod_loader_type = 3;
+  bool force_refresh = 4;
+}
+
+message GetCurseForgeFilesResponse {
+  string json_data = 1; // Raw JSON response
+}
+
+// Java Installations
+message GetJavaInstallationsRequest {}
+
+message GetJavaInstallationsResponse {
+  repeated JavaInstallation installations = 1;
+}
+
+message JavaInstallation {
+  string id = 1;
+  string path = 2;
+  string version = 3;
+  string vendor = 4;
+  string architecture = 5;
+  bool is_valid = 6;
+  int64 detected_at = 7;
+}
+
+message RefreshJavaInstallationsRequest {}
+
+message RefreshJavaInstallationsResponse {
+  repeated JavaInstallation installations = 1;
+}
+
+// Profile Statistics
+message GetProfileStatsRequest {
+  string profile_id = 1;
+}
+
+message GetProfileStatsResponse {
+  ProfileStats stats = 1;
+}
+
+message ProfileStats {
+  string profile_id = 1;
+  int64 last_launched_at = 2;
+  int64 total_play_time = 3; // in seconds
+  int32 launch_count = 4;
+  int32 crash_count = 5;
+  int64 last_crash_at = 6;
+}
+
+message RecordProfileLaunchRequest {
+  string profile_id = 1;
+}
+
+message RecordProfileLaunchResponse {
+  bool success = 1;
+}
+
+message RecordProfilePlayTimeRequest {
+  string profile_id = 1;
+  int64 seconds = 2;
+}
+
+message RecordProfilePlayTimeResponse {
+  bool success = 1;
+}
+
+message RecordProfileCrashRequest {
+  string profile_id = 1;
+}
+
+message RecordProfileCrashResponse {
+  bool success = 1;
+}
+
+// Cache Management
+message InvalidateCacheRequest {
+  string cache_type = 1; // minecraft|loader|modrinth|curseforge|java
+  string cache_key = 2; // Optional specific key
+}
+
+message InvalidateCacheResponse {
+  bool success = 1;
+}
+
+message ClearExpiredCacheRequest {}
+
+message ClearExpiredCacheResponse {
+  int32 deleted_count = 1;
+}

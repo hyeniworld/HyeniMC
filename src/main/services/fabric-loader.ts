@@ -49,17 +49,27 @@ export class FabricLoaderService {
   private baseUrl = API_ENDPOINTS.FABRIC_META;
 
   /**
-   * 사용 가능한 Fabric 로더 버전 목록 가져오기
+   * 사용 가능한 Fabric 로더 버전 목록 가져오기 (cached via gRPC)
    */
-  async getLoaderVersions(): Promise<FabricLoaderVersion[]> {
+  async getLoaderVersions(forceRefresh = false): Promise<FabricLoaderVersion[]> {
     try {
       console.log('[Fabric] Fetching loader versions...');
-      const response = await axios.get<FabricLoaderVersion[]>(
-        `${this.baseUrl}${API_ENDPOINTS.FABRIC_VERSIONS}/loader`
-      );
       
-      console.log(`[Fabric] Found ${response.data.length} loader versions`);
-      return response.data;
+      // Use cached gRPC service
+      const { cacheRpc } = await import('../grpc/clients');
+      const response = await cacheRpc.getFabricVersions({ forceRefresh });
+      
+      // Convert gRPC response to FabricLoaderVersion
+      const versions: FabricLoaderVersion[] = response.versions.map(v => ({
+        separator: '.',
+        build: v.buildNumber || 0,
+        maven: v.mavenCoords,
+        version: v.version,
+        stable: v.stable,
+      }));
+      
+      console.log(`[Fabric] Found ${versions.length} loader versions (cached)`);
+      return versions;
     } catch (error) {
       console.error('[Fabric] Failed to fetch loader versions:', error);
       throw new Error('Failed to fetch Fabric loader versions');

@@ -69,6 +69,43 @@ import {
   type RefreshModCacheRequest,
   type RefreshModCacheResponse,
 } from '../gen/launcher/mod';
+import {
+  CacheServiceClient,
+  type GetMinecraftVersionsRequest,
+  type GetMinecraftVersionsResponse,
+  type GetLatestMinecraftVersionRequest,
+  type GetLatestMinecraftVersionResponse,
+  type GetLoaderVersionsRequest,
+  type GetLoaderVersionsResponse,
+  type SearchModrinthRequest,
+  type SearchModrinthResponse,
+  type GetModrinthProjectRequest,
+  type GetModrinthProjectResponse,
+  type GetModrinthVersionsRequest,
+  type GetModrinthVersionsResponse,
+  type GetModrinthCategoriesRequest,
+  type GetModrinthCategoriesResponse,
+  type SearchCurseForgeRequest,
+  type SearchCurseForgeResponse,
+  type GetCurseForgeModRequest,
+  type GetCurseForgeModResponse,
+  type GetCurseForgeFilesRequest,
+  type GetCurseForgeFilesResponse,
+  type GetJavaInstallationsRequest,
+  type GetJavaInstallationsResponse,
+  type GetProfileStatsRequest,
+  type GetProfileStatsResponse,
+  type RecordProfileLaunchRequest,
+  type RecordProfileLaunchResponse,
+  type RecordProfilePlayTimeRequest,
+  type RecordProfilePlayTimeResponse,
+  type RecordProfileCrashRequest,
+  type RecordProfileCrashResponse,
+  type InvalidateCacheRequest,
+  type InvalidateCacheResponse,
+  type ClearExpiredCacheRequest,
+  type ClearExpiredCacheResponse,
+} from '../gen/launcher/cache';
 
 let profileClient: ProfileServiceClient | null = null;
 let downloadClient: DownloadServiceClient | null = null;
@@ -80,6 +117,7 @@ let lastAddr: string | null = null;
 let assetClient: AssetServiceClient | null = null;
 let settingsClient: SettingsServiceClient | null = null;
 let modClient: ModServiceClient | null = null;
+let cacheClient: CacheServiceClient | null = null;
 
 function ensureAddr(): string {
   const addr = getBackendAddress();
@@ -326,3 +364,104 @@ export function streamDownloadProgress(
     try { stream.cancel(); } catch {}
   };
 }
+
+function ensureCacheClient(): CacheServiceClient {
+  const addr = ensureAddr();
+  if (!cacheClient || lastAddr !== addr) {
+    cacheClient = new CacheServiceClient(addr, credentials.createInsecure());
+    lastAddr = addr;
+  }
+  return cacheClient;
+}
+
+export const cacheRpc = {
+  // Minecraft versions
+  getMinecraftVersions: (req: GetMinecraftVersionsRequest) =>
+    promisify<GetMinecraftVersionsRequest, GetMinecraftVersionsResponse>(
+      ensureCacheClient().getMinecraftVersions.bind(ensureCacheClient())
+    )(req),
+  getLatestMinecraftVersion: (req: GetLatestMinecraftVersionRequest) =>
+    promisify<GetLatestMinecraftVersionRequest, GetLatestMinecraftVersionResponse>(
+      ensureCacheClient().getLatestMinecraftVersion.bind(ensureCacheClient())
+    )(req),
+  
+  // Loader versions
+  getFabricVersions: (req: GetLoaderVersionsRequest) =>
+    promisify<GetLoaderVersionsRequest, GetLoaderVersionsResponse>(
+      ensureCacheClient().getFabricVersions.bind(ensureCacheClient())
+    )(req),
+  getNeoForgeVersions: (req: GetLoaderVersionsRequest) =>
+    promisify<GetLoaderVersionsRequest, GetLoaderVersionsResponse>(
+      ensureCacheClient().getNeoForgeVersions.bind(ensureCacheClient())
+    )(req),
+  getQuiltVersions: (req: GetLoaderVersionsRequest) =>
+    promisify<GetLoaderVersionsRequest, GetLoaderVersionsResponse>(
+      ensureCacheClient().getQuiltVersions.bind(ensureCacheClient())
+    )(req),
+  
+  // Modrinth API
+  searchModrinthMods: (req: SearchModrinthRequest) =>
+    promisify<SearchModrinthRequest, SearchModrinthResponse>(
+      ensureCacheClient().searchModrinthMods.bind(ensureCacheClient())
+    )(req),
+  getModrinthProject: (req: GetModrinthProjectRequest) =>
+    promisify<GetModrinthProjectRequest, GetModrinthProjectResponse>(
+      ensureCacheClient().getModrinthProject.bind(ensureCacheClient())
+    )(req),
+  getModrinthVersions: (req: GetModrinthVersionsRequest) =>
+    promisify<GetModrinthVersionsRequest, GetModrinthVersionsResponse>(
+      ensureCacheClient().getModrinthVersions.bind(ensureCacheClient())
+    )(req),
+  getModrinthCategories: (req: GetModrinthCategoriesRequest) =>
+    promisify<GetModrinthCategoriesRequest, GetModrinthCategoriesResponse>(
+      ensureCacheClient().getModrinthCategories.bind(ensureCacheClient())
+    )(req),
+  
+  // CurseForge API
+  searchCurseForgeMods: (req: SearchCurseForgeRequest) =>
+    promisify<SearchCurseForgeRequest, SearchCurseForgeResponse>(
+      ensureCacheClient().searchCurseForgeMods.bind(ensureCacheClient())
+    )(req),
+  getCurseForgeMod: (req: GetCurseForgeModRequest) =>
+    promisify<GetCurseForgeModRequest, GetCurseForgeModResponse>(
+      ensureCacheClient().getCurseForgeMod.bind(ensureCacheClient())
+    )(req),
+  getCurseForgeFiles: (req: GetCurseForgeFilesRequest) =>
+    promisify<GetCurseForgeFilesRequest, GetCurseForgeFilesResponse>(
+      ensureCacheClient().getCurseForgeFiles.bind(ensureCacheClient())
+    )(req),
+  
+  // Java installations
+  getJavaInstallations: (req: GetJavaInstallationsRequest) =>
+    promisify<GetJavaInstallationsRequest, GetJavaInstallationsResponse>(
+      ensureCacheClient().getJavaInstallations.bind(ensureCacheClient())
+    )(req),
+  
+  // Profile statistics
+  getProfileStats: (req: GetProfileStatsRequest) =>
+    promisify<GetProfileStatsRequest, GetProfileStatsResponse>(
+      ensureCacheClient().getProfileStats.bind(ensureCacheClient())
+    )(req),
+  recordProfileLaunch: (req: RecordProfileLaunchRequest) =>
+    promisify<RecordProfileLaunchRequest, RecordProfileLaunchResponse>(
+      ensureCacheClient().recordProfileLaunch.bind(ensureCacheClient())
+    )(req),
+  recordProfilePlayTime: (req: RecordProfilePlayTimeRequest) =>
+    promisify<RecordProfilePlayTimeRequest, RecordProfilePlayTimeResponse>(
+      ensureCacheClient().recordProfilePlayTime.bind(ensureCacheClient())
+    )(req),
+  recordProfileCrash: (req: RecordProfileCrashRequest) =>
+    promisify<RecordProfileCrashRequest, RecordProfileCrashResponse>(
+      ensureCacheClient().recordProfileCrash.bind(ensureCacheClient())
+    )(req),
+  
+  // Cache management
+  invalidateCache: (req: InvalidateCacheRequest) =>
+    promisify<InvalidateCacheRequest, InvalidateCacheResponse>(
+      ensureCacheClient().invalidateCache.bind(ensureCacheClient())
+    )(req),
+  clearExpiredCache: (req: ClearExpiredCacheRequest) =>
+    promisify<ClearExpiredCacheRequest, ClearExpiredCacheResponse>(
+      ensureCacheClient().clearExpiredCache.bind(ensureCacheClient())
+    )(req),
+};
