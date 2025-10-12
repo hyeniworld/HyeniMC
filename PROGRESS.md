@@ -511,6 +511,143 @@ npm run dev
 - ⏭️ **오프라인 모드**: 캐시 폴백 (5단계 이후)
 
 ---
+
+## 3단계 시작: CurseForge/Modrinth 통합 (2025-10-12)
+
+### ✅ Phase 1: CurseForge 프록시 인프라 (완료)
+
+#### 1.1 Cloudflare Workers 프록시 구축
+- **파일**: `cloudflare-worker/src/index.js`
+- **기능**:
+  - CurseForge API 키 보호 (서버에만 존재)
+  - Rate Limiting (시간당 100요청/클라이언트)
+  - CORS 지원
+  - 런처 ID 기반 추적
+- **비용**: 무료 (Cloudflare Workers 월 10만 요청)
+
+#### 1.2 런처에서 프록시 사용
+- **파일**: `src/main/services/curseforge-api.ts`
+- **변경사항**:
+  - 프로덕션: 프록시 서버 사용
+  - 개발: 직접 API 호출 (환경변수 API 키)
+  - 런처 ID 생성 (UUID)
+- **상태**: ✅ 구현 완료, 배포 필요
+
+#### 1.3 배포 가이드
+- **파일**: `DEPLOYMENT_GUIDE.md`
+- **내용**:
+  - Cloudflare Workers 설정 단계
+  - KV Namespace 생성
+  - API 키 등록
+  - 모니터링 가이드
+
+### ✅ Phase 2: CurseForge 핵심 기능 완성 (완료)
+
+#### 2.1 업데이트 체크 구현
+- **파일**: `src/main/services/curseforge-api.ts`
+- **함수**: `checkForUpdates(modId, currentFileId, gameVersion, loaderType)`
+- **로직**:
+  - CurseForge는 FileID 기반 (높을수록 최신)
+  - 게임 버전 및 로더 필터링
+  - 최신 버전 반환
+- **상태**: ✅ 구현 완료
+
+#### 2.2 다운로드 URL 가져오기
+- **함수**: `getDownloadUrl(modId, fileId)`
+- **상태**: ✅ 구현 완료
+
+### ✅ Phase 3: 멀티 소스 통합 (완료)
+
+#### 3.1 통합 검색
+- **파일**: `src/main/services/mod-aggregator.ts` (신규)
+- **클래스**: `ModAggregator`
+- **기능**:
+  - Modrinth + CurseForge 동시 검색
+  - 중복 제거 (slug 기준, 다운로드 수 우선)
+  - 소스 선택 지원 ('both', 'modrinth', 'curseforge')
+- **상태**: ✅ 구현 완료
+
+#### 3.2 IPC 핸들러 통합
+- **파일**: `src/main/ipc/mod.ts`
+- **변경사항**:
+  - `MOD_SEARCH`: ModAggregator 사용
+  - 기본값: 'both' (모든 소스 검색)
+  - CurseForge 미설정 시 Modrinth로 폴백
+- **상태**: ✅ 구현 완료
+
+#### 3.3 업데이트 시스템 준비
+- **파일**: `src/main/services/mod-updater.ts`
+- **변경사항**:
+  - `CurseForgeAPI` 추가
+  - `ModUpdateInfo.source` 필드 추가
+  - CurseForge 업데이트 체크 준비
+- **상태**: ⚠️ 부분 완료 (소스 메타데이터 필요)
+
+### ⏳ Phase 4: UI 통합 (다음 단계)
+
+#### 4.1 검색 모달 개선 (TODO)
+- [ ] 소스 선택 라디오 버튼 (Modrinth/CurseForge/Both)
+- [ ] 소스 뱃지 추가 (🟢 M / 🟠 CF)
+- [ ] 필터 연동
+
+#### 4.2 업데이트 UI (TODO)
+- [ ] 업데이트 패널 컴포넌트
+- [ ] 선택 업데이트
+- [ ] 전체 업데이트
+- [ ] 진행률 표시
+
+### ⏳ Phase 5: 소스 메타데이터 (다음 단계)
+
+#### 5.1 데이터베이스 스키마 추가 (TODO)
+```go
+type Mod struct {
+    Source        string  // "modrinth" or "curseforge"
+    SourceModID   string  // 플랫폼별 모드 ID
+    SourceFileID  string  // 플랫폼별 파일/버전 ID
+}
+```
+
+#### 5.2 설치 시 소스 저장 (TODO)
+- [ ] 모드 설치 시 소스 정보 기록
+- [ ] 캐시 서비스 수정
+- [ ] 업데이트 체크에서 소스 정보 활용
+
+### 📊 3단계 진행률
+
+| Phase | 상태 | 완료율 |
+|-------|------|--------|
+| Phase 1: 프록시 인프라 | ✅ 완료 | 100% |
+| Phase 2: CurseForge 완성 | ✅ 완료 | 100% |
+| Phase 3: 멀티 소스 통합 | ✅ 완료 | 100% |
+| Phase 4: UI 통합 | ⏳ 대기 | 0% |
+| Phase 5: 메타데이터 | ⏳ 대기 | 0% |
+| **전체** | **🔄 진행 중** | **60%** |
+
+### 🚀 다음 작업
+
+1. **CurseForge 프록시 배포** (필수)
+   - Cloudflare Workers 설정
+   - API 키 등록
+   - 프록시 URL 설정
+
+2. **UI 통합** (권장)
+   - 소스 선택 UI
+   - 업데이트 패널
+
+3. **소스 메타데이터** (권장)
+   - DB 마이그레이션
+   - 설치 시 저장
+
+### 📝 배포 전 체크리스트
+
+- [ ] Cloudflare Workers 배포
+- [ ] CurseForge API 키 등록
+- [ ] 프록시 URL 설정
+- [ ] 통합 검색 테스트
+- [ ] Rate Limit 확인
+- [ ] 모니터링 설정
+
+---
 - **[SettingsService 스키마]**
   - `GlobalSettings`
     - `DownloadSettings`: `request_timeout_ms(기본 3000)`, `max_retries(기본 5)`, `max_parallel(기본 10)`

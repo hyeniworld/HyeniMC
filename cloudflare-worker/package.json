@@ -1,0 +1,13 @@
+{
+  "name": "hyenimc-curseforge-proxy",
+  "version": "1.0.0",
+  "description": "CurseForge API proxy for HyeniMC Launcher",
+  "scripts": {
+    "deploy": "wrangler publish",
+    "dev": "wrangler dev",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  }
+}

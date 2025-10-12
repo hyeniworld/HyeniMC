@@ -1,4 +1,5 @@
 import { ModrinthAPI } from './modrinth-api';
+import { CurseForgeAPI } from './curseforge-api';
 import { ModManager } from './mod-manager';
 import type { ModVersion } from '../../shared/types/profile';
 
@@ -13,6 +14,7 @@ export interface ModUpdateInfo {
   required: boolean;
   downloadUrl: string;
   fileSize: number;
+  source: 'modrinth' | 'curseforge';  // Added source tracking
 }
 
 export interface UpdateResult {
@@ -23,9 +25,11 @@ export interface UpdateResult {
 
 export class ModUpdater {
   private modrinthAPI: ModrinthAPI;
+  private curseforgeAPI: CurseForgeAPI;
 
   constructor() {
     this.modrinthAPI = new ModrinthAPI();
+    this.curseforgeAPI = new CurseForgeAPI();
   }
 
   /**
@@ -169,6 +173,7 @@ export class ModUpdater {
               required: false,
               downloadUrl: latestVersion.downloadUrl!,
               fileSize: latestVersion.fileSize!,
+              source: 'modrinth',  // TODO: Get from mod metadata when available
             });
 
             console.log(`[ModUpdater] Update available: ${mod.name} ${currentVersion} -> ${latestVersion.versionNumber}`);

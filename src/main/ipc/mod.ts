@@ -4,6 +4,7 @@ import { IPC_CHANNELS } from '../../shared/constants';
 import { ModManager } from '../services/mod-manager';
 import { ModrinthAPI } from '../services/modrinth-api';
 import { CurseForgeAPI } from '../services/curseforge-api';
+import { ModAggregator } from '../services/mod-aggregator';
 import { DependencyResolver } from '../services/dependency-resolver';
 import { ModUpdater } from '../services/mod-updater';
 import { getProfileInstanceDir } from '../utils/paths';
@@ -11,6 +12,7 @@ import type { ModSearchFilters } from '../../shared/types/profile';
 
 const modrinthAPI = new ModrinthAPI();
 const curseforgeAPI = new CurseForgeAPI();
+const modAggregator = new ModAggregator();
 const dependencyResolver = new DependencyResolver();
 const modUpdater = new ModUpdater();
 
@@ -80,16 +82,24 @@ export function registerModHandlers(): void {
     }
   });
 
-  // Search mods
+  // Search mods (supports multi-source)
   ipcMain.handle(IPC_CHANNELS.MOD_SEARCH, async (_event, query: string, filters?: ModSearchFilters) => {
     try {
       console.log(`[IPC Mod] Searching mods: "${query}"`, filters);
       
-      const source = filters?.source || 'modrinth';
+      const source = filters?.source || 'both';
       
+      // Use aggregator for multi-source search
+      if (source === 'both' || !filters?.source) {
+        const result = await modAggregator.searchAll(query, filters);
+        return result;
+      }
+      
+      // Single source search
       if (source === 'curseforge') {
         if (!curseforgeAPI.isConfigured()) {
-          throw new Error('CurseForge API key not configured');
+          console.warn('[IPC Mod] CurseForge not configured, falling back to Modrinth');
+          return await modrinthAPI.searchMods(query, filters);
         }
         const result = await curseforgeAPI.searchMods(query, filters);
         return result;

@@ -1,4 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
+import { v4 as uuidv4 } from 'uuid';
 import type { 
   ModSearchResult, 
   ModDetails, 
@@ -7,55 +8,82 @@ import type {
   LoaderType 
 } from '../../shared/types/profile';
 
+// Cloudflare Workers Proxy URL (replace with your actual deployment URL)
+// TODO: Update this URL after deploying to Cloudflare Workers
+const PROXY_URL = process.env.CURSEFORGE_PROXY_URL || 'https://hyenimc-curseforge-proxy.devbug.workers.dev';
+const USE_PROXY = process.env.NODE_ENV === 'production' || !process.env.CURSEFORGE_API_KEY;
+
+/**
+ * Generate or retrieve launcher ID for rate limiting
+ */
+function getLauncherId(): string {
+  // In production, this should be stored persistently
+  // For now, generate a UUID per session
+  if (!(global as any).__launcherId) {
+    (global as any).__launcherId = uuidv4();
+  }
+  return (global as any).__launcherId;
+}
+
 /**
  * CurseForge API 클라이언트
  * https://docs.curseforge.com/
  * 
- * 참고: CurseForge API 사용을 위해서는 API 키가 필요합니다.
- * https://console.curseforge.com/ 에서 발급받을 수 있습니다.
+ * Uses a proxy server to protect the API key in production.
+ * In development with CURSEFORGE_API_KEY set, uses direct API access.
  */
 export class CurseForgeAPI {
   private client: AxiosInstance;
   private apiKey: string;
+  private useProxy: boolean;
   private readonly MINECRAFT_GAME_ID = 432; // Minecraft game ID
   private readonly MODS_CLASS_ID = 6; // Mods class ID
 
   constructor(apiKey?: string) {
-    // API 키는 환경 변수 또는 설정 파일에서 가져와야 합니다
+    // Determine if we should use proxy
     this.apiKey = apiKey || process.env.CURSEFORGE_API_KEY || '';
+    this.useProxy = USE_PROXY || !this.apiKey;
     
-    if (!this.apiKey) {
-      console.warn('[CurseForge] API key not provided. CurseForge features will be disabled.');
+    if (this.useProxy) {
+      console.log('[CurseForge] Using proxy server:', PROXY_URL);
+    } else {
+      console.log('[CurseForge] Using direct API access (development mode)');
+    }
+
+    const baseURL = this.useProxy ? PROXY_URL : 'https://api.curseforge.com/v1';
+    const headers: any = {
+      'Accept': 'application/json',
+    };
+
+    if (this.useProxy) {
+      // Proxy mode: send launcher ID for rate limiting
+      headers['x-launcher-id'] = getLauncherId();
+    } else {
+      // Direct mode: send API key
+      headers['x-api-key'] = this.apiKey;
     }
 
     this.client = axios.create({
-      baseURL: 'https://api.curseforge.com/v1',
-      headers: {
-        'Accept': 'application/json',
-        'x-api-key': this.apiKey,
-      },
+      baseURL,
+      headers,
       timeout: 30000,
     });
   }
 
   /**
-   * API 키가 설정되어 있는지 확인
+   * API 키가 설정되어 있거나 프록시를 사용 중인지 확인
    */
   isConfigured(): boolean {
-    return this.apiKey.length > 0;
+    return this.useProxy || this.apiKey.length > 0;
   }
 
   /**
-   * 모드 검색 (cached via gRPC)
+   * 모드 검색 (direct HTTP request via proxy or CurseForge API)
    */
   async searchMods(
     query: string,
     filters?: ModSearchFilters
   ): Promise<{ hits: ModSearchResult[]; total: number }> {
-    if (!this.isConfigured()) {
-      throw new Error('CurseForge API key not configured');
-    }
-
     try {
       console.log(`[CurseForge] Searching mods: "${query}"`);
       
@@ -71,19 +99,26 @@ export class CurseForgeAPI {
         modLoaderType = loaderMap[filters.loaderType] || 0;
       }
 
-      // Use cached gRPC service
-      const { cacheRpc } = await import('../grpc/clients');
-      const response = await cacheRpc.searchCurseForgeMods({
-        query,
-        gameVersion: filters?.gameVersion || '',
-        modLoaderType,
+      // Build search parameters
+      const params: any = {
+        gameId: this.MINECRAFT_GAME_ID,
+        classId: this.MODS_CLASS_ID,
+        searchFilter: query,
         pageSize: filters?.limit || 20,
         index: filters?.offset || 0,
-        forceRefresh: false,
-      });
+      };
 
-      // Parse cached JSON response
-      const data = JSON.parse(response.jsonData);
+      if (filters?.gameVersion) {
+        params.gameVersion = filters.gameVersion;
+      }
+
+      if (modLoaderType > 0) {
+        params.modLoaderType = modLoaderType;
+      }
+
+      // Direct HTTP request to proxy or CurseForge API
+      const response = await this.client.get('/mods/search', { params });
+      const data = response.data;
 
       const hits: ModSearchResult[] = data.data.map((mod: any) => {
         const latestFiles = mod.latestFiles || [];
@@ -108,11 +143,11 @@ export class CurseForgeAPI {
         };
       });
 
-      console.log(`[CurseForge] Found ${hits.length} mods (total: ${data.pagination.totalCount}) [cached]`);
+      console.log(`[CurseForge] Found ${hits.length} mods (total: ${data.pagination?.totalCount || 0})`);
       
       return {
         hits,
-        total: data.pagination.totalCount,
+        total: data.pagination?.totalCount || 0,
       };
     } catch (error) {
       console.error('[CurseForge] Search failed:', error);
@@ -124,10 +159,6 @@ export class CurseForgeAPI {
    * 모드 상세 정보 가져오기
    */
   async getModDetails(modId: string): Promise<ModDetails> {
-    if (!this.isConfigured()) {
-      throw new Error('CurseForge API key not configured');
-    }
-
     try {
       console.log(`[CurseForge] Fetching mod details: ${modId}`);
       
@@ -176,10 +207,6 @@ export class CurseForgeAPI {
     gameVersion?: string,
     loaderType?: LoaderType
   ): Promise<ModVersion[]> {
-    if (!this.isConfigured()) {
-      throw new Error('CurseForge API key not configured');
-    }
-
     try {
       console.log(`[CurseForge] Fetching versions for ${modId}`);
       
@@ -287,6 +314,70 @@ export class CurseForgeAPI {
         return 'embedded';
       default:
         return 'optional';
+    }
+  }
+
+  /**
+   * 모드 업데이트 확인
+   */
+  async checkForUpdates(
+    modId: string,
+    currentFileId: string,
+    gameVersion: string,
+    loaderType: LoaderType
+  ): Promise<ModVersion | null> {
+    try {
+      console.log(`[CurseForge] Checking updates for mod ${modId}, current file: ${currentFileId}`);
+      
+      // Get all versions for this mod
+      const versions = await this.getModVersions(modId, gameVersion, loaderType);
+      
+      if (versions.length === 0) {
+        return null;
+      }
+
+      const currentFileIdNum = parseInt(currentFileId);
+      
+      // Find newer versions (higher file ID = newer)
+      const newerVersions = versions.filter(v => {
+        const versionFileId = parseInt(v.id);
+        return versionFileId > currentFileIdNum;
+      });
+
+      if (newerVersions.length === 0) {
+        console.log(`[CurseForge] No updates found for mod ${modId}`);
+        return null;
+      }
+
+      // Return the latest version (highest file ID)
+      const latest = newerVersions.reduce((prev, current) => {
+        return parseInt(current.id) > parseInt(prev.id) ? current : prev;
+      });
+
+      console.log(`[CurseForge] Update available for mod ${modId}: ${latest.versionNumber}`);
+      return latest;
+    } catch (error) {
+      console.error('[CurseForge] Failed to check for updates:', error);
+      return null;
+    }
+  }
+
+  /**
+   * 다운로드 URL 가져오기
+   */
+  async getDownloadUrl(modId: string, fileId: string): Promise<string> {
+    try {
+      const response = await this.client.get(`/mods/${modId}/files/${fileId}`);
+      const file = response.data.data;
+      
+      if (!file.downloadUrl) {
+        throw new Error('No download URL found');
+      }
+
+      return file.downloadUrl;
+    } catch (error) {
+      console.error('[CurseForge] Failed to get download URL:', error);
+      throw error;
     }
   }
 }
