@@ -175,6 +175,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke(IPC_CHANNELS.RESOURCEPACK_DELETE, profileId, fileName),
     install: (profileId: string, filePath: string): Promise<{ success: boolean }> =>
       ipcRenderer.invoke(IPC_CHANNELS.RESOURCEPACK_INSTALL, profileId, filePath),
+    installUrl: (profileId: string, url: string): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.RESOURCEPACK_INSTALL_URL, profileId, url),
     selectFile: (): Promise<string | null> =>
       ipcRenderer.invoke(IPC_CHANNELS.RESOURCEPACK_SELECT_FILE),
   },
@@ -191,6 +193,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke(IPC_CHANNELS.SHADERPACK_DELETE, profileId, fileName, isDirectory),
     install: (profileId: string, filePath: string): Promise<{ success: boolean }> =>
       ipcRenderer.invoke(IPC_CHANNELS.SHADERPACK_INSTALL, profileId, filePath),
+    installUrl: (profileId: string, url: string): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SHADERPACK_INSTALL_URL, profileId, url),
     selectFile: (): Promise<string | null> =>
       ipcRenderer.invoke(IPC_CHANNELS.SHADERPACK_SELECT_FILE),
   },
@@ -203,6 +207,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke(IPC_CHANNELS.MODPACK_GET_VERSIONS, modpackId, gameVersion),
     install: (profileId: string, versionId: string): Promise<{ success: boolean }> =>
       ipcRenderer.invoke(IPC_CHANNELS.MODPACK_INSTALL, profileId, versionId),
+    installUrl: (profileId: string, url: string): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.MODPACK_IMPORT_URL, profileId, url),
     validateFile: (filePath: string): Promise<any> =>
       ipcRenderer.invoke(IPC_CHANNELS.MODPACK_VALIDATE_FILE, filePath),
     extractMetadata: (filePath: string): Promise<any> =>
@@ -314,6 +320,7 @@ declare global {
         checkDependencies: (profileId: string, modId: string, versionId: string, gameVersion: string, loaderType: string, source?: 'modrinth' | 'curseforge') => Promise<any>;
         installDependencies: (profileId: string, dependencies: any[]) => Promise<any>;
         checkUpdates: (profileId: string, gameVersion: string, loaderType: string) => Promise<any[]>;
+        updateMod: (profileId: string, modId: string, versionId: string, source: 'modrinth' | 'curseforge') => Promise<{ success: boolean; fileName: string }>;
         update: (profileId: string, update: any) => Promise<{ success: boolean }>;
         updateAll: (profileId: string, updates: any[]) => Promise<any>;
         toggle: (profileId: string, fileName: string, enabled: boolean) => Promise<{ success: boolean }>;
@@ -325,6 +332,7 @@ declare global {
         disable: (profileId: string, fileName: string) => Promise<{ success: boolean }>;
         delete: (profileId: string, fileName: string) => Promise<{ success: boolean }>;
         install: (profileId: string, filePath: string) => Promise<{ success: boolean }>;
+        installUrl: (profileId: string, url: string) => Promise<{ success: boolean }>;
         selectFile: () => Promise<string | null>;
       };
       shaderpack: {
@@ -332,6 +340,9 @@ declare global {
         enable: (profileId: string, fileName: string, isDirectory: boolean) => Promise<{ success: boolean }>;
         disable: (profileId: string, fileName: string, isDirectory: boolean) => Promise<{ success: boolean }>;
         delete: (profileId: string, fileName: string, isDirectory: boolean) => Promise<{ success: boolean }>;
+        install: (profileId: string, filePath: string) => Promise<{ success: boolean }>;
+        installUrl: (profileId: string, url: string) => Promise<{ success: boolean }>;
+        selectFile: () => Promise<string | null>;
       };
       settings: {
         get: () => Promise<any>;
@@ -345,6 +356,7 @@ declare global {
         search: (query: string, gameVersion?: string) => Promise<any[]>;
         getVersions: (modpackId: string, gameVersion?: string) => Promise<any[]>;
         install: (profileId: string, versionId: string) => Promise<{ success: boolean }>;
+        installUrl: (profileId: string, url: string) => Promise<{ success: boolean }>;
         validateFile: (filePath: string) => Promise<any>;
         extractMetadata: (filePath: string) => Promise<any>;
         importFile: (filePath: string, profileId: string) => Promise<{ success: boolean }>;
