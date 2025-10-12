@@ -276,6 +276,18 @@ var migrations = []Migration{
 			CREATE INDEX IF NOT EXISTS idx_profile_stats_play_time ON profile_stats(total_play_time DESC);
 		`,
 	},
+	{
+		Version: 14,
+		Name:    "add_mod_source_metadata",
+		SQL: `
+			-- Add source metadata columns for multi-source support
+			ALTER TABLE profile_mods ADD COLUMN source_mod_id TEXT;
+			ALTER TABLE profile_mods ADD COLUMN source_file_id TEXT;
+			
+			-- Create index for source lookups (useful for update checks)
+			CREATE INDEX IF NOT EXISTS idx_profile_mods_source ON profile_mods(source, source_mod_id);
+		`,
+	},
 }
 
 func runMigrations(db *sql.DB) error {

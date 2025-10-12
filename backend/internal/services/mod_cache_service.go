@@ -155,6 +155,14 @@ func (s *ModCacheService) parseModFile(profileID, filePath string, info os.FileI
 		UpdatedAt:    time.Now(),
 	}
 
+	// Try to load source metadata from .meta.json file
+	metaPath := filePath + ".meta.json"
+	if metaData, err := loadMetadataFile(metaPath); err == nil {
+		mod.Source = metaData.Source
+		mod.SourceModID = metaData.SourceModID
+		mod.SourceFileID = metaData.SourceFileID
+	}
+
 	// Try to extract metadata from JAR
 	metadata, err := extractModMetadata(filePath)
 	if err == nil && metadata != nil {
@@ -460,4 +468,27 @@ func (s *ModCacheService) ToggleMod(ctx context.Context, modID string, enabled b
 	}
 
 	return nil
+}
+
+// SourceMetadata represents source information stored in .meta.json files
+type SourceMetadata struct {
+	Source       string `json:"source"`
+	SourceModID  string `json:"sourceModId"`
+	SourceFileID string `json:"sourceFileId"`
+	InstalledAt  string `json:"installedAt"`
+}
+
+// loadMetadataFile loads source metadata from .meta.json file
+func loadMetadataFile(path string) (*SourceMetadata, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	var metadata SourceMetadata
+	if err := json.Unmarshal(data, &metadata); err != nil {
+		return nil, err
+	}
+
+	return &metadata, nil
 }

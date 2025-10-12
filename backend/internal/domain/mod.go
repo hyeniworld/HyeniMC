@@ -4,22 +4,24 @@ import "time"
 
 // Mod represents a cached mod file
 type Mod struct {
-	ID           string    `json:"id"`
-	ProfileID    string    `json:"profileId"`
-	FileName     string    `json:"fileName"`
-	FilePath     string    `json:"filePath"`
-	FileHash     string    `json:"fileHash"`
-	FileSize     int64     `json:"fileSize"`
-	ModID        string    `json:"modId"`        // modrinth/curseforge ID
-	Name         string    `json:"name"`
-	Version      string    `json:"version"`
-	Description  string    `json:"description"`
-	Authors      []string  `json:"authors"`
-	Enabled      bool      `json:"enabled"`
-	Source       string    `json:"source"`       // "modrinth", "curseforge", "local"
-	LastModified time.Time `json:"lastModified"`
-	CreatedAt    time.Time `json:"createdAt"`
-	UpdatedAt    time.Time `json:"updatedAt"`
+	ID            string    `json:"id"`
+	ProfileID     string    `json:"profileId"`
+	FileName      string    `json:"fileName"`
+	FilePath      string    `json:"filePath"`
+	FileHash      string    `json:"fileHash"`
+	FileSize      int64     `json:"fileSize"`
+	ModID         string    `json:"modId"`         // modrinth/curseforge ID
+	Name          string    `json:"name"`
+	Version       string    `json:"version"`
+	Description   string    `json:"description"`
+	Authors       []string  `json:"authors"`
+	Enabled       bool      `json:"enabled"`
+	Source        string    `json:"source"`        // "modrinth", "curseforge", "local"
+	SourceModID   string    `json:"sourceModId"`   // Platform-specific mod ID for update checks
+	SourceFileID  string    `json:"sourceFileId"`  // Platform-specific file/version ID
+	LastModified  time.Time `json:"lastModified"`
+	CreatedAt     time.Time `json:"createdAt"`
+	UpdatedAt     time.Time `json:"updatedAt"`
 }
 
 // ResourcePack represents a cached resource pack

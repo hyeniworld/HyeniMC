@@ -673,6 +673,40 @@ type Mod struct {
 - [ ] 캐시 서비스 수정
 - [ ] 업데이트 체크에서 소스 정보 활용
 
+### ✅ Phase 5: 메타데이터 저장 (완료)
+
+#### 5.1 DB 마이그레이션
+- **파일**: `backend/internal/db/migrations.go`
+- **Migration 14**: `add_mod_source_metadata`
+  - `source_mod_id TEXT` 컬럼 추가
+  - `source_file_id TEXT` 컬럼 추가
+  - 소스 조회 인덱스 생성
+- **상태**: ✅ 구현 완료
+
+#### 5.2 Node.js - 메타데이터 파일 생성
+- **파일**: `src/main/ipc/mod.ts`
+- **변경사항**:
+  - 모드 설치 시 `.meta.json` 파일 생성
+  - 의존성 설치 시에도 메타데이터 저장
+  - 소스, modId, versionId 기록
+- **상태**: ✅ 구현 완료
+
+#### 5.3 Go 백엔드 - 메타데이터 읽기
+- **파일**: `backend/internal/services/mod_cache_service.go`
+- **변경사항**:
+  - `loadMetadataFile()` 함수 추가
+  - 모드 파싱 시 `.meta.json` 읽기
+  - `domain.Mod`에 `SourceModID`, `SourceFileID` 추가
+- **상태**: ✅ 구현 완료
+
+#### 5.4 DB Repository 업데이트
+- **파일**: `backend/internal/cache/mod_repository.go`
+- **변경사항**:
+  - `Save()`: source_mod_id, source_file_id 저장
+  - `BatchSave()`: 배치 저장 지원
+  - `Get()`, `ListByProfile()`: 새 필드 읽기
+- **상태**: ✅ 구현 완료
+
 ### 📊 CurseForge 통합 진행률
 
 | Phase | 상태 | 완료율 |
@@ -682,11 +716,11 @@ type Mod struct {
 | Phase 3: 멀티 소스 통합 | ✅ 완료 | 100% |
 | Phase 4.3: CurseForge 모드 설치 | ✅ 완료 | 100% |
 | Phase 4.4: 의존성 및 업데이트 | ✅ 완료 | 100% |
-| **핵심 기능** | **✅ 완료** | **100%** |
+| **Phase 5: 메타데이터 저장** | **✅ 완료** | **100%** |
 | | | |
-| Phase 4.1-4.2: UI 개선 | ⏳ 선택 | 0% |
-| Phase 5: 메타데이터 저장 | ⏳ 선택 | 0% |
-| Phase 6: 모드팩 지원 | ⏳ 선택 | 0% |
+| Phase 4.1-4.2: UI 개선 | ⏳ 다음 | 0% |
+| Phase 6: CurseForge 업데이트 체크 | ⏳ 다음 | 0% |
+| Phase 7: 모드팩 지원 | ⏳ 선택 | 0% |
 
 ### 🚀 다음 단계 옵션
 

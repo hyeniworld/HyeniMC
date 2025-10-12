@@ -207,6 +207,23 @@ export function registerModHandlers(): void {
       });
 
       console.log(`[IPC Mod] Mod installed successfully: ${version.fileName}`);
+      
+      // Save source metadata for update checks
+      try {
+        const metaPath = `${destPath}.meta.json`;
+        const metadata = {
+          source: source,
+          sourceModId: modId,
+          sourceFileId: versionId,
+          installedAt: new Date().toISOString(),
+        };
+        await fs.writeFile(metaPath, JSON.stringify(metadata, null, 2));
+        console.log(`[IPC Mod] Saved metadata: ${metaPath}`);
+      } catch (metaError) {
+        console.error('[IPC Mod] Failed to save metadata:', metaError);
+        // Don't fail the installation if metadata save fails
+      }
+      
       return { success: true, fileName: version.fileName };
     } catch (error) {
       console.error('[IPC Mod] Failed to install mod:', error);
@@ -327,6 +344,7 @@ export function registerModHandlers(): void {
       console.log(`[IPC Mod] Installing ${dependencies.length} dependencies`);
       const gameDir = getProfileInstanceDir(profileId);
       const modsDir = `${gameDir}/mods`;
+      const fs = await import('fs/promises');
       
       const success: string[] = [];
       const failed: Array<{ modId: string; error: string }> = [];
@@ -388,6 +406,22 @@ export function registerModHandlers(): void {
 
           success.push(dep.modName);
           console.log(`[IPC Mod] Dependency installed: ${version.fileName}`);
+          
+          // Save source metadata for dependency
+          try {
+            const metaPath = `${destPath}.meta.json`;
+            const metadata = {
+              source: dep.source || 'modrinth',
+              sourceModId: dep.modId,
+              sourceFileId: dep.versionId,
+              installedAt: new Date().toISOString(),
+              isDependency: true,
+            };
+            await fs.writeFile(metaPath, JSON.stringify(metadata, null, 2));
+            console.log(`[IPC Mod] Saved dependency metadata: ${metaPath}`);
+          } catch (metaError) {
+            console.error('[IPC Mod] Failed to save dependency metadata:', metaError);
+          }
         } catch (error) {
           console.error(`[IPC Mod] Failed to install dependency ${dep.modId}:`, error);
           failed.push({ 

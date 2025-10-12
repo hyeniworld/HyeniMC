@@ -27,12 +27,14 @@ func (r *ModRepository) Save(mod *domain.Mod) error {
 		INSERT OR REPLACE INTO profile_mods (
 			id, profile_id, file_name, file_path, file_hash, file_size,
 			mod_id, name, version, description, authors, enabled, source,
+			source_mod_id, source_file_id,
 			last_modified, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		mod.ID, mod.ProfileID, mod.FileName, mod.FilePath, mod.FileHash, mod.FileSize,
 		mod.ModID, mod.Name, mod.Version, mod.Description, string(authors),
 		boolToInt(mod.Enabled), mod.Source,
+		mod.SourceModID, mod.SourceFileID,
 		mod.LastModified.Unix(), mod.CreatedAt.Unix(), mod.UpdatedAt.Unix(),
 	)
 	
@@ -58,8 +60,9 @@ func (r *ModRepository) BatchSave(mods []*domain.Mod) error {
 		INSERT OR REPLACE INTO profile_mods (
 			id, profile_id, file_name, file_path, file_hash, file_size,
 			mod_id, name, version, description, authors, enabled, source,
+			source_mod_id, source_file_id,
 			last_modified, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare statement: %w", err)
@@ -72,6 +75,7 @@ func (r *ModRepository) BatchSave(mods []*domain.Mod) error {
 			mod.ID, mod.ProfileID, mod.FileName, mod.FilePath, mod.FileHash, mod.FileSize,
 			mod.ModID, mod.Name, mod.Version, mod.Description, string(authors),
 			boolToInt(mod.Enabled), mod.Source,
+			mod.SourceModID, mod.SourceFileID,
 			mod.LastModified.Unix(), mod.CreatedAt.Unix(), mod.UpdatedAt.Unix(),
 		)
 		if err != nil {
@@ -96,11 +100,13 @@ func (r *ModRepository) Get(id string) (*domain.Mod, error) {
 	err := r.db.QueryRow(`
 		SELECT id, profile_id, file_name, file_path, file_hash, file_size,
 			mod_id, name, version, description, authors, enabled, source,
+			source_mod_id, source_file_id,
 			last_modified, created_at, updated_at
 		FROM profile_mods WHERE id = ?
 	`, id).Scan(
 		&mod.ID, &mod.ProfileID, &mod.FileName, &mod.FilePath, &mod.FileHash, &mod.FileSize,
 		&mod.ModID, &mod.Name, &mod.Version, &mod.Description, &authors, &enabled, &mod.Source,
+		&mod.SourceModID, &mod.SourceFileID,
 		&lastModified, &createdAt, &updatedAt,
 	)
 	
@@ -125,6 +131,7 @@ func (r *ModRepository) ListByProfile(profileID string) ([]*domain.Mod, error) {
 	rows, err := r.db.Query(`
 		SELECT id, profile_id, file_name, file_path, file_hash, file_size,
 			mod_id, name, version, description, authors, enabled, source,
+			source_mod_id, source_file_id,
 			last_modified, created_at, updated_at
 		FROM profile_mods WHERE profile_id = ?
 		ORDER BY file_name ASC
@@ -144,6 +151,7 @@ func (r *ModRepository) ListByProfile(profileID string) ([]*domain.Mod, error) {
 		err := rows.Scan(
 			&mod.ID, &mod.ProfileID, &mod.FileName, &mod.FilePath, &mod.FileHash, &mod.FileSize,
 			&mod.ModID, &mod.Name, &mod.Version, &mod.Description, &authors, &enabled, &mod.Source,
+			&mod.SourceModID, &mod.SourceFileID,
 			&lastModified, &createdAt, &updatedAt,
 		)
 		if err != nil {
@@ -192,11 +200,13 @@ func (r *ModRepository) GetByFileName(profileID, fileName string) (*domain.Mod, 
 	err := r.db.QueryRow(`
 		SELECT id, profile_id, file_name, file_path, file_hash, file_size,
 			mod_id, name, version, description, authors, enabled, source,
+			source_mod_id, source_file_id,
 			last_modified, created_at, updated_at
 		FROM profile_mods WHERE profile_id = ? AND file_name = ?
 	`, profileID, fileName).Scan(
 		&mod.ID, &mod.ProfileID, &mod.FileName, &mod.FilePath, &mod.FileHash, &mod.FileSize,
 		&mod.ModID, &mod.Name, &mod.Version, &mod.Description, &authors, &enabled, &mod.Source,
+		&mod.SourceModID, &mod.SourceFileID,
 		&lastModified, &createdAt, &updatedAt,
 	)
 	
