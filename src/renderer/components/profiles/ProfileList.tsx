@@ -191,7 +191,7 @@ export function ProfileList() {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-4">
-        <Loader2 className="w-12 h-12 text-purple-500 animate-spin" />
+        <Loader2 className="w-12 h-12 text-hyeni-pink-500 animate-spin" />
         <div className="text-gray-400 text-lg">프로필 불러오는 중...</div>
       </div>
     );
@@ -221,7 +221,7 @@ export function ProfileList() {
         </div>
         <button
           onClick={() => setShowCreateModal(true)}
-          className="btn-primary flex items-center gap-2 px-6 py-3 text-base font-semibold shadow-lg shadow-purple-500/20 hover:shadow-purple-500/40 transition-all"
+          className="btn-primary flex items-center gap-2 px-6 py-3 text-base font-semibold shadow-lg shadow-hyeni-pink-500/20 hover:shadow-hyeni-pink-500/40 transition-all"
         >
           <Plus className="w-5 h-5" />
           새 프로필
@@ -242,7 +242,7 @@ export function ProfileList() {
           </div>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="btn-primary flex items-center gap-2 mt-4 px-8 py-4 text-lg font-semibold shadow-lg shadow-purple-500/30"
+            className="btn-primary flex items-center gap-2 mt-4 px-8 py-4 text-lg font-semibold shadow-lg shadow-hyeni-pink-500/30"
           >
             <Plus className="w-5 h-5" />
             첫 프로필 만들기
@@ -255,19 +255,19 @@ export function ProfileList() {
             <div 
               key={profile.id} 
               onClick={() => navigate(`/profile/${profile.id}`)}
-              className="card hover:border-purple-500 hover:shadow-lg hover:shadow-purple-500/10 transition-all duration-200 group cursor-pointer"
+              className="card hover:border-hyeni-pink-500 hover:shadow-lg hover:shadow-hyeni-pink-500/10 transition-all duration-200 group cursor-pointer"
             >
               {/* Profile Icon & Name */}
               <div className="flex items-start gap-4 mb-4">
-                <div className="w-20 h-20 bg-gradient-to-br from-purple-500 via-pink-500 to-purple-600 rounded-xl flex items-center justify-center text-3xl font-bold shadow-lg group-hover:scale-105 transition-transform">
+                <div className="w-20 h-20 bg-gradient-to-br from-hyeni-pink-600 via-hyeni-pink-500 to-hyeni-pink-600 rounded-xl flex items-center justify-center text-3xl font-bold shadow-lg group-hover:scale-105 transition-transform">
                   {profile.icon || profile.name.charAt(0).toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0 pt-1">
-                  <h3 className="text-xl font-bold truncate mb-1 group-hover:text-purple-400 transition-colors">
+                  <h3 className="text-xl font-bold truncate mb-1 group-hover:text-hyeni-pink-400 transition-colors">
                     {profile.name}
                   </h3>
                   <div className="flex items-center gap-2 text-sm">
-                    <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded font-medium">
+                    <span className="px-2 py-0.5 bg-hyeni-pink-500/20 text-hyeni-pink-300 rounded font-medium">
                       {profile.gameVersion}
                     </span>
                     <span className="px-2 py-0.5 bg-gray-700 text-gray-300 rounded font-medium">
@@ -324,7 +324,7 @@ export function ProfileList() {
                       e.stopPropagation();
                       handleLaunch(profile.id);
                     }}
-                    className="flex-1 btn-primary flex items-center justify-center gap-2 py-3 font-semibold shadow-md shadow-purple-500/20 hover:shadow-purple-500/40"
+                    className="flex-1 btn-primary flex items-center justify-center gap-2 py-3 font-semibold shadow-md shadow-hyeni-pink-500/20 hover:shadow-hyeni-pink-500/40"
                   >
                     <Play className="w-4 h-4 fill-current" />
                     플레이

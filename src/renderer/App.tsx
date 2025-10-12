@@ -54,11 +54,11 @@ function MainLayout() {
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-purple-500 via-pink-500 to-purple-600 rounded-xl shadow-lg flex items-center justify-center">
+              <div className="w-10 h-10 bg-gradient-to-br from-hyeni-pink-600 via-hyeni-pink-500 to-hyeni-pink-600 rounded-xl shadow-lg flex items-center justify-center">
                 <Sparkles className="w-6 h-6" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent">
+                <h1 className="text-2xl font-bold bg-gradient-to-r from-hyeni-pink-400 via-hyeni-pink-300 to-hyeni-pink-400 bg-clip-text text-transparent">
                   HyeniMC
                 </h1>
                 <p className="text-xs text-gray-500">혜니월드 전용 런처</p>

@@ -14,6 +14,19 @@ module.exports = {
     },
     extend: {
       colors: {
+        'hyeni-pink': {
+          DEFAULT: '#FF69B4',
+          50: '#FFE5F3',
+          100: '#FFD1E9',
+          200: '#FFA3D3',
+          300: '#FF75BD',
+          400: '#FF4FA7',
+          500: '#FF69B4',
+          600: '#FF1493',
+          700: '#DB0075',
+          800: '#A8005A',
+          900: '#75003F',
+        },
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
