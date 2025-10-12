@@ -5,6 +5,7 @@ import { initializeDownloadStreamBridge, shutdownDownloadStreamBridge } from './
 import { initializeInstanceLogBridge, shutdownInstanceLogBridge } from './ipc/instanceStream';
 import { initializeInstanceStateBridge, shutdownInstanceStateBridge } from './ipc/instanceState';
 import { startBackend, stopBackend } from './backend/manager';
+import { fileWatcher } from './services/file-watcher';
 
 // Set app name
 app.setName('HyeniMC');
@@ -74,6 +75,9 @@ async function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+
+  // Set main window for file watcher
+  fileWatcher.setMainWindow(mainWindow);
 }
 
 async function initialize() {
@@ -120,6 +124,7 @@ app.on('activate', () => {
 });
 
 app.on('before-quit', async () => {
+  await fileWatcher.stopAll();
   shutdownDownloadStreamBridge();
   shutdownInstanceLogBridge();
   shutdownInstanceStateBridge();

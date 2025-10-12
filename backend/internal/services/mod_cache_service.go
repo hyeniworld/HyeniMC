@@ -358,7 +358,75 @@ func (s *ModCacheService) GetMods(ctx context.Context, profileID string, modsDir
 		return s.SyncMods(ctx, profileID, modsDir)
 	}
 
+	// Quick check: detect if file system has changed
+	needsSync, err := s.checkIfSyncNeeded(profileID, modsDir, validMods)
+	if err != nil {
+		log.Printf("[ModCache] Warning: failed to check if sync needed: %v", err)
+		// On error, return cached data (better than failing)
+		return validMods, nil
+	}
+
+	if needsSync {
+		log.Printf("[ModCache] File system changes detected, syncing mods for profile %s", profileID)
+		return s.SyncMods(ctx, profileID, modsDir)
+	}
+
 	return validMods, nil
+}
+
+// checkIfSyncNeeded performs a quick check to see if file system differs from cache
+func (s *ModCacheService) checkIfSyncNeeded(profileID string, modsDir string, cachedMods []*domain.Mod) (bool, error) {
+	// Check if mods directory exists
+	entries, err := os.ReadDir(modsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Directory doesn't exist but we have cached mods = needs sync
+			return len(cachedMods) > 0, nil
+		}
+		return false, err
+	}
+
+	// Count actual .jar files in directory
+	actualJarFiles := make(map[string]os.FileInfo)
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		fileName := entry.Name()
+		if strings.HasSuffix(fileName, ".jar") || strings.HasSuffix(fileName, ".jar.disabled") {
+			info, err := entry.Info()
+			if err != nil {
+				continue
+			}
+			actualJarFiles[fileName] = info
+		}
+	}
+
+	// Quick check 1: Different number of files
+	if len(actualJarFiles) != len(cachedMods) {
+		log.Printf("[ModCache] File count mismatch: %d actual vs %d cached", len(actualJarFiles), len(cachedMods))
+		return true, nil
+	}
+
+	// Quick check 2: Check if all cached files still exist with same modification time
+	for _, cached := range cachedMods {
+		actual, exists := actualJarFiles[cached.FileName]
+		if !exists {
+			// Cached file no longer exists
+			log.Printf("[ModCache] Cached file missing: %s", cached.FileName)
+			return true, nil
+		}
+
+		// Check modification time
+		if actual.ModTime().Unix() != cached.LastModified.Unix() {
+			log.Printf("[ModCache] File modified: %s (cache: %v, actual: %v)", 
+				cached.FileName, cached.LastModified, actual.ModTime())
+			return true, nil
+		}
+	}
+
+	// All checks passed, cache is up to date
+	return false, nil
 }
 
 // ToggleMod enables or disables a mod

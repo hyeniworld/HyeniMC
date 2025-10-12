@@ -116,6 +116,10 @@ export const IPC_CHANNELS = {
   DOWNLOAD_RESUME: 'download:resume',
   DOWNLOAD_CANCEL: 'download:cancel',
   DOWNLOAD_RETRY: 'download:retry',
+  
+  // File Watcher
+  FILE_WATCH_START: 'file:watch-start',
+  FILE_WATCH_STOP: 'file:watch-stop',
 } as const;
 
 export const IPC_EVENTS = {
@@ -143,4 +147,7 @@ export const IPC_EVENTS = {
   SYSTEM_ERROR: 'system:error',
   SYSTEM_WARNING: 'system:warning',
   SYSTEM_INFO: 'system:info',
+  
+  // File Watcher Events
+  FILE_CHANGED: 'file:changed',
 } as const;

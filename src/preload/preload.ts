@@ -208,6 +208,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke(IPC_CHANNELS.MODPACK_SELECT_FILE),
   },
 
+  // File Watcher APIs
+  fileWatcher: {
+    start: (profileId: string, gameDirectory: string): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.FILE_WATCH_START, profileId, gameDirectory),
+    stop: (profileId: string): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.FILE_WATCH_STOP, profileId),
+  },
+
   // Event listeners
   on: (channel: string, callback: (...args: any[]) => void) => {
     // Validate channel is in our allowed list

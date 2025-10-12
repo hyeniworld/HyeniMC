@@ -30,6 +30,40 @@ export const ModList: React.FC<ModListProps> = ({ profileId }) => {
   useEffect(() => {
     loadProfile();
     loadMods();
+    
+    // Start file watcher
+    const startWatcher = async () => {
+      try {
+        const profile = await window.electronAPI.profile.get(profileId);
+        await window.electronAPI.fileWatcher.start(profileId, profile.gameDirectory);
+      } catch (error) {
+        console.error('[ModList] Failed to start file watcher:', error);
+      }
+    };
+    startWatcher();
+    
+    // Listen for file changes
+    const cleanup = window.electronAPI.on('file:changed', async (data: any) => {
+      if (data.profileId === profileId && data.type === 'mods') {
+        console.log('[ModList] File changed:', data);
+        
+        // Partial update instead of full reload to prevent flicker
+        if (data.action === 'remove') {
+          // Remove mod from list immediately
+          setMods(prev => prev.filter(mod => mod.fileName !== data.fileName));
+        } else if (data.action === 'add' || data.action === 'change') {
+          // Reload to get the new/updated mod info
+          const modList = await window.electronAPI.mod.list(profileId);
+          setMods(modList);
+        }
+      }
+    });
+    
+    return () => {
+      cleanup();
+      // Stop file watcher
+      window.electronAPI.fileWatcher.stop(profileId).catch(console.error);
+    };
   }, [profileId]);
 
   const loadProfile = async () => {

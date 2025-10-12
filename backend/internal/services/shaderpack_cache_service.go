@@ -134,7 +134,71 @@ func (s *ShaderPackCacheService) GetShaderPacks(ctx context.Context, profileID s
 		return s.SyncShaderPacks(ctx, profileID, shadersDir)
 	}
 
+	// Quick check: detect if file system has changed
+	needsSync, err := s.checkIfSyncNeeded(profileID, shadersDir, packs)
+	if err != nil {
+		// On error, return cached data (better than failing)
+		return packs, nil
+	}
+
+	if needsSync {
+		return s.SyncShaderPacks(ctx, profileID, shadersDir)
+	}
+
 	return packs, nil
+}
+
+// checkIfSyncNeeded performs a quick check to see if file system differs from cache
+func (s *ShaderPackCacheService) checkIfSyncNeeded(profileID string, shadersDir string, cachedPacks []*domain.ShaderPack) (bool, error) {
+	// Check if shaders directory exists
+	entries, err := os.ReadDir(shadersDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Directory doesn't exist but we have cached packs = needs sync
+			return len(cachedPacks) > 0, nil
+		}
+		return false, err
+	}
+
+	// Count actual shader pack files in directory (zip or directories)
+	actualFiles := make(map[string]os.FileInfo)
+	for _, entry := range entries {
+		fileName := entry.Name()
+		isDir := entry.IsDir()
+		
+		// Only zip files or directories
+		if !isDir && !strings.HasSuffix(fileName, ".zip") {
+			continue
+		}
+		
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		actualFiles[fileName] = info
+	}
+
+	// Quick check 1: Different number of files
+	if len(actualFiles) != len(cachedPacks) {
+		return true, nil
+	}
+
+	// Quick check 2: Check if all cached files still exist with same modification time
+	for _, cached := range cachedPacks {
+		actual, exists := actualFiles[cached.FileName]
+		if !exists {
+			// Cached file no longer exists
+			return true, nil
+		}
+
+		// Check modification time
+		if actual.ModTime().Unix() != cached.LastModified.Unix() {
+			return true, nil
+		}
+	}
+
+	// All checks passed, cache is up to date
+	return false, nil
 }
 
 // ToggleShaderPack enables or disables a shader pack

@@ -87,6 +87,10 @@ declare global {
         getPath: (name: string) => Promise<string>;
         getMemory: () => Promise<number>;
       };
+      fileWatcher: {
+        start: (profileId: string, gameDirectory: string) => Promise<{ success: boolean }>;
+        stop: (profileId: string) => Promise<{ success: boolean }>;
+      };
       on: (channel: string, callback: (...args: any[]) => void) => () => void;
       once: (channel: string, callback: (...args: any[]) => void) => void;
       off: (channel: string, callback: (...args: any[]) => void) => void;

@@ -18,6 +18,39 @@ export const ShaderPackList: React.FC<ShaderPackListProps> = ({ profileId }) => 
 
   useEffect(() => {
     loadPacks();
+    
+    // Start file watcher
+    const startWatcher = async () => {
+      try {
+        const profile = await window.electronAPI.profile.get(profileId);
+        await window.electronAPI.fileWatcher.start(profileId, profile.gameDirectory);
+      } catch (error) {
+        console.error('[ShaderPackList] Failed to start file watcher:', error);
+      }
+    };
+    startWatcher();
+    
+    // Listen for file changes
+    const cleanup = window.electronAPI.on('file:changed', async (data: any) => {
+      if (data.profileId === profileId && data.type === 'shaderpacks') {
+        console.log('[ShaderPackList] File changed:', data);
+        
+        // Partial update instead of full reload to prevent flicker
+        if (data.action === 'remove') {
+          // Remove pack from list immediately
+          setPacks(prev => prev.filter(pack => pack.fileName !== data.fileName));
+        } else if (data.action === 'add' || data.action === 'change') {
+          // Reload to get the new/updated pack info
+          const packList = await window.electronAPI.shaderpack.list(profileId);
+          setPacks(packList);
+        }
+      }
+    });
+    
+    return () => {
+      cleanup();
+      window.electronAPI.fileWatcher.stop(profileId).catch(console.error);
+    };
   }, [profileId]);
 
   const loadPacks = async () => {
