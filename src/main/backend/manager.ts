@@ -1,6 +1,7 @@
 import { spawn, ChildProcess } from 'child_process';
 import path from 'path';
 import { app } from 'electron';
+import fs from 'fs/promises';
 
 let backendProcess: ChildProcess | null = null;
 let backendAddress: string | null = null;
@@ -78,17 +79,10 @@ export async function startBackend(): Promise<string> {
 
     let resolved = false;
 
-    // Capture stdout to get the listening address
+    // Capture stdout for logging
     backendProcess.stdout?.on('data', (data) => {
       const output = data.toString().trim();
       console.log('[Backend]', output);
-
-      if (!resolved && output.match(/^\d+\.\d+\.\d+\.\d+:\d+$/)) {
-        backendAddress = output;
-        resolved = true;
-        console.log('[Backend] Server listening on:', backendAddress);
-        resolve(output);
-      }
     });
 
     backendProcess.stderr?.on('data', (data) => {
@@ -108,12 +102,49 @@ export async function startBackend(): Promise<string> {
       backendAddress = null;
     });
 
-    // Timeout after 10 seconds
-    setTimeout(() => {
-      if (!resolved) {
-        reject(new Error('Backend server failed to start within timeout'));
+    // Poll for the port file (more reliable than stdout parsing)
+    const portFile = path.join(dataDir, '.grpc-port');
+    const maxAttempts = 50; // 5 seconds total (50 * 100ms)
+    let attempts = 0;
+
+    const pollPortFile = async () => {
+      try {
+        const content = await fs.readFile(portFile, 'utf-8');
+        const trimmedContent = content.trim();
+        
+        // Parse format: address|pid
+        const [address, pidStr] = trimmedContent.split('|');
+        
+        // Validate address format (security: prevent injection)
+        if (address && /^127\.0\.0\.1:\d+$/.test(address) && !resolved) {
+          // Optional: Validate PID matches our spawned process
+          const pid = parseInt(pidStr, 10);
+          if (backendProcess && backendProcess.pid !== pid) {
+            console.warn(`[Backend] PID mismatch: expected ${backendProcess.pid}, got ${pid}`);
+          }
+          
+          backendAddress = address;
+          resolved = true;
+          console.log('[Backend] Server listening on:', backendAddress, `(PID: ${pid})`);
+          resolve(backendAddress);
+        } else if (trimmedContent && !resolved) {
+          reject(new Error(`Invalid backend port file format: ${trimmedContent}`));
+        }
+      } catch (err) {
+        // File doesn't exist yet, keep polling
+        attempts++;
+        if (attempts >= maxAttempts) {
+          if (!resolved) {
+            reject(new Error('Backend server failed to start within timeout'));
+          }
+        } else {
+          setTimeout(pollPortFile, 100);
+        }
       }
-    }, 10000);
+    };
+
+    // Start polling after a short delay
+    setTimeout(pollPortFile, 100);
   });
 }
 
@@ -123,9 +154,20 @@ export async function startBackend(): Promise<string> {
 export async function stopBackend(): Promise<void> {
   if (backendProcess) {
     return new Promise((resolve) => {
-      backendProcess!.once('exit', () => {
+      backendProcess!.once('exit', async () => {
         backendProcess = null;
         backendAddress = null;
+        
+        // Clean up port file
+        try {
+          const dataDir = path.join(app.getPath('userData'), 'data');
+          const portFile = path.join(dataDir, '.grpc-port');
+          await fs.unlink(portFile);
+          console.log('[Backend] Cleaned up port file');
+        } catch (err) {
+          // Ignore errors (file might not exist)
+        }
+        
         resolve();
       });
       

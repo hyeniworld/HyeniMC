@@ -13,8 +13,9 @@ import (
 )
 
 func main() {
-    // Route standard logger to stdout (default is stderr)
-    log.SetOutput(os.Stdout)
+	// Keep standard logger on stdout (info logs)
+	// File-based port communication doesn't require clean stdout
+	log.SetOutput(os.Stdout)
 
 	// Get data directory from environment or use default
 	dataDir := os.Getenv("HYENIMC_DATA_DIR")
@@ -26,8 +27,8 @@ func main() {
 		dataDir = filepath.Join(homeDir, ".hyenimc")
 	}
 
-	// Create data directory if it doesn't exist
-	if err := os.MkdirAll(dataDir, 0755); err != nil {
+	// Create data directory if it doesn't exist (owner-only access)
+	if err := os.MkdirAll(dataDir, 0700); err != nil {
 		log.Fatalf("failed to create data directory: %v", err)
 	}
 

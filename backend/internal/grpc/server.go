@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"path/filepath"
 
 	pb "hyenimc/backend/gen/launcher"
 	"hyenimc/backend/internal/services"
@@ -26,10 +27,27 @@ func StartGRPCServer(addr string, db *sql.DB, dataDir string, profileSvc *servic
 		return fmt.Errorf("failed to listen: %w", err)
 	}
 
-	// Print the chosen address for Electron Main to capture via stdout
-	fmt.Println(lis.Addr().String())
-	os.Stdout.Sync() // Ensure stdout is flushed immediately
-	log.Printf("gRPC server listening on %s", lis.Addr().String())
+	// Write the chosen address to a file for Electron Main to read
+	address := lis.Addr().String()
+	portFile := filepath.Join(dataDir, ".grpc-port")
+	
+	// Security: Ensure parent directory exists and has proper permissions
+	if err := os.MkdirAll(dataDir, 0700); err != nil {
+		log.Printf("Warning: failed to create data directory: %v", err)
+	}
+	
+	// Security: Remove old port file if exists (prevent symlink attacks)
+	os.Remove(portFile)
+	
+	// Write with restrictive permissions (owner read/write only)
+	// Format: address|pid for process validation
+	content := fmt.Sprintf("%s|%d", address, os.Getpid())
+	if err := os.WriteFile(portFile, []byte(content), 0600); err != nil {
+		return fmt.Errorf("failed to write port file: %w", err)
+	}
+	
+	// Log server start (all logs go to stderr now)
+	log.Printf("gRPC server listening on %s (port file: %s)", address, portFile)
 
 	server := grpclib.NewServer()
 
