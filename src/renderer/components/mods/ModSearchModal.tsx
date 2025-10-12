@@ -78,11 +78,13 @@ export function ModSearchModal({
       const versions = await window.electronAPI.mod.getVersions(
         mod.id,
         gameVersion,
-        loaderType === 'vanilla' ? undefined : loaderType
+        loaderType === 'vanilla' ? undefined : loaderType,
+        mod.source  // Pass source (modrinth | curseforge)
       );
       setModVersions(versions);
       if (versions.length > 0) {
-        await handleSelectVersion(versions[0]);
+        // Pass mod directly to avoid state update timing issues
+        await handleSelectVersion(versions[0], mod);
       }
     } catch (error) {
       console.error('Failed to load versions:', error);
@@ -91,20 +93,34 @@ export function ModSearchModal({
     }
   };
 
-  const handleSelectVersion = async (version: ModVersion) => {
+  const handleSelectVersion = async (version: ModVersion, mod?: ModSearchResult) => {
+    // Use passed mod or selectedMod from state
+    const currentMod = mod || selectedMod;
+    
+    console.log('[ModSearchModal] Selecting version:', version.id, 'for mod:', currentMod?.id, 'source:', currentMod?.source);
     setSelectedVersion(version);
     setShowVersions(false);
     
     // Check dependencies for this version
-    if (version.id) {
+    if (version.id && currentMod) {
+      console.log('[ModSearchModal] Checking dependencies for:', {
+        modId: currentMod.id,
+        versionId: version.id,
+        gameVersion,
+        loaderType,
+        source: currentMod.source
+      });
       setIsCheckingDependencies(true);
       try {
         const result = await window.electronAPI.mod.checkDependencies(
           profileId,
+          currentMod.id,      // Pass modId
           version.id,
           gameVersion,
-          loaderType
+          loaderType,
+          currentMod.source  // Pass source
         );
+        console.log('[ModSearchModal] Dependency check result:', result);
         setDependencies(result.dependencies || []);
         setDependencyIssues(result.issues || []);
         
@@ -116,6 +132,8 @@ export function ModSearchModal({
       } finally {
         setIsCheckingDependencies(false);
       }
+    } else {
+      console.log('[ModSearchModal] Skipping dependency check - no version.id or currentMod');
     }
   };
 
@@ -137,7 +155,7 @@ export function ModSearchModal({
       }
 
       // Install the main mod
-      await window.electronAPI.mod.install(profileId, selectedMod.id, selectedVersion.id);
+      await window.electronAPI.mod.install(profileId, selectedMod.id, selectedVersion.id, selectedMod.source);
       
       const message = requiredDeps.length > 0
         ? `${selectedMod.name} 및 ${requiredDeps.length}개 의존성 설치 완료!`

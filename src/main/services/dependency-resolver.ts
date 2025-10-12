@@ -1,6 +1,7 @@
 import { ModrinthAPI } from './modrinth-api';
+import { CurseForgeAPI } from './curseforge-api';
 import { ModManager } from './mod-manager';
-import type { ModVersion, ModDependency } from '../../shared/types/profile';
+import type { ModVersion, ModDependency, LoaderType } from '../../shared/types/profile';
 
 export interface DependencyResolution {
   modId: string;
@@ -9,6 +10,7 @@ export interface DependencyResolution {
   versionNumber: string;
   required: boolean;
   alreadyInstalled: boolean;
+  source: 'modrinth' | 'curseforge';
 }
 
 export interface DependencyIssue {
@@ -21,9 +23,11 @@ export interface DependencyIssue {
 
 export class DependencyResolver {
   private modrinthAPI: ModrinthAPI;
+  private curseforgeAPI: CurseForgeAPI;
 
   constructor() {
     this.modrinthAPI = new ModrinthAPI();
+    this.curseforgeAPI = new CurseForgeAPI();
   }
 
   /**
@@ -33,7 +37,8 @@ export class DependencyResolver {
     versionId: string,
     gameVersion: string,
     loaderType: string,
-    installedMods: Array<{ id: string; name: string; fileName: string }>
+    installedMods: Array<{ id: string; name: string; fileName: string }>,
+    source: 'modrinth' | 'curseforge' = 'modrinth'
   ): Promise<{
     dependencies: DependencyResolution[];
     issues: DependencyIssue[];
@@ -43,8 +48,21 @@ export class DependencyResolver {
     const processedMods = new Set<string>();
 
     try {
-      // Get the version details correctly by versionId
-      const version = await this.modrinthAPI.getVersion(versionId);
+      console.log(`[DependencyResolver] Resolving dependencies from ${source} for version: ${versionId}`);
+      
+      // Get the version details from the appropriate source
+      let version: ModVersion | null = null;
+      
+      if (source === 'curseforge') {
+        // For CurseForge, dependency checking is limited
+        // CurseForge API returns dependencies but doesn't have a direct getVersion by versionId
+        // We'll skip dependency resolution for CurseForge for now
+        // Dependencies are still included in the version data when fetched
+        console.log(`[DependencyResolver] CurseForge dependency resolution skipped (dependencies included in version data)`);
+        return { dependencies, issues };
+      }
+      
+      version = await this.modrinthAPI.getVersion(versionId);
       
       if (!version || !version.dependencies) {
         return { dependencies, issues };
@@ -75,10 +93,8 @@ export class DependencyResolver {
         }
 
         try {
-          // Get the dependency mod details
+          // Get the dependency mod details (only for Modrinth at this point)
           const depDetails = await this.modrinthAPI.getModDetails(dep.modId);
-          
-          // Find compatible version
           const depVersions = await this.modrinthAPI.getModVersions(
             dep.modId,
             gameVersion,
@@ -106,6 +122,7 @@ export class DependencyResolver {
             versionNumber: latestVersion.versionNumber,
             required: isRequired,
             alreadyInstalled: false,
+            source: source,
           });
 
           console.log(`[DependencyResolver] Found dependency: ${depDetails.name} (${latestVersion.versionNumber})`);

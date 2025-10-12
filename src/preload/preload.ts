@@ -136,14 +136,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke(IPC_CHANNELS.MOD_LIST, profileId),
     search: (query: string, filters?: any): Promise<{ hits: any[]; total: number }> =>
       ipcRenderer.invoke(IPC_CHANNELS.MOD_SEARCH, query, filters),
-    getDetails: (modId: string): Promise<any> =>
-      ipcRenderer.invoke(IPC_CHANNELS.MOD_GET_DETAILS, modId),
-    getVersions: (modId: string, gameVersion?: string, loaderType?: string): Promise<any[]> =>
-      ipcRenderer.invoke(IPC_CHANNELS.MOD_GET_VERSIONS, modId, gameVersion, loaderType),
-    install: (profileId: string, modId: string, versionId: string): Promise<{ success: boolean; fileName: string }> =>
-      ipcRenderer.invoke(IPC_CHANNELS.MOD_INSTALL, profileId, modId, versionId),
-    checkDependencies: (profileId: string, versionId: string, gameVersion: string, loaderType: string): Promise<any> =>
-      ipcRenderer.invoke(IPC_CHANNELS.MOD_CHECK_DEPENDENCIES, profileId, versionId, gameVersion, loaderType),
+    getDetails: (modId: string, source?: 'modrinth' | 'curseforge'): Promise<any> =>
+      ipcRenderer.invoke(IPC_CHANNELS.MOD_GET_DETAILS, modId, source),
+    getVersions: (modId: string, gameVersion?: string, loaderType?: string, source?: 'modrinth' | 'curseforge'): Promise<any[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.MOD_GET_VERSIONS, modId, gameVersion, loaderType, source),
+    install: (profileId: string, modId: string, versionId: string, source?: 'modrinth' | 'curseforge'): Promise<{ success: boolean; fileName: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.MOD_INSTALL, profileId, modId, versionId, source),
+    checkDependencies: (profileId: string, modId: string, versionId: string, gameVersion: string, loaderType: string, source?: 'modrinth' | 'curseforge'): Promise<any> =>
+      ipcRenderer.invoke(IPC_CHANNELS.MOD_CHECK_DEPENDENCIES, profileId, modId, versionId, gameVersion, loaderType, source),
     installDependencies: (profileId: string, dependencies: any[]): Promise<any> =>
       ipcRenderer.invoke(IPC_CHANNELS.MOD_INSTALL_DEPENDENCIES, profileId, dependencies),
     checkUpdates: (profileId: string, gameVersion: string, loaderType: string): Promise<any[]> =>
@@ -254,6 +254,10 @@ declare global {
         update: (id: string, data: any) => Promise<any>;
         delete: (id: string) => Promise<void>;
         launch: (id: string, accountId?: string) => Promise<void>;
+        getStats: (profileId: string) => Promise<any>;
+        recordLaunch: (profileId: string) => Promise<void>;
+        recordPlayTime: (profileId: string, seconds: number) => Promise<void>;
+        recordCrash: (profileId: string) => Promise<void>;
       };
       account: {
         loginMicrosoft: () => Promise<any>;
@@ -298,10 +302,10 @@ declare global {
       mod: {
         list: (profileId: string) => Promise<any[]>;
         search: (query: string, filters?: any) => Promise<{ hits: any[]; total: number }>;
-        getDetails: (modId: string) => Promise<any>;
-        getVersions: (modId: string, gameVersion?: string, loaderType?: string) => Promise<any[]>;
-        install: (profileId: string, modId: string, versionId: string) => Promise<{ success: boolean; fileName: string }>;
-        checkDependencies: (profileId: string, versionId: string, gameVersion: string, loaderType: string) => Promise<any>;
+        getDetails: (modId: string, source?: 'modrinth' | 'curseforge') => Promise<any>;
+        getVersions: (modId: string, gameVersion?: string, loaderType?: string, source?: 'modrinth' | 'curseforge') => Promise<any[]>;
+        install: (profileId: string, modId: string, versionId: string, source?: 'modrinth' | 'curseforge') => Promise<{ success: boolean; fileName: string }>;
+        checkDependencies: (profileId: string, modId: string, versionId: string, gameVersion: string, loaderType: string, source?: 'modrinth' | 'curseforge') => Promise<any>;
         installDependencies: (profileId: string, dependencies: any[]) => Promise<any>;
         checkUpdates: (profileId: string, gameVersion: string, loaderType: string) => Promise<any[]>;
         update: (profileId: string, update: any) => Promise<{ success: boolean }>;
