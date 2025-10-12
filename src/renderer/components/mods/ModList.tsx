@@ -11,6 +11,9 @@ interface Mod {
   enabled: boolean;
   loader: string;
   fileName: string;
+  source?: 'modrinth' | 'curseforge' | 'local';
+  sourceModId?: string;
+  sourceFileId?: string;
 }
 
 interface ModListProps {
@@ -88,12 +91,13 @@ export const ModList: React.FC<ModListProps> = ({ profileId }) => {
     }
   };
 
-  const toggleMod = async (fileName: string, enabled: boolean) => {
+  const toggleMod = async (fileName: string, currentEnabled: boolean) => {
     try {
-      await window.electronAPI.mod.toggle(profileId, fileName, !enabled);
+      const newEnabled = !currentEnabled;
+      await window.electronAPI.mod.toggle(profileId, fileName, newEnabled);
       // Update state locally instead of reloading
       setMods(prev => prev.map(mod => 
-        mod.fileName === fileName ? { ...mod, enabled: !enabled } : mod
+        mod.fileName === fileName ? { ...mod, enabled: newEnabled } : mod
       ));
     } catch (error) {
       console.error('Failed to toggle mod:', error);
@@ -262,7 +266,7 @@ export const ModList: React.FC<ModListProps> = ({ profileId }) => {
             >
               <div className="flex items-start justify-between">
                 <div className="flex-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
                       {mod.name}
                     </h3>
@@ -272,6 +276,17 @@ export const ModList: React.FC<ModListProps> = ({ profileId }) => {
                     <span className="px-2 py-0.5 text-xs rounded bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">
                       {mod.loader}
                     </span>
+                    {mod.source && mod.source !== 'local' && (
+                      <span
+                        className={`px-2 py-0.5 text-xs font-medium rounded ${
+                          mod.source === 'curseforge'
+                            ? 'bg-orange-500/20 text-orange-600 dark:text-orange-400 border border-orange-500/50'
+                            : 'bg-green-500/20 text-green-600 dark:text-green-400 border border-green-500/50'
+                        }`}
+                      >
+                        {mod.source === 'curseforge' ? '🟠 CF' : '🟢 MR'}
+                      </span>
+                    )}
                   </div>
                   {mod.description && (
                     <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
