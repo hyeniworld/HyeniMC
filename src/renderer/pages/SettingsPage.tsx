@@ -163,8 +163,8 @@ export const SettingsPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950">
-      <div className="container mx-auto px-6 py-8 max-w-6xl space-y-6">
+    <div className="h-full">
+      <div className="max-w-6xl space-y-6">
         {/* Header */}
         <div className="flex items-start justify-between">
           <div>

@@ -262,13 +262,13 @@ export const ModList: React.FC<ModListProps> = ({ profileId }) => {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+      <div className="flex items-center justify-between p-4 border-b border-gray-700">
         <div className="flex items-center gap-4">
-          <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200">
+          <h2 className="text-xl font-semibold text-gray-200">
             모드 ({filteredMods.length})
           </h2>
           {updates.length > 0 && (
-            <span className="px-3 py-1 bg-green-500/20 text-green-600 dark:text-green-400 rounded-full text-sm font-medium">
+            <span className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm font-medium">
               {updates.length}개 업데이트 가능
             </span>
           )}
@@ -317,7 +317,7 @@ export const ModList: React.FC<ModListProps> = ({ profileId }) => {
           placeholder="모드 검색..."
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200"
+          className="w-full px-4 py-2 border border-gray-600 rounded-lg bg-gray-800 text-gray-200 placeholder-gray-400"
         />
       </div>
 
@@ -333,25 +333,25 @@ export const ModList: React.FC<ModListProps> = ({ profileId }) => {
               key={mod.fileName}
               className={`p-4 border rounded-lg transition-colors ${
                 mod.enabled
-                  ? 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'
-                  : 'bg-gray-50 dark:bg-gray-900 border-gray-300 dark:border-gray-600 opacity-60'
+                  ? 'bg-gray-800 border-gray-700'
+                  : 'bg-gray-900 border-gray-600 opacity-60'
               }`}
             >
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
+                    <h3 className="text-lg font-semibold text-gray-200">
                       {mod.name}
                     </h3>
-                    <span className="text-sm text-gray-500 dark:text-gray-400">
+                    <span className="text-sm text-gray-400">
                       v{mod.version}
                     </span>
                     {mod.hasUpdate && mod.updateInfo && (
-                      <span className="text-xs text-gray-400 dark:text-gray-500">
+                      <span className="text-xs text-gray-500">
                         → v{mod.updateInfo.latestVersion}
                       </span>
                     )}
-                    <span className="px-2 py-0.5 text-xs rounded bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">
+                    <span className="px-2 py-0.5 text-xs rounded bg-blue-900 text-blue-200">
                       {mod.loader}
                     </span>
                     {mod.source && mod.source !== 'local' && (
@@ -372,12 +372,12 @@ export const ModList: React.FC<ModListProps> = ({ profileId }) => {
                     )}
                   </div>
                   {mod.description && (
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    <p className="text-sm text-gray-400 mt-1">
                       {mod.description}
                     </p>
                   )}
                   {mod.authors && mod.authors.length > 0 && (
-                    <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                    <p className="text-xs text-gray-500 mt-1">
                       by {mod.authors.join(', ')}
                     </p>
                   )}
@@ -405,15 +405,15 @@ export const ModList: React.FC<ModListProps> = ({ profileId }) => {
                     onClick={() => toggleMod(mod.fileName, mod.enabled)}
                     className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
                       mod.enabled
-                        ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-800'
-                        : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+                        ? 'bg-green-900 text-green-300 hover:bg-green-800'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                     }`}
                   >
                     {mod.enabled ? '활성화됨' : '비활성화됨'}
                   </button>
                   <button
                     onClick={() => deleteMod(mod.fileName)}
-                    className="px-3 py-1 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded text-sm font-medium hover:bg-red-200 dark:hover:bg-red-800 transition-colors"
+                    className="px-3 py-1 bg-red-900 text-red-300 rounded text-sm font-medium hover:bg-red-800 transition-colors"
                   >
                     삭제
                   </button>

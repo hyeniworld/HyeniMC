@@ -67,7 +67,7 @@ export const ShaderPackList: React.FC<ShaderPackListProps> = ({ profileId }) => 
 
   const togglePack = async (fileName: string, enabled: boolean, isDirectory: boolean) => {
     if (isDirectory) {
-      alert('디렉토리 형태의 셸이더팩은 활성화/비활성화할 수 없습니다.');
+      alert('디렉토리 형태의 셰이더팩은 활성화/비활성화할 수 없습니다.');
       return;
     }
 
@@ -88,7 +88,7 @@ export const ShaderPackList: React.FC<ShaderPackListProps> = ({ profileId }) => 
   };
 
   const deletePack = async (fileName: string, isDirectory: boolean) => {
-    if (!confirm('정말 이 셸이더팩을 삭제하시겠습니까?')) return;
+    if (!confirm('정말 이 셰이더팩을 삭제하시겠습니까?')) return;
 
     try {
       await window.electronAPI.shaderpack.delete(profileId, fileName, isDirectory);
@@ -127,12 +127,12 @@ export const ShaderPackList: React.FC<ShaderPackListProps> = ({ profileId }) => 
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+      <div className="flex items-center justify-between p-4 border-b border-gray-700">
         <div>
-          <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200">
+          <h2 className="text-xl font-semibold text-gray-200">
             셰이더팩 ({filteredPacks.length})
           </h2>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+          <p className="text-xs text-gray-400 mt-1">
             Iris 또는 OptiFine이 필요합니다
           </p>
         </div>
@@ -148,7 +148,7 @@ export const ShaderPackList: React.FC<ShaderPackListProps> = ({ profileId }) => 
           placeholder="셰이더팩 검색..."
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200"
+          className="w-full px-4 py-2 border border-gray-600 rounded-lg bg-gray-800 text-gray-200 placeholder-gray-400"
         />
       </div>
 
@@ -164,29 +164,29 @@ export const ShaderPackList: React.FC<ShaderPackListProps> = ({ profileId }) => 
               key={pack.fileName}
               className={`p-4 border rounded-lg transition-colors ${
                 pack.enabled
-                  ? 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'
-                  : 'bg-gray-50 dark:bg-gray-900 border-gray-300 dark:border-gray-600 opacity-60'
+                  ? 'bg-gray-800 border-gray-700'
+                  : 'bg-gray-900 border-gray-600 opacity-60'
               }`}
             >
               <div className="flex items-start gap-4">
                 {/* Info */}
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
-                    <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
+                    <h3 className="text-lg font-semibold text-gray-200">
                       {pack.name}
                     </h3>
                     {pack.isDirectory && (
-                      <span className="px-2 py-0.5 text-xs rounded bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200">
+                      <span className="px-2 py-0.5 text-xs rounded bg-yellow-900 text-yellow-200">
                         폴더
                       </span>
                     )}
                     {!pack.isDirectory && (
-                      <span className="px-2 py-0.5 text-xs rounded bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">
+                      <span className="px-2 py-0.5 text-xs rounded bg-blue-900 text-blue-200">
                         ZIP
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  <p className="text-xs text-gray-400 mt-1">
                     {pack.fileName}
                   </p>
                 </div>
@@ -198,8 +198,8 @@ export const ShaderPackList: React.FC<ShaderPackListProps> = ({ profileId }) => 
                       onClick={() => togglePack(pack.fileName, pack.enabled, pack.isDirectory)}
                       className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
                         pack.enabled
-                          ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-800'
-                          : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+                          ? 'bg-green-900 text-green-300 hover:bg-green-800'
+                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                       }`}
                     >
                       {pack.enabled ? '활성화됨' : '비활성화됨'}
@@ -207,7 +207,7 @@ export const ShaderPackList: React.FC<ShaderPackListProps> = ({ profileId }) => 
                   )}
                   <button
                     onClick={() => deletePack(pack.fileName, pack.isDirectory)}
-                    className="px-3 py-1 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded text-sm font-medium hover:bg-red-200 dark:hover:bg-red-800 transition-colors"
+                    className="px-3 py-1 bg-red-900 text-red-300 rounded text-sm font-medium hover:bg-red-800 transition-colors"
                   >
                     삭제
                   </button>

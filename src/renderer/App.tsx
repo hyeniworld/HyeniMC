@@ -1,5 +1,5 @@
 import React, { useState, createContext, useContext } from 'react';
-import { HashRouter, Routes, Route, Link } from 'react-router-dom';
+import { HashRouter, Routes, Route, Link, Outlet } from 'react-router-dom';
 import { ProfileList } from './components/profiles/ProfileList';
 import { ProfileDetailPage } from './pages/ProfileDetailPage';
 import { AccountManager } from './components/accounts/AccountManager';
@@ -33,9 +33,11 @@ function App() {
       <AccountContext.Provider value={{ selectedAccountId, setSelectedAccountId }}>
         <HashRouter>
           <Routes>
-            <Route path="/" element={<MainLayout />} />
-            <Route path="/profile/:profileId" element={<ProfileDetailPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/" element={<MainLayout />}>
+              <Route index element={<ProfileList />} />
+              <Route path="profile/:profileId" element={<ProfileDetailPage />} />
+              <Route path="settings" element={<SettingsPage />} />
+            </Route>
           </Routes>
         </HashRouter>
         {/* Global Download/Install Modal (rich) */}
@@ -89,7 +91,7 @@ function MainLayout() {
 
         {/* 오른쪽: 메인 컨텐츠 영역 */}
         <main className="flex-1 px-6 py-8 overflow-y-auto overflow-x-hidden">
-          <ProfileList />
+          <Outlet />
         </main>
       </div>
     
