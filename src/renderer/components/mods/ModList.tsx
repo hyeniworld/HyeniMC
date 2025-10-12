@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, RefreshCw } from 'lucide-react';
 import { ModSearchModal } from './ModSearchModal';
+import { useToast } from '../../contexts/ToastContext';
 
 interface ModUpdateInfo {
   modId: string;
@@ -38,6 +39,7 @@ interface ModListProps {
 }
 
 export const ModList: React.FC<ModListProps> = ({ profileId }) => {
+  const toast = useToast();
   const [mods, setMods] = useState<Mod[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
@@ -139,7 +141,7 @@ export const ModList: React.FC<ModListProps> = ({ profileId }) => {
     const file = event.target.files?.[0];
     if (!file) return;
     console.log('File selected:', file.name);
-    alert('모드 파일 업로드 기능은 준비 중입니다.');
+    toast.info('준비 중', '모드 파일 업로드 기능은 준비 중입니다.');
   };
 
   const handleCheckUpdates = async () => {
@@ -168,13 +170,13 @@ export const ModList: React.FC<ModListProps> = ({ profileId }) => {
       }));
       
       if (foundUpdates.length === 0) {
-        alert('모든 모드가 최신 버전입니다!');
+        toast.success('최신 버전', '모든 모드가 최신 버전입니다!');
       } else {
-        alert(`${foundUpdates.length}개의 업데이트를 찾았습니다!`);
+        toast.success('업데이트 발견', `${foundUpdates.length}개의 업데이트를 찾았습니다!`);
       }
     } catch (error) {
       console.error('Failed to check updates:', error);
-      alert('업데이트 확인에 실패했습니다.');
+      toast.error('업데이트 확인 실패', '업데이트 확인에 실패했습니다.');
     } finally {
       setCheckingUpdates(false);
     }
@@ -197,7 +199,7 @@ export const ModList: React.FC<ModListProps> = ({ profileId }) => {
         mod.updateInfo.source
       );
 
-      alert(`${mod.name} 업데이트 완료!`);
+      toast.success('업데이트 완료', `${mod.name}이(가) 성공적으로 업데이트되었습니다.`);
       
       // 업데이트 목록에서 제거
       setUpdates(prev => prev.filter(u => u.fileName !== mod.fileName));
@@ -206,7 +208,8 @@ export const ModList: React.FC<ModListProps> = ({ profileId }) => {
       await loadMods();
     } catch (error) {
       console.error('Failed to update mod:', error);
-      alert(`${mod.name} 업데이트 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
+      const errorMsg = error instanceof Error ? error.message : '알 수 없는 오류';
+      toast.error('업데이트 실패', `${mod.name}: ${errorMsg}`);
     } finally {
       setUpdatingModIds(prev => {
         const newSet = new Set(prev);
@@ -227,14 +230,17 @@ export const ModList: React.FC<ModListProps> = ({ profileId }) => {
     try {
       const result = await window.electronAPI.mod.updateAll(profileId, updates);
       
-      const message = `성공: ${result.success.length}개\n실패: ${result.failed.length}개`;
-      alert(`모드 업데이트 완료!\n\n${message}`);
+      if (result.failed.length === 0) {
+        toast.success('전체 업데이트 완료', `${result.success.length}개의 모드가 업데이트되었습니다.`);
+      } else {
+        toast.warning('업데이트 완료', `성공: ${result.success.length}개, 실패: ${result.failed.length}개`);
+      }
       
       setUpdates([]);
       await loadMods();
     } catch (error) {
       console.error('Failed to update mods:', error);
-      alert('모드 업데이트에 실패했습니다.');
+      toast.error('업데이트 실패', '모드 업데이트에 실패했습니다.');
     } finally {
       setUpdatingMods(false);
     }

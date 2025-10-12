@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { SectionCard } from '../components/common/SectionCard';
 import { Slider } from '../components/common/Slider';
+import { useToast } from '../contexts/ToastContext';
 
 type DownloadSettings = {
   request_timeout_ms?: number;
@@ -34,8 +35,9 @@ type GlobalSettings = {
   cache?: CacheSettings;
 };
 
-export function SettingsPage() {
+export const SettingsPage: React.FC = () => {
   const navigate = useNavigate();
+  const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState<GlobalSettings>({});
@@ -103,9 +105,9 @@ export function SettingsPage() {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      alert('✅ 설정을 내보냈습니다.');
+      toast.success('내보내기 성공', '설정을 성공적으로 내보냈습니다.');
     } catch (error) {
-      alert('❌ 설정 내보내기에 실패했습니다.');
+      toast.error('내보내기 실패', '설정 내보내기에 실패했습니다.');
     }
   };
   
@@ -124,24 +126,24 @@ export function SettingsPage() {
             const data = e.target?.result as string;
             const result = await window.electronAPI.settings.import(data);
             if (result.success) {
-              alert('✅ ' + result.message);
+              toast.success('가져오기 성공', result.message);
               // Reload settings
               const gs = await window.electronAPI.settings.get();
               const filled = fillDefaults(gs || {});
               setSettings(filled);
               setOriginal(filled);
             } else {
-              alert('❌ ' + result.message);
+              toast.error('가져오기 실패', result.message);
             }
           } catch (error) {
-            alert('❌ JSON 파싱에 실패했습니다.');
+            toast.error('파일 오류', 'JSON 파싱에 실패했습니다.');
           }
         };
         reader.readAsText(file);
       };
       input.click();
     } catch (error) {
-      alert('❌ 설정 가져오기에 실패했습니다.');
+      toast.error('가져오기 실패', '설정 가져오기에 실패했습니다.');
     }
   };
 
@@ -378,11 +380,11 @@ export function SettingsPage() {
                     if (confirm('정말로 모든 캐시를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
                       const result = await window.electronAPI.settings.resetCache();
                       if (result.success) {
-                        alert('✅ ' + result.message);
+                        toast.success('캐시 삭제 완료', result.message);
                         const stats = await window.electronAPI.settings.getCacheStats();
                         setCacheStats(stats);
                       } else {
-                        alert('❌ ' + result.message);
+                        toast.error('캐시 삭제 실패', result.message);
                       }
                     }
                   }}

@@ -7,6 +7,7 @@ import { Sparkles } from 'lucide-react';
 import { GlobalDownloadModal } from './components/common/GlobalDownloadModal';
 import { SettingsPage } from './pages/SettingsPage';
 import { useDownloadProgress } from './hooks/useDownloadProgress';
+import { ToastProvider } from './contexts/ToastContext';
 
 // Global account context
 interface AccountContextType {
@@ -27,17 +28,19 @@ function App() {
   useDownloadProgress();
 
   return (
-    <AccountContext.Provider value={{ selectedAccountId, setSelectedAccountId }}>
-      <HashRouter>
-        <Routes>
-          <Route path="/" element={<MainLayout />} />
-          <Route path="/profile/:profileId" element={<ProfileDetailPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-        </Routes>
-      </HashRouter>
-      {/* Global Download/Install Modal (rich) */}
-      <GlobalDownloadModal />
-    </AccountContext.Provider>
+    <ToastProvider>
+      <AccountContext.Provider value={{ selectedAccountId, setSelectedAccountId }}>
+        <HashRouter>
+          <Routes>
+            <Route path="/" element={<MainLayout />} />
+            <Route path="/profile/:profileId" element={<ProfileDetailPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+          </Routes>
+        </HashRouter>
+        {/* Global Download/Install Modal (rich) */}
+        <GlobalDownloadModal />
+      </AccountContext.Provider>
+    </ToastProvider>
   );
 }
 

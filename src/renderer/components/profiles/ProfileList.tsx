@@ -4,10 +4,12 @@ import { Play, Settings, Trash2, Plus, FolderOpen, Clock, Loader2 } from 'lucide
 import { CreateProfileModal } from './CreateProfileModal';
 import { useDownloadStore } from '../../store/downloadStore';
 import { useAccount } from '../../App';
+import { useToast } from '../../contexts/ToastContext';
 
 export function ProfileList() {
   const navigate = useNavigate();
   const { selectedAccountId } = useAccount();
+  const toast = useToast();
   const [profiles, setProfiles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -104,7 +106,7 @@ export function ProfileList() {
 
       // Check if already running
       if (runningProfiles.has(profileId)) {
-        alert('이 프로필은 이미 실행 중입니다!');
+        toast.warning('이미 실행 중', '이 프로필은 이미 실행 중입니다.');
         return;
       }
 
@@ -157,9 +159,11 @@ export function ProfileList() {
 
     try {
       await window.electronAPI.game.stop(profileId);
+      toast.success('게임 중단', '게임이 종료되었습니다.');
     } catch (err) {
       console.error('Failed to stop game:', err);
-      alert(err instanceof Error ? err.message : '게임 중단에 실패했습니다.');
+      const errorMsg = err instanceof Error ? err.message : '게임 중단에 실패했습니다.';
+      toast.error('중단 실패', errorMsg);
     }
   };
 
@@ -170,10 +174,12 @@ export function ProfileList() {
 
     try {
       await window.electronAPI.profile.delete(profileId);
+      toast.success('삭제 완료', '프로필이 삭제되었습니다.');
       await loadProfiles();
     } catch (err) {
       console.error('Failed to delete profile:', err);
-      alert(err instanceof Error ? err.message : '프로필 삭제에 실패했습니다.');
+      const errorMsg = err instanceof Error ? err.message : '프로필 삭제에 실패했습니다.';
+      toast.error('삭제 실패', errorMsg);
     }
   };
 
