@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"path/filepath"
+	"sort"
+	"strings"
 
 	"hyenimc/backend/internal/cache"
 	"hyenimc/backend/internal/domain"
@@ -53,6 +55,19 @@ func (s *modServiceServer) ListMods(ctx context.Context, req *pb.ListModsRequest
 	}
 
 	log.Printf("[ModService] Found %d mods", len(mods))
+
+	// Sort mods alphabetically by name (case-insensitive)
+	sort.Slice(mods, func(i, j int) bool {
+		nameI := mods[i].Name
+		nameJ := mods[j].Name
+		if nameI == "" {
+			nameI = mods[i].FileName
+		}
+		if nameJ == "" {
+			nameJ = mods[j].FileName
+		}
+		return strings.ToLower(nameI) < strings.ToLower(nameJ)
+	})
 
 	pbMods := make([]*pb.Mod, len(mods))
 	for i, mod := range mods {
