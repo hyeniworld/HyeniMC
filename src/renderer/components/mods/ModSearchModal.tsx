@@ -1,24 +1,20 @@
 import React, { useState, useEffect } from 'react';
+import { useToast } from '../../contexts/ToastContext';
 import { X, Search, Download, Loader2, ExternalLink, ChevronDown, AlertCircle, CheckCircle } from 'lucide-react';
 import type { ModSearchResult, ModVersion } from '../../../shared/types/profile';
 
 interface ModSearchModalProps {
   isOpen: boolean;
   profileId: string;
+  profile: any;
   gameVersion: string;
   loaderType: string;
   onClose: () => void;
   onInstallSuccess?: () => void;
 }
 
-export function ModSearchModal({
-  isOpen,
-  profileId,
-  gameVersion,
-  loaderType,
-  onClose,
-  onInstallSuccess,
-}: ModSearchModalProps) {
+export function ModSearchModal({ isOpen, onClose, profileId, profile, onInstallSuccess }: ModSearchModalProps) {
+  const toast = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<ModSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -59,7 +55,7 @@ export function ModSearchModal({
     } catch (error) {
       console.error('Failed to search mods:', error);
       if (error instanceof Error && error.message.includes('CurseForge API key')) {
-        alert('CurseForge API 키가 설정되지 않았습니다. Modrinth를 사용해주세요.');
+        toast.warning('API 키 없음', 'CurseForge API 키가 설정되지 않았습니다. Modrinth를 사용해주세요.');
         setSearchSource('modrinth');
       }
     } finally {
@@ -150,7 +146,7 @@ export function ModSearchModal({
         
         if (depResult.failed.length > 0) {
           const failedNames = depResult.failed.map((f: any) => f.modId).join(', ');
-          alert(`일부 의존성 설치 실패: ${failedNames}\n\n계속해서 모드를 설치합니다.`);
+          toast.warning('의존성 설치 실패', `일부 의존성 설치 실패: ${failedNames}`);
         }
       }
 
@@ -161,12 +157,12 @@ export function ModSearchModal({
         ? `${selectedMod.name} 및 ${requiredDeps.length}개 의존성 설치 완료!`
         : `${selectedMod.name} 설치 완료!`;
       
-      alert(message);
+      toast.success('설치 성공', message);
       onInstallSuccess?.();
       onClose();
     } catch (error) {
       console.error('Failed to install mod:', error);
-      alert(`모드 설치 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
+      toast.error('설치 실패', `모드 설치 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
     } finally {
       setIsInstalling(false);
     }

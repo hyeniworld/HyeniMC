@@ -6,6 +6,7 @@ import { ResourcePackList } from '../components/resourcepacks/ResourcePackList';
 import { ShaderPackList } from '../components/shaderpacks/ShaderPackList';
 import { ProfileSettingsTab } from '../components/profiles/ProfileSettingsTab';
 import { useDownloadStore } from '../store/downloadStore';
+import { useToast } from '../contexts/ToastContext';
 
 type TabType = 'overview' | 'mods' | 'resourcepacks' | 'shaderpacks' | 'settings';
 
@@ -13,6 +14,7 @@ export const ProfileDetailPage: React.FC = () => {
   const { profileId } = useParams<{ profileId: string }>();
   const navigate = useNavigate();
   const { selectedAccountId } = useAccount();
+  const toast = useToast();
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -98,7 +100,7 @@ export const ProfileDetailPage: React.FC = () => {
     if (!profileId) return;
     
     if (isRunning) {
-      alert('이 프로필은 이미 실행 중입니다!');
+      toast.warning('실행 중', '이 프로필은 이미 실행 중입니다!');
       return;
     }
 
@@ -119,7 +121,7 @@ export const ProfileDetailPage: React.FC = () => {
       console.error('Failed to launch:', error);
       setIsRunning(false);
       setIsLaunching(false);
-      alert(error instanceof Error ? error.message : '게임 실행에 실패했습니다.');
+      toast.error('실행 실패', error instanceof Error ? error.message : '게임 실행에 실패했습니다.');
     }
   };
 
@@ -135,7 +137,7 @@ export const ProfileDetailPage: React.FC = () => {
       // State will be updated by event listener
     } catch (error) {
       console.error('Failed to stop game:', error);
-      alert(error instanceof Error ? error.message : '게임 중단에 실패했습니다.');
+      toast.error('중단 실패', error instanceof Error ? error.message : '게임 중단에 실패했습니다.');
     }
   };
 
@@ -254,6 +256,7 @@ export const ProfileDetailPage: React.FC = () => {
 
 // Overview Tab
 const OverviewTab: React.FC<{ profile: any }> = ({ profile }) => {
+  const toast = useToast();
   const getInstancePath = async () => {
     // Get userData path from electron
     const userData = await window.electronAPI.system.getPath('userData');
@@ -262,7 +265,7 @@ const OverviewTab: React.FC<{ profile: any }> = ({ profile }) => {
 
   const handleOpenFolder = async () => {
     if (!profile?.id) {
-      alert('프로필 정보가 올바르지 않습니다.');
+      toast.error('오류', '프로필 정보가 올바르지 않습니다.');
       return;
     }
 
@@ -272,13 +275,13 @@ const OverviewTab: React.FC<{ profile: any }> = ({ profile }) => {
       await window.electronAPI.shell.openPath(instancePath);
     } catch (error) {
       console.error('Failed to open folder:', error);
-      alert('폴더 열기에 실패했습니다.');
+      toast.error('오류', '폴더 열기에 실패했습니다.');
     }
   };
 
   const handleShowLogs = async () => {
     if (!profile?.id) {
-      alert('프로필 정보가 올바르지 않습니다.');
+      toast.error('오류', '프로필 정보가 올바르지 않습니다.');
       return;
     }
 
@@ -289,7 +292,7 @@ const OverviewTab: React.FC<{ profile: any }> = ({ profile }) => {
       await window.electronAPI.shell.openPath(logPath);
     } catch (error) {
       console.error('Failed to open logs:', error);
-      alert('로그 파일을 찾을 수 없습니다. 게임을 한 번 실행해주세요.');
+      toast.error('오류', '로그 파일을 찾을 수 없습니다. 게임을 한 번 실행해주세요.');
     }
   };
 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Cpu, HardDrive, FolderOpen, Save, RefreshCw, Info } from 'lucide-react';
+import { useToast } from '../../contexts/ToastContext';
 
 interface ProfileSettingsTabProps {
   profile: any;
@@ -15,6 +16,7 @@ interface JavaInstallation {
 }
 
 export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProps) {
+  const toast = useToast();
   // Global settings
   const [globalSettings, setGlobalSettings] = useState<any>(null);
   
@@ -180,11 +182,11 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
       };
       await window.electronAPI.profile.update(profile.id, updates);
       
-      alert('✅ 설정이 저장되었습니다!');
+      toast.success('저장 성공', '설정이 저장되었습니다!');
       onUpdate();
     } catch (error) {
       console.error('Failed to save settings:', error);
-      alert('❌ 설정 저장에 실패했습니다: ' + (error instanceof Error ? error.message : String(error)));
+      toast.error('저장 실패', '설정 저장에 실패했습니다: ' + (error instanceof Error ? error.message : String(error)));
     } finally {
       setSaving(false);
     }

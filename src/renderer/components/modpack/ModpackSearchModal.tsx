@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useToast } from '../../contexts/ToastContext';
 import { X, Search, Download, Loader2, Package, Calendar, Users } from 'lucide-react';
 
 interface ModpackSearchResult {
@@ -39,6 +40,7 @@ export function ModpackSearchModal({
   onClose,
   onSelect,
 }: ModpackSearchModalProps) {
+  const toast = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<ModpackSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -66,7 +68,7 @@ export function ModpackSearchModal({
       setSearchResults(results);
     } catch (error) {
       console.error('Failed to search modpacks:', error);
-      alert('모드팩 검색에 실패했습니다.');
+      toast.error('검색 실패', '모드팩 검색에 실패했습니다.');
     } finally {
       setIsSearching(false);
     }
@@ -86,7 +88,7 @@ export function ModpackSearchModal({
       }
     } catch (error) {
       console.error('Failed to load versions:', error);
-      alert('버전 정보를 불러오는데 실패했습니다.');
+      toast.error('불러오기 실패', '버전 정보를 불러오는데 실패했습니다.');
     } finally {
       setIsLoadingVersions(false);
     }

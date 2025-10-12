@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useToast } from '../../contexts/ToastContext';
 import { User, UserPlus, Trash2, LogIn, ChevronDown } from 'lucide-react';
 
 interface Account {
@@ -16,6 +17,7 @@ interface AccountManagerProps {
 }
 
 export function AccountManager({ selectedAccountId, onAccountChange }: AccountManagerProps) {
+  const toast = useToast();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [showOfflineModal, setShowOfflineModal] = useState(false);
@@ -48,7 +50,7 @@ export function AccountManager({ selectedAccountId, onAccountChange }: AccountMa
       await loadAccounts();
       onAccountChange(account.id);
     } catch (error: any) {
-      alert(error.message || 'Microsoft 로그인에 실패했습니다');
+      toast.error('로그인 실패', error.message || 'Microsoft 로그인에 실패했습니다');
     } finally {
       setLoading(false);
     }
@@ -56,7 +58,7 @@ export function AccountManager({ selectedAccountId, onAccountChange }: AccountMa
 
   const handleAddOffline = async () => {
     if (!offlineUsername.trim()) {
-      alert('사용자 이름을 입력해주세요');
+      toast.warning('입력 필요', '사용자 이름을 입력해주세요');
       return;
     }
 
@@ -68,7 +70,7 @@ export function AccountManager({ selectedAccountId, onAccountChange }: AccountMa
       setShowOfflineModal(false);
       setOfflineUsername('');
     } catch (error: any) {
-      alert(error.message || '오프라인 계정 추가에 실패했습니다');
+      toast.error('추가 실패', error.message || '오프라인 계정 추가에 실패했습니다');
     } finally {
       setLoading(false);
     }
@@ -88,7 +90,7 @@ export function AccountManager({ selectedAccountId, onAccountChange }: AccountMa
       }
       await loadAccounts();
     } catch (error: any) {
-      alert(error.message || '계정 삭제에 실패했습니다');
+      toast.error('삭제 실패', error.message || '계정 삭제에 실패했습니다');
     }
   };
 

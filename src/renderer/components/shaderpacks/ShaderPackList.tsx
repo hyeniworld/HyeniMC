@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useToast } from '../../contexts/ToastContext';
 
 interface ShaderPack {
   name: string;
@@ -12,6 +13,7 @@ interface ShaderPackListProps {
 }
 
 export const ShaderPackList: React.FC<ShaderPackListProps> = ({ profileId }) => {
+  const toast = useToast();
   const [packs, setPacks] = useState<ShaderPack[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
@@ -67,7 +69,7 @@ export const ShaderPackList: React.FC<ShaderPackListProps> = ({ profileId }) => 
 
   const togglePack = async (fileName: string, enabled: boolean, isDirectory: boolean) => {
     if (isDirectory) {
-      alert('디렉토리 형태의 셰이더팩은 활성화/비활성화할 수 없습니다.');
+      toast.warning('지원 안 함', '디렉토리 형태의 셰이더팩은 활성화/비활성화할 수 없습니다.');
       return;
     }
 

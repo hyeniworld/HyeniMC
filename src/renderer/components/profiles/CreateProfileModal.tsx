@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
+import { useToast } from '../../contexts/ToastContext';
 import { X, Loader2, Package, Settings, FileArchive } from 'lucide-react';
 import { ModpackSearchModal } from '../modpack/ModpackSearchModal';
 import { ImportModpackTab } from './ImportModpackTab';
 import { IPC_EVENTS } from '../../../shared/constants/ipc';
 
 interface CreateProfileModalProps {
+  isOpen?: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  initialModpackId?: string;
 }
 
 interface JavaInstallation {
@@ -17,8 +20,10 @@ interface JavaInstallation {
   architecture: string;
 }
 
-export function CreateProfileModal({ onClose, onSuccess }: CreateProfileModalProps) {
+export function CreateProfileModal({ isOpen, onClose, onSuccess, initialModpackId }: CreateProfileModalProps) {
+  const toast = useToast();
   const [tab, setTab] = useState<'custom' | 'modpack' | 'import'>('custom');
+  const [step, setStep] = useState<'basic' | 'modpack' | 'installing'>('basic');
   const [showModpackSearch, setShowModpackSearch] = useState(false);
   
   const [versions, setVersions] = useState<string[]>([]);
@@ -188,7 +193,7 @@ export function CreateProfileModal({ onClose, onSuccess }: CreateProfileModalPro
       // Install modpack
       await window.electronAPI.modpack.install(profile.id, versionId);
       
-      alert('모드팩이 성공적으로 설치되었습니다!');
+      toast.success('설치 성공', '모드팩이 성공적으로 설치되었습니다!');
       onSuccess();
     } catch (err) {
       console.error('Failed to install modpack:', err);
