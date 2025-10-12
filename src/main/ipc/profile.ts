@@ -138,6 +138,51 @@ export function registerProfileHandlers(): void {
     }
   });
 
+  // Get profile stats
+  ipcMain.handle('profile:getStats', async (event, profileId: string) => {
+    try {
+      const { cacheRpc } = await import('../grpc/clients');
+      const response = await cacheRpc.getProfileStats({ profileId });
+      return response;
+    } catch (error) {
+      console.error('[IPC Profile] Failed to get stats:', error);
+      throw error;
+    }
+  });
+
+  // Record profile launch
+  ipcMain.handle('profile:recordLaunch', async (event, profileId: string) => {
+    try {
+      const { cacheRpc } = await import('../grpc/clients');
+      await cacheRpc.recordProfileLaunch({ profileId });
+    } catch (error) {
+      console.error('[IPC Profile] Failed to record launch:', error);
+      // Don't throw - this is not critical
+    }
+  });
+
+  // Record play time
+  ipcMain.handle('profile:recordPlayTime', async (event, profileId: string, seconds: number) => {
+    try {
+      const { cacheRpc } = await import('../grpc/clients');
+      await cacheRpc.recordProfilePlayTime({ profileId, seconds });
+    } catch (error) {
+      console.error('[IPC Profile] Failed to record play time:', error);
+      // Don't throw - this is not critical
+    }
+  });
+
+  // Record crash
+  ipcMain.handle('profile:recordCrash', async (event, profileId: string) => {
+    try {
+      const { cacheRpc } = await import('../grpc/clients');
+      await cacheRpc.recordProfileCrash({ profileId });
+    } catch (error) {
+      console.error('[IPC Profile] Failed to record crash:', error);
+      // Don't throw - this is not critical
+    }
+  });
+
   // Launch profile
   ipcMain.handle(IPC_CHANNELS.PROFILE_LAUNCH, async (event, id: string, accountId?: string) => {
     try {
@@ -472,6 +517,17 @@ export function registerProfileHandlers(): void {
       }
 
       console.log(`[IPC Profile] Game launched successfully: ${profile.name}`);
+      
+      // Record launch statistics
+      try {
+        const { cacheRpc } = await import('../grpc/clients');
+        await cacheRpc.recordProfileLaunch({ profileId: id });
+        console.log(`[IPC Profile] Recorded launch for profile: ${id}`);
+      } catch (error) {
+        console.warn(`[IPC Profile] Failed to record launch statistics:`, error);
+        // Don't fail the launch if stats recording fails
+      }
+      
       return { success: true, message: '게임이 시작되었습니다!' };
     } catch (error) {
       console.error('[IPC Profile] Failed to launch:', error);

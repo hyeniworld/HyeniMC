@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	pb "hyenimc/backend/gen/launcher"
+	"hyenimc/backend/internal/cache"
 	"hyenimc/backend/internal/services"
 	"hyenimc/backend/internal/settings"
 
@@ -57,8 +58,11 @@ func StartGRPCServer(addr string, db *sql.DB, dataDir string, profileSvc *servic
 		log.Printf("Warning: CurseForge API key not set. CurseForge features will be disabled.")
 	}
 
+	// Create profile stats repository
+	profileStatsRepo := cache.NewProfileStatsRepository(db)
+	
 	// Register services
-	pb.RegisterProfileServiceServer(server, NewProfileServiceServer(profileSvc))
+	pb.RegisterProfileServiceServer(server, NewProfileServiceServer(profileSvc, profileStatsRepo))
 	pb.RegisterDownloadServiceServer(server, NewDownloadServiceServer())
 	pb.RegisterInstanceServiceServer(server, NewInstanceServiceServer())
 	pb.RegisterVersionServiceServer(server, NewVersionServiceServer())

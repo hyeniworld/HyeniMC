@@ -4,6 +4,7 @@ import (
 	"context"
 
 	pb "hyenimc/backend/gen/launcher"
+	"hyenimc/backend/internal/cache"
 	"hyenimc/backend/internal/domain"
 	"hyenimc/backend/internal/services"
 )
@@ -11,12 +12,16 @@ import (
 // profileServiceServer adapts internal ProfileService to protobuf ProfileServiceServer
 type profileServiceServer struct {
 	pb.UnimplementedProfileServiceServer
-	service *services.ProfileService
+	service   *services.ProfileService
+	statsRepo *cache.ProfileStatsRepository
 }
 
 // NewProfileServiceServer creates a new protobuf server backed by internal service
-func NewProfileServiceServer(svc *services.ProfileService) pb.ProfileServiceServer {
-	return &profileServiceServer{service: svc}
+func NewProfileServiceServer(svc *services.ProfileService, statsRepo *cache.ProfileStatsRepository) pb.ProfileServiceServer {
+	return &profileServiceServer{
+		service:   svc,
+		statsRepo: statsRepo,
+	}
 }
 
 func (s *profileServiceServer) CreateProfile(ctx context.Context, req *pb.CreateProfileRequest) (*pb.Profile, error) {
@@ -39,7 +44,14 @@ func (s *profileServiceServer) GetProfile(ctx context.Context, req *pb.GetProfil
 	if err != nil {
 		return nil, err
 	}
-	return toPbProfile(p), nil
+	
+	// Get stats and update total play time
+	pbProfile := toPbProfile(p)
+	if stats, err := s.statsRepo.Get(p.ID); err == nil && stats != nil {
+		pbProfile.TotalPlayTime = stats.TotalPlayTime
+	}
+	
+	return pbProfile, nil
 }
 
 func (s *profileServiceServer) ListProfiles(ctx context.Context, _ *pb.ListProfilesRequest) (*pb.ListProfilesResponse, error) {
@@ -49,7 +61,14 @@ func (s *profileServiceServer) ListProfiles(ctx context.Context, _ *pb.ListProfi
 	}
 	res := &pb.ListProfilesResponse{Profiles: make([]*pb.Profile, 0, len(list))}
 	for _, p := range list {
-		res.Profiles = append(res.Profiles, toPbProfile(p))
+		pbProfile := toPbProfile(p)
+		
+		// Get stats and update total play time
+		if stats, err := s.statsRepo.Get(p.ID); err == nil && stats != nil {
+			pbProfile.TotalPlayTime = stats.TotalPlayTime
+		}
+		
+		res.Profiles = append(res.Profiles, pbProfile)
 	}
 	return res, nil
 }

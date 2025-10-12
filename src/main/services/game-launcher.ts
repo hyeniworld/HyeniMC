@@ -27,6 +27,8 @@ export interface GameProcess {
   profileId?: string;  // Profile ID
   versionId: string;
   startTime: Date;
+  playTimeTracker?: NodeJS.Timeout;  // Timer for tracking play time
+  lastRecordedTime: number;  // Last recorded play time in seconds
 }
 
 export class GameLauncher {
@@ -95,12 +97,40 @@ export class GameLauncher {
       profileId: options.profileId,
       versionId: options.versionId,
       startTime: new Date(),
+      lastRecordedTime: 0,
     };
 
     // Use profileId as key if available, otherwise use versionId
     const processKey = options.profileId || options.versionId;
     this.activeProcesses.set(processKey, gameProcess);
     console.log(`[Game Launcher] Started game: ${processKey} (PID: ${childProcess.pid})`);
+
+    // Start play time tracker (record every 30 seconds if profileId is available)
+    if (options.profileId) {
+      gameProcess.playTimeTracker = setInterval(async () => {
+        const elapsedSeconds = Math.floor((Date.now() - gameProcess.startTime.getTime()) / 1000);
+        const newPlayTime = elapsedSeconds - gameProcess.lastRecordedTime;
+        
+        if (newPlayTime > 0) {
+          try {
+            const { cacheRpc } = await import('../grpc/clients');
+            await cacheRpc.recordProfilePlayTime({
+              profileId: options.profileId!,
+              seconds: newPlayTime,
+            });
+            gameProcess.lastRecordedTime = elapsedSeconds;
+            // Log only every 5 minutes (10 intervals) to reduce noise
+            if (elapsedSeconds % 300 === 0 || elapsedSeconds < 60) {
+              console.log(`[Game Launcher] Play time: ${Math.floor(elapsedSeconds / 60)}m ${elapsedSeconds % 60}s`);
+            }
+          } catch (error) {
+            console.error('[Game Launcher] Failed to record play time:', error);
+          }
+        }
+      }, 30000); // 30 seconds
+      
+      console.log(`[Game Launcher] Play time tracker started for profile ${options.profileId}`);
+    }
 
     // Handle stdout
     childProcess.stdout?.on('data', (data) => {
@@ -129,9 +159,47 @@ export class GameLauncher {
     });
 
     // Handle exit
-    childProcess.on('exit', (code) => {
+    childProcess.on('exit', async (code) => {
       console.log(`[Game Launcher] Process exited with code: ${code}`);
       const processKey = options.profileId || options.versionId;
+      
+      // Stop play time tracker and record final play time
+      if (gameProcess.playTimeTracker) {
+        clearInterval(gameProcess.playTimeTracker);
+      }
+      
+      // Record final play time
+      if (options.profileId) {
+        const elapsedSeconds = Math.floor((Date.now() - gameProcess.startTime.getTime()) / 1000);
+        const finalPlayTime = elapsedSeconds - gameProcess.lastRecordedTime;
+        
+        if (finalPlayTime > 0) {
+          try {
+            const { cacheRpc } = await import('../grpc/clients');
+            await cacheRpc.recordProfilePlayTime({
+              profileId: options.profileId,
+              seconds: finalPlayTime,
+            });
+            const minutes = Math.floor(elapsedSeconds / 60);
+            const seconds = elapsedSeconds % 60;
+            console.log(`[Game Launcher] Total session: ${minutes}m ${seconds}s`);
+          } catch (error) {
+            console.error('[Game Launcher] Failed to record final play time:', error);
+          }
+        }
+        
+        // Record crash if exit code is not 0
+        if (code !== 0 && code !== null) {
+          try {
+            const { cacheRpc } = await import('../grpc/clients');
+            await cacheRpc.recordProfileCrash({ profileId: options.profileId });
+            console.log(`[Game Launcher] Game crashed (exit code: ${code})`);
+          } catch (error) {
+            console.error('[Game Launcher] Failed to record crash:', error);
+          }
+        }
+      }
+      
       this.activeProcesses.delete(processKey);
       if (onExit) {
         onExit(code);
@@ -141,6 +209,11 @@ export class GameLauncher {
     // Handle error
     childProcess.on('error', (error) => {
       console.error(`[Game Launcher] Process error:`, error);
+      
+      // Stop play time tracker
+      if (gameProcess.playTimeTracker) {
+        clearInterval(gameProcess.playTimeTracker);
+      }
       
       // Send user-friendly error to renderer
       const { createUserFriendlyError } = require('../utils/error-handler');
@@ -681,6 +754,12 @@ export class GameLauncher {
     const gameProcess = this.activeProcesses.get(versionId);
     if (gameProcess) {
       console.log(`[Game Launcher] Stopping game: ${versionId} (PID: ${gameProcess.process.pid})`);
+      
+      // Stop play time tracker
+      if (gameProcess.playTimeTracker) {
+        clearInterval(gameProcess.playTimeTracker);
+      }
+      
       gameProcess.process.kill('SIGTERM');  // Use SIGTERM for graceful shutdown
       this.activeProcesses.delete(versionId);
       return true;
@@ -704,6 +783,12 @@ export class GameLauncher {
       } catch (error) {
         // Process is dead, clean up
         console.log(`[Game Launcher] Cleaning up dead process: ${key} (PID: ${gameProcess.process.pid})`);
+        
+        // Stop play time tracker
+        if (gameProcess.playTimeTracker) {
+          clearInterval(gameProcess.playTimeTracker);
+        }
+        
         this.activeProcesses.delete(key);
       }
     }

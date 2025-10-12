@@ -58,6 +58,19 @@ export function ProfileList() {
           newSet.delete(data.versionId);
           return newSet;
         });
+        
+        // Update only the specific profile's play time (no full reload)
+        setTimeout(async () => {
+          try {
+            const updatedProfile = await window.electronAPI.profile.get(data.versionId);
+            setProfiles(prev => prev.map(p => 
+              p.id === data.versionId ? updatedProfile : p
+            ));
+            console.log('[ProfileList] Updated play time for profile:', data.versionId);
+          } catch (error) {
+            console.error('[ProfileList] Failed to update profile:', error);
+          }
+        }, 1000); // Wait 1 second for backend to finish recording
       }
     });
 
@@ -269,11 +282,11 @@ export function ProfileList() {
               <div className="flex items-center gap-4 text-xs text-gray-500 mb-4 pb-4 border-b border-gray-800">
                 <div className="flex items-center gap-1">
                   <Clock className="w-3.5 h-3.5" />
-                  <span>{Math.floor(profile.totalPlayTime / 60)}분</span>
+                  <span>{Math.floor(profile.totalPlayTime / 60)}분 플레이</span>
                 </div>
                 {profile.lastPlayed && (
-                  <span>
-                    {new Date(profile.lastPlayed).toLocaleDateString()}
+                  <span className="text-gray-600">
+                    최근 {new Date(profile.lastPlayed).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}
                   </span>
                 )}
               </div>

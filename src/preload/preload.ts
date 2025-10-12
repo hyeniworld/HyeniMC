@@ -22,6 +22,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     
     launch: (id: string, accountId?: string): Promise<void> => 
       ipcRenderer.invoke(IPC_CHANNELS.PROFILE_LAUNCH, id, accountId),
+    
+    // Profile statistics
+    getStats: (profileId: string): Promise<any> =>
+      ipcRenderer.invoke('profile:getStats', profileId),
+    
+    recordLaunch: (profileId: string): Promise<void> =>
+      ipcRenderer.invoke('profile:recordLaunch', profileId),
+    
+    recordPlayTime: (profileId: string, seconds: number): Promise<void> =>
+      ipcRenderer.invoke('profile:recordPlayTime', profileId, seconds),
+    
+    recordCrash: (profileId: string): Promise<void> =>
+      ipcRenderer.invoke('profile:recordCrash', profileId),
   },
 
   // Settings APIs

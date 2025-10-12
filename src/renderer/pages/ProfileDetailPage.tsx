@@ -50,6 +50,18 @@ export const ProfileDetailPage: React.FC = () => {
       console.log('[ProfileDetail] Game stopped:', data);
       if (data.versionId === profileId) {
         setIsRunning(false);
+        
+        // Update only the play time (no full reload)
+        setTimeout(async () => {
+          try {
+            if (!profileId) return;
+            const updatedProfile = await window.electronAPI.profile.get(profileId);
+            setProfile(updatedProfile);
+            console.log('[ProfileDetail] Updated play time');
+          } catch (error) {
+            console.error('[ProfileDetail] Failed to update profile:', error);
+          }
+        }, 1000); // Wait 1 second for backend to finish recording
       }
     });
 
