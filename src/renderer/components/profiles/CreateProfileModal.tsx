@@ -472,9 +472,7 @@ export function CreateProfileModal({ onClose, onSuccess }: CreateProfileModalPro
                     <option key={java.path} value={java.path}>
                       Java {java.majorVersion} ({java.version})
                       {java.vendor ? ` - ${java.vendor}` : ''}
-                      {java.majorVersion >= recommendedJava && (
-                        <span> ✓</span>
-                      )}
+                      {java.majorVersion >= recommendedJava ? ' ✓' : ''}
                     </option>
                   ))}
                 </select>
