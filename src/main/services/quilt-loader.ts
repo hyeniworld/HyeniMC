@@ -30,7 +30,22 @@ export class QuiltLoader {
   private readonly baseUrl = 'https://meta.quiltmc.org/v3';
 
   /**
+   * Get all available Quilt loader versions (cached via gRPC)
+   */
+  async getAllVersions(forceRefresh = false): Promise<string[]> {
+    try {
+      const { cacheRpc } = await import('../grpc/clients');
+      const response = await cacheRpc.getQuiltVersions({ forceRefresh });
+      return response.versions.map(v => v.version);
+    } catch (error) {
+      console.error('[Quilt] Failed to fetch all versions:', error);
+      throw new Error('Failed to fetch Quilt versions');
+    }
+  }
+
+  /**
    * Get available Quilt versions for a Minecraft version
+   * Note: This still uses direct API call as cached data doesn't include per-MC-version filtering
    */
   async getVersions(minecraftVersion: string): Promise<string[]> {
     try {

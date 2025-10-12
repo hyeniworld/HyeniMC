@@ -49,26 +49,20 @@ export class NeoForgeLoaderService {
   private mavenUrl = API_ENDPOINTS.NEOFORGE_MAVEN;
 
   /**
-   * 사용 가능한 NeoForge 버전 목록 가져오기
+   * 사용 가능한 NeoForge 버전 목록 가져오기 (cached via gRPC)
    */
-  async getVersions(): Promise<string[]> {
+  async getVersions(forceRefresh = false): Promise<string[]> {
     try {
       console.log('[NeoForge] Fetching versions...');
-      const response = await axios.get(this.metaUrl);
       
-      // API 응답이 배열인지 확인
-      let versions: string[];
-      if (Array.isArray(response.data)) {
-        versions = response.data;
-      } else if (response.data && typeof response.data === 'object') {
-        // 객체인 경우 versions 프로퍼티 확인
-        versions = response.data.versions || [];
-      } else {
-        console.error('[NeoForge] Unexpected API response:', response.data);
-        versions = [];
-      }
+      // Use cached gRPC service
+      const { cacheRpc } = await import('../grpc/clients');
+      const response = await cacheRpc.getNeoForgeVersions({ forceRefresh });
       
-      console.log(`[NeoForge] Found ${versions.length} versions`);
+      // Convert gRPC response to version strings
+      const versions = response.versions.map(v => v.version);
+      
+      console.log(`[NeoForge] Found ${versions.length} versions (cached)`);
       return versions;
     } catch (error) {
       console.error('[NeoForge] Failed to fetch versions:', error);

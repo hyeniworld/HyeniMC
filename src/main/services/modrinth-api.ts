@@ -63,7 +63,7 @@ export class ModrinthAPI {
   }
 
   /**
-   * 모드 검색
+   * 모드 검색 (cached via gRPC)
    */
   async searchMods(
     query: string,
@@ -72,13 +72,6 @@ export class ModrinthAPI {
     try {
       console.log(`[Modrinth] Searching mods: "${query}"`);
       
-      const params: any = {
-        query,
-        limit: filters?.limit || 20,
-        offset: filters?.offset || 0,
-        facets: [],
-      };
-
       // Facets 구성
       const facets: string[][] = [];
       
@@ -98,13 +91,22 @@ export class ModrinthAPI {
       // Project type: mod only
       facets.push(['project_type:mod']);
 
-      if (facets.length > 0) {
-        params.facets = JSON.stringify(facets);
-      }
+      const facetsJson = facets.length > 0 ? JSON.stringify(facets) : '';
 
-      const response = await this.client.get('/search', { params });
+      // Use cached gRPC service
+      const { cacheRpc } = await import('../grpc/clients');
+      const response = await cacheRpc.searchModrinthMods({
+        query,
+        limit: filters?.limit || 20,
+        offset: filters?.offset || 0,
+        facets: facetsJson,
+        forceRefresh: false,
+      });
 
-      const hits: ModSearchResult[] = response.data.hits.map((hit: any) => ({
+      // Parse cached JSON response
+      const data = JSON.parse(response.jsonData);
+
+      const hits: ModSearchResult[] = data.hits.map((hit: any) => ({
         id: hit.project_id,
         slug: hit.slug,
         name: hit.title,
@@ -122,11 +124,11 @@ export class ModrinthAPI {
         updatedAt: new Date(hit.date_modified),
       }));
 
-      console.log(`[Modrinth] Found ${hits.length} mods (total: ${response.data.total_hits})`);
+      console.log(`[Modrinth] Found ${hits.length} mods (total: ${data.total_hits}) [cached]`);
       
       return {
         hits,
-        total: response.data.total_hits,
+        total: data.total_hits,
       };
     } catch (error) {
       console.error('[Modrinth] Search failed:', error);
@@ -135,14 +137,21 @@ export class ModrinthAPI {
   }
 
   /**
-   * 모드 상세 정보 가져오기
+   * 모드 상세 정보 가져오기 (cached via gRPC)
    */
   async getModDetails(projectId: string): Promise<ModDetails> {
     try {
       console.log(`[Modrinth] Fetching mod details: ${projectId}`);
       
-      const response = await this.client.get(`/project/${projectId}`);
-      const project = response.data;
+      // Use cached gRPC service
+      const { cacheRpc } = await import('../grpc/clients');
+      const response = await cacheRpc.getModrinthProject({
+        projectId,
+        forceRefresh: false,
+      });
+
+      // Parse cached JSON response
+      const project = JSON.parse(response.jsonData);
 
       const details: ModDetails = {
         id: project.id,
@@ -171,7 +180,7 @@ export class ModrinthAPI {
         versions: [],
       };
 
-      console.log(`[Modrinth] Fetched details for: ${details.name}`);
+      console.log(`[Modrinth] Fetched details for: ${details.name} [cached]`);
       return details;
     } catch (error) {
       console.error('[Modrinth] Failed to fetch mod details:', error);
@@ -264,15 +273,22 @@ export class ModrinthAPI {
   }
 
   /**
-   * 카테고리 목록 가져오기
+   * 카테고리 목록 가져오기 (cached via gRPC)
    */
   async getCategories(): Promise<Array<{ name: string; id: string; icon: string }>> {
     try {
       console.log('[Modrinth] Fetching categories...');
       
-      const response = await this.client.get('/tag/category');
+      // Use cached gRPC service
+      const { cacheRpc } = await import('../grpc/clients');
+      const response = await cacheRpc.getModrinthCategories({
+        forceRefresh: false,
+      });
+
+      // Parse cached JSON response
+      const data = JSON.parse(response.jsonData);
       
-      return response.data
+      return data
         .filter((cat: any) => cat.project_type === 'mod')
         .map((cat: any) => ({
           name: cat.name,

@@ -46,7 +46,7 @@ export class CurseForgeAPI {
   }
 
   /**
-   * 모드 검색
+   * 모드 검색 (cached via gRPC)
    */
   async searchMods(
     query: string,
@@ -59,36 +59,33 @@ export class CurseForgeAPI {
     try {
       console.log(`[CurseForge] Searching mods: "${query}"`);
       
-      const params: any = {
-        gameId: this.MINECRAFT_GAME_ID,
-        classId: this.MODS_CLASS_ID,
-        searchFilter: query,
-        sortField: 2, // 2 = Popularity
-        sortOrder: 'desc',
-        pageSize: filters?.limit || 20,
-        index: filters?.offset || 0,
-      };
-
-      // Add game version filter
-      if (filters?.gameVersion) {
-        params.gameVersion = filters.gameVersion;
-      }
-
-      // Add mod loader filter
+      // Map loader type to CurseForge loader ID
+      let modLoaderType = 0;
       if (filters?.loaderType && filters.loaderType !== 'vanilla') {
-        // CurseForge uses different loader IDs
         const loaderMap: Record<string, number> = {
           'fabric': 4, // Fabric
           'forge': 1,  // Forge
           'neoforge': 6, // NeoForge
           'quilt': 5,  // Quilt
         };
-        params.modLoaderType = loaderMap[filters.loaderType];
+        modLoaderType = loaderMap[filters.loaderType] || 0;
       }
 
-      const response = await this.client.get('/mods/search', { params });
+      // Use cached gRPC service
+      const { cacheRpc } = await import('../grpc/clients');
+      const response = await cacheRpc.searchCurseForgeMods({
+        query,
+        gameVersion: filters?.gameVersion || '',
+        modLoaderType,
+        pageSize: filters?.limit || 20,
+        index: filters?.offset || 0,
+        forceRefresh: false,
+      });
 
-      const hits: ModSearchResult[] = response.data.data.map((mod: any) => {
+      // Parse cached JSON response
+      const data = JSON.parse(response.jsonData);
+
+      const hits: ModSearchResult[] = data.data.map((mod: any) => {
         const latestFiles = mod.latestFiles || [];
         const gameVersions = [...new Set(
           latestFiles.flatMap((f: any) => f.gameVersions || [])
@@ -111,11 +108,11 @@ export class CurseForgeAPI {
         };
       });
 
-      console.log(`[CurseForge] Found ${hits.length} mods (total: ${response.data.pagination.totalCount})`);
+      console.log(`[CurseForge] Found ${hits.length} mods (total: ${data.pagination.totalCount}) [cached]`);
       
       return {
         hits,
-        total: response.data.pagination.totalCount,
+        total: data.pagination.totalCount,
       };
     } catch (error) {
       console.error('[CurseForge] Search failed:', error);
