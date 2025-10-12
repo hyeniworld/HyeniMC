@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Play, Settings, Trash2, Plus, FolderOpen, Clock, Loader2 } from 'lucide-react';
+import { Play, Settings, Trash2, Plus, FolderOpen, Clock, Loader2, Star } from 'lucide-react';
 import { CreateProfileModal } from './CreateProfileModal';
 import { useDownloadStore } from '../../store/downloadStore';
 import { useAccount } from '../../App';
 import { useToast } from '../../contexts/ToastContext';
+import { sortProfiles } from '../../utils/profileSorter';
 
 export function ProfileList() {
   const navigate = useNavigate();
@@ -89,7 +90,9 @@ export function ProfileList() {
       setError(null);
       const data = await window.electronAPI.profile.list();
       console.log('[ProfileList] Loaded profiles:', data);
-      setProfiles(data || []);
+      // Apply sorting: favorite → lastPlayed → createdAt
+      const sorted = sortProfiles(data || []);
+      setProfiles(sorted);
     } catch (err) {
       console.error('Failed to load profiles:', err);
       setError(err instanceof Error ? err.message : '프로필을 불러오는데 실패했습니다.');
@@ -188,6 +191,18 @@ export function ProfileList() {
     loadProfiles();
   };
 
+  const handleToggleFavorite = async (profileId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await window.electronAPI.profile.toggleFavorite(profileId);
+      await loadProfiles(); // Reload and re-sort
+    } catch (err) {
+      console.error('Failed to toggle favorite:', err);
+      const errorMsg = err instanceof Error ? err.message : '즐겨찾기 변경에 실패했습니다.';
+      toast.error('오류', errorMsg);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-4">
@@ -255,10 +270,31 @@ export function ProfileList() {
             <div 
               key={profile.id} 
               onClick={() => navigate(`/profile/${profile.id}`)}
-              className="card hover:border-hyeni-pink-500 hover:shadow-lg hover:shadow-hyeni-pink-500/10 transition-all duration-200 group cursor-pointer"
+              className={`card hover:border-hyeni-pink-500 hover:shadow-lg hover:shadow-hyeni-pink-500/10 transition-all duration-200 group cursor-pointer relative ${
+                profile.favorite ? 'ring-2 ring-yellow-400/50 bg-gradient-to-br from-yellow-900/10' : ''
+              }`}
             >
+              {/* Favorite Badge */}
+              {profile.favorite && (
+                <div className="absolute top-0 left-0 px-2 py-0.5 bg-yellow-400 text-black text-xs font-semibold rounded-br">
+                  즐겨찾기
+                </div>
+              )}
+              
+              {/* Favorite Button */}
+              <button
+                onClick={(e) => handleToggleFavorite(profile.id, e)}
+                className="absolute top-2 right-2 p-1.5 rounded hover:bg-gray-700 transition-colors z-10"
+                title={profile.favorite ? '즐겨찾기 해제' : '즐겨찾기 추가'}
+              >
+                {profile.favorite ? (
+                  <Star className="w-5 h-5 fill-yellow-400 text-yellow-400" />
+                ) : (
+                  <Star className="w-5 h-5 text-gray-500 hover:text-gray-300" />
+                )}
+              </button>
               {/* Profile Icon & Name */}
-              <div className="flex items-start gap-4 mb-4">
+              <div className="flex items-start gap-4 mb-4 pt-6">
                 <div className="w-20 h-20 bg-gradient-to-br from-hyeni-pink-600 via-hyeni-pink-500 to-hyeni-pink-600 rounded-xl flex items-center justify-center text-3xl font-bold shadow-lg group-hover:scale-105 transition-transform">
                   {profile.icon || profile.name.charAt(0).toUpperCase()}
                 </div>

@@ -33,6 +33,8 @@ message Profile {
   int32 resolution_width = 20;
   int32 resolution_height = 21;
   bool fullscreen = 22;
+  bool favorite = 23;
+  string server_address = 24;
 }
 
 message CreateProfileRequest {

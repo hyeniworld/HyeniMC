@@ -56,13 +56,19 @@ func (r *Repository) Save(profile *domain.Profile) error {
 		fullscreenVal = sql.NullInt32{Int32: 0, Valid: true}
 	}
 	
+	var serverAddr sql.NullString
+	if profile.ServerAddress != "" {
+		serverAddr = sql.NullString{String: profile.ServerAddress, Valid: true}
+	}
+	
 	_, err := r.db.Exec(`
 		INSERT INTO profiles (
 			id, name, description, icon, game_version, loader_type, loader_version,
 			game_directory, java_path, memory_min, memory_max, resolution_width,
 			resolution_height, fullscreen, jvm_args, game_args, modpack_id,
-			modpack_source, created_at, updated_at, last_played, total_play_time
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			modpack_source, created_at, updated_at, last_played, total_play_time,
+			favorite, server_address
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			name = excluded.name,
 			description = excluded.description,
@@ -83,7 +89,9 @@ func (r *Repository) Save(profile *domain.Profile) error {
 			modpack_source = excluded.modpack_source,
 			updated_at = excluded.updated_at,
 			last_played = excluded.last_played,
-			total_play_time = excluded.total_play_time
+			total_play_time = excluded.total_play_time,
+			favorite = excluded.favorite,
+			server_address = excluded.server_address
 	`,
 		profile.ID, profile.Name, profile.Description, profile.Icon,
 		profile.GameVersion, profile.LoaderType, profile.LoaderVersion,
@@ -91,6 +99,7 @@ func (r *Repository) Save(profile *domain.Profile) error {
 		fullscreenVal, jvmArgs, gameArgs, profile.ModpackID, profile.ModpackSource,
 		profile.CreatedAt.Unix(), profile.UpdatedAt.Unix(),
 		nullTime(profile.LastPlayed), profile.TotalPlayTime,
+		profile.Favorite, serverAddr,
 	)
 	
 	if err != nil {
@@ -110,11 +119,14 @@ func (r *Repository) Get(id string) (*domain.Profile, error) {
 	var createdAt, updatedAt int64
 	var lastPlayed sql.NullInt64
 	
+	var serverAddr sql.NullString
+	
 	err := r.db.QueryRow(`
 		SELECT id, name, description, icon, game_version, loader_type, loader_version,
 			game_directory, java_path, memory_min, memory_max, resolution_width,
 			resolution_height, fullscreen, jvm_args, game_args, modpack_id,
-			modpack_source, created_at, updated_at, last_played, total_play_time
+			modpack_source, created_at, updated_at, last_played, total_play_time,
+			favorite, server_address
 		FROM profiles WHERE id = ?
 	`, id).Scan(
 		&profile.ID, &profile.Name, &profile.Description, &profile.Icon,
@@ -122,6 +134,7 @@ func (r *Repository) Get(id string) (*domain.Profile, error) {
 		&profile.GameDirectory, &javaPath, &memoryMin, &memoryMax, &resWidth, &resHeight,
 		&fullscreenVal, &jvmArgs, &gameArgs, &profile.ModpackID,
 		&profile.ModpackSource, &createdAt, &updatedAt, &lastPlayed, &profile.TotalPlayTime,
+		&profile.Favorite, &serverAddr,
 	)
 	
 	if err == sql.ErrNoRows {
@@ -150,6 +163,9 @@ func (r *Repository) Get(id string) (*domain.Profile, error) {
 	if fullscreenVal.Valid {
 		profile.Fullscreen = fullscreenVal.Int32 > 0
 	}
+	if serverAddr.Valid {
+		profile.ServerAddress = serverAddr.String
+	}
 	
 	json.Unmarshal(jvmArgs, &profile.JvmArgs)
 	json.Unmarshal(gameArgs, &profile.GameArgs)
@@ -169,7 +185,8 @@ func (r *Repository) List() ([]*domain.Profile, error) {
 		SELECT id, name, description, icon, game_version, loader_type, loader_version,
 			game_directory, java_path, memory_min, memory_max, resolution_width,
 			resolution_height, fullscreen, jvm_args, game_args, modpack_id,
-			modpack_source, created_at, updated_at, last_played, total_play_time
+			modpack_source, created_at, updated_at, last_played, total_play_time,
+			favorite, server_address
 		FROM profiles
 		ORDER BY last_played DESC, created_at DESC
 	`)
@@ -183,6 +200,7 @@ func (r *Repository) List() ([]*domain.Profile, error) {
 		var profile domain.Profile
 		var jvmArgs, gameArgs []byte
 		var javaPath sql.NullString
+		var serverAddr sql.NullString
 		var memoryMin, memoryMax sql.NullInt32
 		var resWidth, resHeight sql.NullInt32
 		var fullscreenVal sql.NullInt32
@@ -195,6 +213,7 @@ func (r *Repository) List() ([]*domain.Profile, error) {
 			&profile.GameDirectory, &javaPath, &memoryMin, &memoryMax, &resWidth, &resHeight,
 			&fullscreenVal, &jvmArgs, &gameArgs, &profile.ModpackID,
 			&profile.ModpackSource, &createdAt, &updatedAt, &lastPlayed, &profile.TotalPlayTime,
+			&profile.Favorite, &serverAddr,
 		)
 		if err != nil {
 			continue
@@ -218,6 +237,9 @@ func (r *Repository) List() ([]*domain.Profile, error) {
 		}
 		if fullscreenVal.Valid {
 			profile.Fullscreen = fullscreenVal.Int32 > 0
+		}
+		if serverAddr.Valid {
+			profile.ServerAddress = serverAddr.String
 		}
 		
 		json.Unmarshal(jvmArgs, &profile.JvmArgs)

@@ -288,6 +288,19 @@ var migrations = []Migration{
 			CREATE INDEX IF NOT EXISTS idx_profile_mods_source ON profile_mods(source, source_mod_id);
 		`,
 	},
+	{
+		Version: 15,
+		Name:    "add_favorite_and_server_address",
+		SQL: `
+			-- Add favorite and server_address columns to profiles
+			ALTER TABLE profiles ADD COLUMN favorite INTEGER DEFAULT 0;
+			ALTER TABLE profiles ADD COLUMN server_address TEXT;
+			
+			-- Create indexes for efficient sorting and filtering
+			CREATE INDEX IF NOT EXISTS idx_profiles_favorite ON profiles(favorite);
+			CREATE INDEX IF NOT EXISTS idx_profiles_server_address ON profiles(server_address);
+		`,
+	},
 }
 
 func runMigrations(db *sql.DB) error {

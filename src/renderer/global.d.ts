@@ -10,6 +10,7 @@ declare global {
         update: (id: string, data: any) => Promise<any>;
         delete: (id: string) => Promise<void>;
         launch: (id: string, accountId?: string) => Promise<void>;
+        toggleFavorite: (id: string) => Promise<any>;
         getStats: (profileId: string) => Promise<any>;
         recordLaunch: (profileId: string) => Promise<void>;
         recordPlayTime: (profileId: string, seconds: number) => Promise<void>;

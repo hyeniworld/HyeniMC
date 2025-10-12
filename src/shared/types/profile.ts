@@ -49,6 +49,7 @@ export interface Profile {
   authRequired?: boolean;
   spaEnabled?: boolean;
   serverAddress?: string;
+  favorite: boolean;
 }
 
 export interface CreateProfileData {

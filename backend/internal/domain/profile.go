@@ -27,6 +27,7 @@ type Profile struct {
 	AuthRequired    bool       `json:"authRequired,omitempty"`
 	SPAEnabled      bool       `json:"spaEnabled,omitempty"`
 	ServerAddress   string     `json:"serverAddress,omitempty"`
+	Favorite        bool       `json:"favorite"`
 }
 
 // Memory represents JVM memory settings

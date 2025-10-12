@@ -119,6 +119,8 @@ func (s *profileServiceServer) UpdateProfile(ctx context.Context, req *pb.Update
 			updates["resolutionWidth"] = float64(patch.ResolutionWidth)
 			updates["resolutionHeight"] = float64(patch.ResolutionHeight)
 			updates["fullscreen"] = patch.Fullscreen
+			updates["favorite"] = patch.Favorite
+			updates["serverAddress"] = patch.ServerAddress
 		}
 	}
 
@@ -164,5 +166,7 @@ func toPbProfile(p *domain.Profile) *pb.Profile {
 		ResolutionWidth:  p.Resolution.Width,
 		ResolutionHeight: p.Resolution.Height,
 		Fullscreen:       p.Fullscreen,
+		Favorite:         p.Favorite,
+		ServerAddress:    p.ServerAddress,
 	}
 }

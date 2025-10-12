@@ -120,6 +120,9 @@ func (s *ProfileService) UpdateProfile(ctx context.Context, id string, updates m
 	if serverAddr, ok := updates["serverAddress"].(string); ok {
 		profile.ServerAddress = serverAddr
 	}
+	if favorite, ok := updates["favorite"].(bool); ok {
+		profile.Favorite = favorite
+	}
 	if gameDir, ok := updates["gameDirectory"].(string); ok {
 		profile.GameDirectory = gameDir
 	}

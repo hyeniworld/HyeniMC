@@ -10,6 +10,7 @@ export const IPC_CHANNELS = {
   PROFILE_GET: 'profile:get',
   PROFILE_LIST: 'profile:list',
   PROFILE_LAUNCH: 'profile:launch',
+  PROFILE_TOGGLE_FAVORITE: 'profile:toggle-favorite',
   
   // Version channels
   VERSION_LIST: 'version:list',

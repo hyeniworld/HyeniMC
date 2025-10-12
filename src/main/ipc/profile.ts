@@ -99,6 +99,8 @@ export function registerProfileHandlers(): void {
         resolutionWidth: data.resolution?.width ?? 0,
         resolutionHeight: data.resolution?.height ?? 0,
         fullscreen: data.fullscreen ?? false,
+        favorite: data.favorite ?? false,
+        serverAddress: data.serverAddress ?? '',
       };
       const res = await profileRpc.updateProfile({ id, patch });
       console.log(`[IPC Profile] Profile updated successfully:`);
@@ -135,6 +137,32 @@ export function registerProfileHandlers(): void {
       return { success: true };
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : '프로필 삭제에 실패했습니다');
+    }
+  });
+
+  // Toggle favorite
+  ipcMain.handle(IPC_CHANNELS.PROFILE_TOGGLE_FAVORITE, async (event, id: string) => {
+    try {
+      const addr = getBackendAddress();
+      if (!addr) {
+        throw new Error('Backend server is not running');
+      }
+
+      // Get current profile
+      const profile = await profileRpc.getProfile({ id });
+      
+      // Toggle favorite
+      const patch: pb.Profile = {
+        ...profile,
+        favorite: !profile.favorite,
+      };
+      
+      const res = await profileRpc.updateProfile({ id, patch });
+      console.log(`[IPC Profile] Favorite toggled: ${res.favorite}`);
+      return fromPbProfile(res);
+    } catch (error) {
+      console.error('[IPC Profile] Toggle favorite failed:', error);
+      throw error;
     }
   });
 
@@ -563,6 +591,7 @@ function fromPbProfile(p: pb.Profile): Profile {
     totalPlayTime: p.totalPlayTime ?? 0,
     authRequired: false,
     spaEnabled: false,
-    serverAddress: '',
+    serverAddress: p.serverAddress ?? '',
+    favorite: p.favorite ?? false,
   } as any;
 }

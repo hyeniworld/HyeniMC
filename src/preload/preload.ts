@@ -23,6 +23,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     launch: (id: string, accountId?: string): Promise<void> => 
       ipcRenderer.invoke(IPC_CHANNELS.PROFILE_LAUNCH, id, accountId),
     
+    toggleFavorite: (id: string): Promise<any> =>
+      ipcRenderer.invoke(IPC_CHANNELS.PROFILE_TOGGLE_FAVORITE, id),
+    
     // Profile statistics
     getStats: (profileId: string): Promise<any> =>
       ipcRenderer.invoke('profile:getStats', profileId),
@@ -256,6 +259,7 @@ declare global {
         update: (id: string, data: any) => Promise<any>;
         delete: (id: string) => Promise<void>;
         launch: (id: string, accountId?: string) => Promise<void>;
+        toggleFavorite: (id: string) => Promise<any>;
         getStats: (profileId: string) => Promise<any>;
         recordLaunch: (profileId: string) => Promise<void>;
         recordPlayTime: (profileId: string, seconds: number) => Promise<void>;
