@@ -96,6 +96,7 @@ func (r *ModRepository) Get(id string) (*domain.Mod, error) {
 	var authors string
 	var enabled int
 	var lastModified, createdAt, updatedAt int64
+	var sourceModID, sourceFileID sql.NullString
 	
 	err := r.db.QueryRow(`
 		SELECT id, profile_id, file_name, file_path, file_hash, file_size,
@@ -106,7 +107,7 @@ func (r *ModRepository) Get(id string) (*domain.Mod, error) {
 	`, id).Scan(
 		&mod.ID, &mod.ProfileID, &mod.FileName, &mod.FilePath, &mod.FileHash, &mod.FileSize,
 		&mod.ModID, &mod.Name, &mod.Version, &mod.Description, &authors, &enabled, &mod.Source,
-		&mod.SourceModID, &mod.SourceFileID,
+		&sourceModID, &sourceFileID,
 		&lastModified, &createdAt, &updatedAt,
 	)
 	
@@ -122,6 +123,12 @@ func (r *ModRepository) Get(id string) (*domain.Mod, error) {
 	mod.LastModified = time.Unix(lastModified, 0)
 	mod.CreatedAt = time.Unix(createdAt, 0)
 	mod.UpdatedAt = time.Unix(updatedAt, 0)
+	if sourceModID.Valid {
+		mod.SourceModID = sourceModID.String
+	}
+	if sourceFileID.Valid {
+		mod.SourceFileID = sourceFileID.String
+	}
 	
 	return &mod, nil
 }
@@ -147,11 +154,12 @@ func (r *ModRepository) ListByProfile(profileID string) ([]*domain.Mod, error) {
 		var authors string
 		var enabled int
 		var lastModified, createdAt, updatedAt int64
+		var sourceModID, sourceFileID sql.NullString
 		
 		err := rows.Scan(
 			&mod.ID, &mod.ProfileID, &mod.FileName, &mod.FilePath, &mod.FileHash, &mod.FileSize,
 			&mod.ModID, &mod.Name, &mod.Version, &mod.Description, &authors, &enabled, &mod.Source,
-			&mod.SourceModID, &mod.SourceFileID,
+			&sourceModID, &sourceFileID,
 			&lastModified, &createdAt, &updatedAt,
 		)
 		if err != nil {
@@ -163,6 +171,12 @@ func (r *ModRepository) ListByProfile(profileID string) ([]*domain.Mod, error) {
 		mod.LastModified = time.Unix(lastModified, 0)
 		mod.CreatedAt = time.Unix(createdAt, 0)
 		mod.UpdatedAt = time.Unix(updatedAt, 0)
+		if sourceModID.Valid {
+			mod.SourceModID = sourceModID.String
+		}
+		if sourceFileID.Valid {
+			mod.SourceFileID = sourceFileID.String
+		}
 		
 		mods = append(mods, &mod)
 	}
@@ -196,6 +210,7 @@ func (r *ModRepository) GetByFileName(profileID, fileName string) (*domain.Mod, 
 	var authors string
 	var enabled int
 	var lastModified, createdAt, updatedAt int64
+	var sourceModID, sourceFileID sql.NullString
 	
 	err := r.db.QueryRow(`
 		SELECT id, profile_id, file_name, file_path, file_hash, file_size,
@@ -206,7 +221,7 @@ func (r *ModRepository) GetByFileName(profileID, fileName string) (*domain.Mod, 
 	`, profileID, fileName).Scan(
 		&mod.ID, &mod.ProfileID, &mod.FileName, &mod.FilePath, &mod.FileHash, &mod.FileSize,
 		&mod.ModID, &mod.Name, &mod.Version, &mod.Description, &authors, &enabled, &mod.Source,
-		&mod.SourceModID, &mod.SourceFileID,
+		&sourceModID, &sourceFileID,
 		&lastModified, &createdAt, &updatedAt,
 	)
 	
@@ -222,6 +237,12 @@ func (r *ModRepository) GetByFileName(profileID, fileName string) (*domain.Mod, 
 	mod.LastModified = time.Unix(lastModified, 0)
 	mod.CreatedAt = time.Unix(createdAt, 0)
 	mod.UpdatedAt = time.Unix(updatedAt, 0)
+	if sourceModID.Valid {
+		mod.SourceModID = sourceModID.String
+	}
+	if sourceFileID.Valid {
+		mod.SourceFileID = sourceFileID.String
+	}
 	
 	return &mod, nil
 }
