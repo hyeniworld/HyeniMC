@@ -206,6 +206,76 @@ var migrations = []Migration{
 			WHERE file_name NOT LIKE '%.jar' AND file_name NOT LIKE '%.jar.disabled';
 		`,
 	},
+	{
+		Version: 10,
+		Name:    "create_api_cache",
+		SQL: `
+			CREATE TABLE IF NOT EXISTS api_cache (
+				cache_key TEXT PRIMARY KEY,
+				cache_type TEXT NOT NULL,
+				response_data TEXT NOT NULL,
+				cached_at INTEGER NOT NULL,
+				expires_at INTEGER NOT NULL
+			);
+			
+			CREATE INDEX IF NOT EXISTS idx_api_cache_type ON api_cache(cache_type);
+			CREATE INDEX IF NOT EXISTS idx_api_cache_expires ON api_cache(expires_at);
+		`,
+	},
+	{
+		Version: 11,
+		Name:    "create_loader_versions_cache",
+		SQL: `
+			CREATE TABLE IF NOT EXISTS loader_versions (
+				loader_type TEXT NOT NULL,
+				version TEXT NOT NULL,
+				stable INTEGER DEFAULT 0,
+				build_number INTEGER,
+				maven_coords TEXT,
+				cached_at INTEGER NOT NULL,
+				PRIMARY KEY (loader_type, version)
+			);
+			
+			CREATE INDEX IF NOT EXISTS idx_loader_versions_type ON loader_versions(loader_type, stable DESC);
+			CREATE INDEX IF NOT EXISTS idx_loader_versions_cached ON loader_versions(cached_at);
+		`,
+	},
+	{
+		Version: 12,
+		Name:    "create_java_installations_cache",
+		SQL: `
+			CREATE TABLE IF NOT EXISTS java_installations (
+				id TEXT PRIMARY KEY,
+				path TEXT NOT NULL UNIQUE,
+				version TEXT NOT NULL,
+				vendor TEXT,
+				architecture TEXT,
+				is_valid INTEGER DEFAULT 1,
+				detected_at INTEGER NOT NULL
+			);
+			
+			CREATE INDEX IF NOT EXISTS idx_java_installations_version ON java_installations(version);
+			CREATE INDEX IF NOT EXISTS idx_java_installations_detected ON java_installations(detected_at DESC);
+		`,
+	},
+	{
+		Version: 13,
+		Name:    "create_profile_stats",
+		SQL: `
+			CREATE TABLE IF NOT EXISTS profile_stats (
+				profile_id TEXT PRIMARY KEY,
+				last_launched_at INTEGER,
+				total_play_time INTEGER DEFAULT 0,
+				launch_count INTEGER DEFAULT 0,
+				crash_count INTEGER DEFAULT 0,
+				last_crash_at INTEGER,
+				FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+			);
+			
+			CREATE INDEX IF NOT EXISTS idx_profile_stats_last_launched ON profile_stats(last_launched_at DESC);
+			CREATE INDEX IF NOT EXISTS idx_profile_stats_play_time ON profile_stats(total_play_time DESC);
+		`,
+	},
 }
 
 func runMigrations(db *sql.DB) error {
