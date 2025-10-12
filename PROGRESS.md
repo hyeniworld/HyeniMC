@@ -990,3 +990,126 @@ type Mod struct {
 - **[완료 기준]**
   - 런처에서 프로필 생성→권장 로더 자동 설치→모드/모드팩 설치·업데이트→게임 실행·로그 스트리밍 전 과정을 gRPC 기반으로 안정적으로 수행하며, 대형 모드팩 기준 중단복구·무결성 검증을 통과합니다.
 
+---
+
+## ✅ 혜니월드 인증 연동 완료 (2025-10-13)
+
+### 구현된 기능
+
+#### 1. **프로토콜 핸들러 (`hyenimc://` URL)**
+- **위치**: `src/main/protocol/handler.ts`
+- **기능**:
+  - `hyenimc://auth?token={TOKEN}&server={SERVER}` URL 처리
+  - Windows/macOS 프로토콜 자동 등록
+  - Second-instance 핸들링 (이미 실행 중인 런처에 전달)
+
+#### 2. **두 가지 인증 모드**
+
+##### MODE 1: 서버 주소 지정 (Server-Specific)
+```
+hyenimc://auth?token=xxx&server=play.hyeniworld.com
+```
+- **동작**:
+  1. 마인크래프트 `servers.dat` 파일(NBT 형식)에서 서버 주소 확인
+  2. 매칭되는 프로필의 HyeniHelper 모드 검색
+  3. **무조건 config 덮어쓰기** (기존 토큰 무시)
+- **사용 사례**: 특정 서버용 토큰 강제 업데이트
+
+##### MODE 2: 전체 프로필 (Global)
+```
+hyenimc://auth?token=xxx
+```
+- **동작**:
+  1. `servers.dat` 확인 안 함 (모든 프로필 대상)
+  2. HyeniHelper 모드가 있는 모든 프로필 검색
+  3. **조건부 작성**:
+     - ✅ Config 없으면 → 작성
+     - ✅ Config 있지만 token 비었으면 → 작성
+     - ❌ Config 있고 token 있으면 → 건너뜀 (보호)
+- **사용 사례**: 처음 설치하는 유저에게 기본 토큰 배포
+
+#### 3. **자동 Config 생성**
+- **경로**: `{프로필}/config/hyenihelper-config.json`
+- **내용**:
+  ```json
+  {
+    "token": "user-auth-token",
+    "enabled": true,
+    "timeoutSeconds": 10,
+    "serverStatusPort": 4444,
+    "authPort": 35565,
+    "serverStatusInterval": 180
+  }
+  ```
+
+#### 4. **Toast 알림**
+- **성공 시**: "✨ 혜니월드 인증 완료! (N개 프로필)"
+- **실패 시**: 에러 메시지 표시
+- **IPC 이벤트**: `auth:success`, `auth:error`
+
+#### 5. **검증 로직**
+- **servers.dat 파싱**: `prismarine-nbt` 라이브러리 사용
+- **JAR 검사**: 파일명 + 메타데이터(`META-INF/mods.toml`) 확인
+- **에러 처리**: 프로필 없음, 모드 없음 등 명확한 메시지
+
+### 📚 작성된 문서
+
+#### 1. **AUTH_PROTOCOL.md** - 개발자용 API 문서
+- URL 형식 및 파라미터 설명
+- 두 가지 인증 모드 상세 설명
+- 디스코드 봇 연동 예시 (Discord.js, discord.py)
+- 웹훅 콜백/폴링 구현 가이드
+- 보안 고려사항 (토큰 관리, URL 보안)
+- 테스트 방법
+
+#### 2. **USER_AUTH_GUIDE.md** - 사용자용 가이드
+- 준비사항 체크리스트
+- 단계별 인증 방법
+- 문제 해결 (6가지 시나리오)
+- 재인증 방법
+- 보안 팁
+
+#### 3. **test-auth.html** - 테스트 페이지
+- 3가지 테스트 버튼 (단일/여러/전체 서버)
+- URL 예시 및 설명
+- 예상 동작 안내
+
+### 🧪 테스트 완료
+
+```bash
+✅ 서버 주소 지정 모드 (MODE 1)
+✅ Config 파일 생성 확인
+✅ Toast 알림 표시
+✅ servers.dat NBT 파싱
+✅ JAR 메타데이터 검증
+```
+
+### 📦 주요 파일
+
+```
+src/main/protocol/
+  └── handler.ts              # 프로토콜 핸들러 (350+ 라인)
+
+src/shared/constants/
+  └── ipc.ts                  # IPC 이벤트 상수 추가
+
+docs/
+  ├── AUTH_PROTOCOL.md        # API 문서 (400+ 라인)
+  ├── USER_AUTH_GUIDE.md      # 사용자 가이드 (250+ 라인)
+  └── test-auth.html          # 테스트 페이지
+
+dependencies:
+  ├── prismarine-nbt          # NBT 파일 파싱
+  └── adm-zip                 # JAR 메타데이터 검사
+```
+
+### 🎯 다음 단계로 이동 가능
+
+장기 목표였던 **"혜니월드 인증 연동"**이 완료되어, 이제 다음 단계로 진행할 수 있습니다:
+
+1. **강혜니 전용 모드 배포 채널** 구현
+2. **테마 시스템** 강화 (강혜니 아이덴티티)
+3. **서버 보안 요구사항** 지원 (SPA 등)
+
+---
+
