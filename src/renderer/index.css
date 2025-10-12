@@ -62,4 +62,37 @@
       transform: scale(1);
     }
   }
+
+  /* 강혜니 일러스트 애니메이션 */
+  @keyframes float {
+    0%, 100% {
+      transform: translateY(0px);
+    }
+    50% {
+      transform: translateY(-20px);
+    }
+  }
+
+  @keyframes bounce-slow {
+    0%, 100% {
+      transform: translateY(0px) rotate(0deg);
+    }
+    25% {
+      transform: translateY(-10px) rotate(-2deg);
+    }
+    50% {
+      transform: translateY(-5px) rotate(0deg);
+    }
+    75% {
+      transform: translateY(-10px) rotate(2deg);
+    }
+  }
+
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+
+  .animate-bounce-slow {
+    animation: bounce-slow 8s ease-in-out infinite;
+  }
 }

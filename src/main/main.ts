@@ -38,10 +38,10 @@ async function createWindow() {
     : path.join(__dirname, '../preload/preload.js');
 
   mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 800,
-    minWidth: 1024,
-    minHeight: 600,
+    width: 1400,
+    height: 900,
+    minWidth: 1200,
+    minHeight: 700,
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,

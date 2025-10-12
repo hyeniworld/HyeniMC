@@ -6,6 +6,7 @@ import { useDownloadStore } from '../../store/downloadStore';
 import { useAccount } from '../../App';
 import { useToast } from '../../contexts/ToastContext';
 import { sortProfiles } from '../../utils/profileSorter';
+import { DecorationCharacter } from '../common/HyeniDecorations';
 
 export function ProfileList() {
   const navigate = useNavigate();
@@ -234,13 +235,17 @@ export function ProfileList() {
           <h2 className="text-3xl font-bold mb-2">프로필</h2>
           <p className="text-gray-400">마인크래프트 게임 프로필을 관리하세요</p>
         </div>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="btn-primary flex items-center gap-2 px-6 py-3 text-base font-semibold shadow-lg shadow-hyeni-pink-500/20 hover:shadow-hyeni-pink-500/40 transition-all"
-        >
-          <Plus className="w-5 h-5" />
-          새 프로필
-        </button>
+        <div className="flex items-center gap-4">
+          {/* 데코레이션 캐릭터 */}
+          <DecorationCharacter />
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="btn-primary flex items-center gap-2 px-6 py-3 text-base font-semibold shadow-lg shadow-hyeni-pink-500/20 hover:shadow-hyeni-pink-500/40 transition-all"
+          >
+            <Plus className="w-5 h-5" />
+            새 프로필
+          </button>
+        </div>
       </div>
 
       {/* Empty State */}

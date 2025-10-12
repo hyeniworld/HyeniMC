@@ -8,6 +8,7 @@ import { GlobalDownloadModal } from './components/common/GlobalDownloadModal';
 import { SettingsPage } from './pages/SettingsPage';
 import { useDownloadProgress } from './hooks/useDownloadProgress';
 import { ToastProvider } from './contexts/ToastContext';
+import { HyeniDecorations } from './components/common/HyeniDecorations';
 
 // Global account context
 interface AccountContextType {
@@ -48,9 +49,9 @@ function MainLayout() {
   const { selectedAccountId, setSelectedAccountId } = useAccount();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 text-white">
+    <div className="h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 text-white flex flex-col overflow-hidden">
       {/* Header */}
-      <header className="border-b border-gray-800 bg-gray-900/80 backdrop-blur-md sticky top-0 z-50 shadow-lg">
+      <header className="border-b border-gray-800 bg-gray-900/80 backdrop-blur-md z-50 shadow-lg flex-shrink-0">
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -79,16 +80,24 @@ function MainLayout() {
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="container mx-auto px-6 py-8">
-        <ProfileList />
-      </main>
+      {/* 2-Column Layout: 캐릭터 영역 + 컨텐츠 영역 */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* 왼쪽: 캐릭터 영역 */}
+        <aside className="w-96 flex-shrink-0 bg-gradient-to-br from-gray-900/50 to-gray-950/50 border-r border-gray-800 relative overflow-hidden">
+          <HyeniDecorations />
+        </aside>
+
+        {/* 오른쪽: 메인 컨텐츠 영역 */}
+        <main className="flex-1 px-6 py-8 overflow-y-auto overflow-x-hidden">
+          <ProfileList />
+        </main>
+      </div>
     
       {/* Footer */}
-      <footer className="border-t border-gray-800 mt-auto">
-        <div className="container mx-auto px-6 py-4">
-          <p className="text-center text-sm text-gray-500">
-            Made with <span className="text-red-500">❤️</span> for <span className="font-semibold text-gray-400">강혜니</span>
+      <footer className="border-t border-gray-800 flex-shrink-0">
+        <div className="container mx-auto px-6 py-2">
+          <p className="text-center text-xs text-gray-600">
+            Made with <span className="text-red-500">❤️</span> for <span className="font-semibold text-gray-500">강혜니</span>
           </p>
         </div>
       </footer>
