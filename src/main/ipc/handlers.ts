@@ -13,6 +13,7 @@ import { registerResourcePackHandlers } from './resourcepack';
 import { registerShaderPackHandlers } from './shaderpack';
 import { registerSettingsHandlers } from './settings';
 import { registerFileWatcherHandlers } from './file-watcher';
+import { registerHyeniHandlers } from './hyeni';
 
 /**
  * Register all IPC handlers
@@ -34,6 +35,7 @@ export function registerIpcHandlers(): void {
   registerShaderPackHandlers();
   registerSettingsHandlers();
   registerFileWatcherHandlers();
+  registerHyeniHandlers();
 
   console.log('[IPC] IPC handlers registered');
 }

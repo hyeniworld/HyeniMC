@@ -84,6 +84,10 @@ export const IPC_CHANNELS = {
   MODPACK_IMPORT_URL: 'modpack:import-url',
   MODPACK_SELECT_FILE: 'modpack:select-file',
   
+  // HyeniHelper (Custom Mod Updates)
+  HYENI_CHECK_UPDATE: 'hyeni:check-update',
+  HYENI_INSTALL_UPDATE: 'hyeni:install-update',
+  
   // Version
   VERSION_MINECRAFT_LIST: 'version:minecraft-list',
   VERSION_LOADER_LIST: 'version:loader-list',

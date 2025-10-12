@@ -1,4 +1,4 @@
-name = "hyenimc-curseforge-proxy"
+name = "hyenimc-worker"
 main = "src/index.js"
 compatibility_date = "2024-01-01"
 
@@ -7,11 +7,17 @@ kv_namespaces = [
   { binding = "RATE_LIMIT", id = "49ce1206ab5641d69ca96345b1650207" }
 ]
 
+# R2 bucket for releases (HyeniHelper mod distribution)
+# Create bucket: wrangler r2 bucket create hyenimc-releases
+r2_buckets = [
+  { binding = "RELEASES", bucket_name = "hyenimc-releases" }
+]
+
 # Environment variables (set via wrangler secret)
 # CURSEFORGE_API_KEY - Set via: wrangler secret put CURSEFORGE_API_KEY
 
 [env.production]
 workers_dev = false
 routes = [
-  { pattern = "hyenimc-cf-proxy.workers.dev/*", zone_name = "workers.dev" }
+  { pattern = "hyenimc-worker.workers.dev/*", zone_name = "workers.dev" }
 ]

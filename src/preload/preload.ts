@@ -219,6 +219,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke(IPC_CHANNELS.MODPACK_SELECT_FILE),
   },
 
+  // HyeniHelper (Custom Mod Updates)
+  hyeni: {
+    checkUpdate: (profilePath: string, gameVersion: string, loaderType: string): Promise<any> =>
+      ipcRenderer.invoke(IPC_CHANNELS.HYENI_CHECK_UPDATE, profilePath, gameVersion, loaderType),
+    installUpdate: (profilePath: string, updateInfo: any): Promise<{ success: boolean; message?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.HYENI_INSTALL_UPDATE, profilePath, updateInfo),
+  },
+
   // File Watcher APIs
   fileWatcher: {
     start: (profileId: string, gameDirectory: string): Promise<{ success: boolean }> =>
@@ -361,6 +369,10 @@ declare global {
         extractMetadata: (filePath: string) => Promise<any>;
         importFile: (filePath: string, profileId: string) => Promise<{ success: boolean }>;
         selectFile: () => Promise<string | null>;
+      };
+      hyeni: {
+        checkUpdate: (profilePath: string, gameVersion: string, loaderType: string) => Promise<any>;
+        installUpdate: (profilePath: string, updateInfo: any) => Promise<{ success: boolean; message?: string }>;
       };
       on: (channel: string, callback: (...args: any[]) => void) => () => void;
       once: (channel: string, callback: (...args: any[]) => void) => void;

@@ -5,6 +5,8 @@ import { ModList } from '../components/mods/ModList';
 import { ResourcePackList } from '../components/resourcepacks/ResourcePackList';
 import { ShaderPackList } from '../components/shaderpacks/ShaderPackList';
 import { ProfileSettingsTab } from '../components/profiles/ProfileSettingsTab';
+import { HyeniUpdateNotification } from '../components/hyeni/HyeniUpdateNotification';
+import { useHyeniUpdate } from '../hooks/useHyeniUpdate';
 import { useDownloadStore } from '../store/downloadStore';
 import { useToast } from '../contexts/ToastContext';
 
@@ -257,10 +259,38 @@ export const ProfileDetailPage: React.FC = () => {
 // Overview Tab
 const OverviewTab: React.FC<{ profile: any }> = ({ profile }) => {
   const toast = useToast();
+  const [profilePath, setProfilePath] = useState<string>('');
+  
   const getInstancePath = async () => {
     // Get userData path from electron
     const userData = await window.electronAPI.system.getPath('userData');
     return `${userData}/instances/${profile.id}`;
+  };
+
+  useEffect(() => {
+    if (profile?.id) {
+      getInstancePath().then(setProfilePath);
+    }
+  }, [profile?.id]);
+
+  // Check for HyeniHelper updates
+  const {
+    updateInfo,
+    isChecking,
+    checkForUpdate,
+    clearUpdate
+  } = useHyeniUpdate({
+    profilePath,
+    gameVersion: profile?.gameVersion || '',
+    loaderType: profile?.loaderType || '',
+    autoCheck: true,
+    checkInterval: 30 * 60 * 1000 // 30 minutes
+  });
+
+  const handleUpdateComplete = () => {
+    toast.success('업데이트 완료', 'HyeniHelper가 성공적으로 업데이트되었습니다.');
+    clearUpdate();
+    checkForUpdate(); // Re-check to confirm
   };
 
   const handleOpenFolder = async () => {
@@ -298,6 +328,18 @@ const OverviewTab: React.FC<{ profile: any }> = ({ profile }) => {
 
   return (
     <div className="p-6 space-y-4">
+      {/* HyeniHelper Update Notification */}
+      {profilePath && updateInfo && (
+        <HyeniUpdateNotification
+          profileId={profile.id}
+          profilePath={profilePath}
+          gameVersion={profile.gameVersion}
+          loaderType={profile.loaderType}
+          updateInfo={updateInfo}
+          onUpdateComplete={handleUpdateComplete}
+          onDismiss={clearUpdate}
+        />
+      )}
       <div className="bg-gray-800 rounded-lg p-6 shadow border border-gray-700">
         <h2 className="text-xl font-semibold text-gray-200 mb-4">
           프로필 정보

@@ -64,8 +64,14 @@ declare global {
         remove: (profileId: string, modId: string) => Promise<void>;
       };
       modpack: {
-        install: (profileId: string, filePath: string) => Promise<void>;
-        installUrl: (profileId: string, url: string) => Promise<void>;
+        search: (query: string, gameVersion?: string) => Promise<any[]>;
+        getVersions: (modpackId: string, gameVersion?: string) => Promise<any[]>;
+        install: (profileId: string, versionId: string) => Promise<{ success: boolean }>;
+        installUrl: (profileId: string, url: string) => Promise<{ success: boolean }>;
+        validateFile: (filePath: string) => Promise<any>;
+        extractMetadata: (filePath: string) => Promise<any>;
+        importFile: (filePath: string, profileId: string) => Promise<{ success: boolean }>;
+        selectFile: () => Promise<string | null>;
       };
       resourcepack: {
         list: (profileId: string) => Promise<any>;
@@ -91,6 +97,10 @@ declare global {
       fileWatcher: {
         start: (profileId: string, gameDirectory: string) => Promise<{ success: boolean }>;
         stop: (profileId: string) => Promise<{ success: boolean }>;
+      };
+      hyeni: {
+        checkUpdate: (profilePath: string, gameVersion: string, loaderType: string) => Promise<any>;
+        installUpdate: (profilePath: string, updateInfo: any) => Promise<{ success: boolean; message?: string }>;
       };
       on: (channel: string, callback: (...args: any[]) => void) => () => void;
       once: (channel: string, callback: (...args: any[]) => void) => void;
