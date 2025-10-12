@@ -804,44 +804,79 @@ type Mod struct {
 
 ---
 
-### 🚀 다음 단계 옵션
+## 🎨 UI/UX 개선 (진행 중)
 
-#### 옵션 1: UI/UX 개선 (사용자 경험 향상) ⭐ 추천
-**목적**: 사용자가 소스를 쉽게 구분하고 선택할 수 있도록
+### ✅ Phase 2: 모드 업데이트 UX 개선 (완료!)
 
-**작업 내용**:
-- 검색 모달에 소스 선택 UI 개선
-  - 탭 형식으로 Modrinth/CurseForge 전환
-  - 소스 뱃지 (🟢 Modrinth / 🟠 CurseForge) 표시
-  - 기본 소스 설정 저장
-- 모드 목록에 소스 표시
-- 업데이트 가능 모드 UI (Modrinth만)
+**목표**: Modrinth처럼 직관적인 모드 업데이트 경험 제공
 
-**예상 시간**: 2-3시간  
-**우선순위**: ⭐⭐⭐ (사용성 향상)
+**구현 내용**:
+- ✅ 모드 목록에 "✨ 업데이트 가능" 뱃지 추가 (animate-pulse)
+- ✅ 버전 정보 표시 (v1.2.3 → v1.3.0)
+- ✅ 개별 업데이트 버튼 추가 (업데이트 중 스피너 포함)
+- ✅ `updateMod` IPC API 추가 (`mod:update-single`)
+- ✅ preload API 확장
+- ✅ 빌드 성공
 
----
+**변경 파일**:
+- `src/renderer/components/mods/ModList.tsx` - UI 및 핸들러
+- `src/main/ipc/mod.ts` - 개별 업데이트 핸들러
+- `src/preload/preload.ts` - API 노출
 
-#### 옵션 2: 메타데이터 저장 (정확도 향상)
-**목적**: CurseForge 모드 업데이트 체크 지원
-
-**작업 내용**:
-- DB 스키마 수정
-  ```sql
-  ALTER TABLE mods ADD COLUMN source TEXT;
-  ALTER TABLE mods ADD COLUMN source_mod_id TEXT;
-  ALTER TABLE mods ADD COLUMN source_file_id TEXT;
-  ```
-- 모드 설치 시 소스 정보 저장
-- `ModUpdater`에서 소스별 업데이트 체크
-- CurseForge 모드 업데이트 지원
-
-**예상 시간**: 3-4시간  
-**우선순위**: ⭐⭐⭐⭐ (완성도 향상)
+**실제 시간**: 3시간  
+**우선순위**: ⭐⭐⭐⭐⭐ (최고)
 
 ---
 
-#### 옵션 3: CurseForge 모드팩 지원 (새로운 기능)
+### 📋 나머지 개선 사항
+
+#### 3. 토스트 알림 시스템 (다음 작업)
+- ❌ 모든 메시지가 `alert()`
+- ❌ 모던하지 않은 UX
+- **예상 시간**: 2-3h
+
+#### 1. 색상 일관성 부족
+- **메인 화면**: Purple 계열
+- **상세 화면**: Blue 계열 (불일치)
+- **버튼**: Green/Red 혼용
+- **예상 시간**: 1-2h
+
+#### 4. 게임 시작 블로킹 (선택)
+- ❌ 다운로드 중 UI 완전 블록
+- ❌ 백그라운드 다운로드 없음
+- **예상 시간**: 6-8h
+
+### 🎯 진행 상황
+
+| Phase | 내용 | 시간 | 상태 |
+|-------|------|------|------|
+| **Phase 2** | 모드 업데이트 UX 개선 | 3h | ✅ 완료 |
+| **Phase 3** | 토스트 알림 시스템 | 2-3h | ⏳ 다음 |
+| **Phase 1** | 디자인 시스템 통일 (색상 테마) | 1-2h | 대기 |
+| **Phase 4** | 백그라운드 다운로드 (선택) | 6-8h | 선택 |
+
+### 🥇 권장 순서
+
+#### Option A: 필수만 (6-9시간)
+```
+Phase 2 → Phase 3 → Phase 1
+```
+- **결과**: 사용자 만족도 크게 향상 ✅
+
+#### Option B: 완전 개선 (12-17시간)
+```
+Phase 2 → Phase 3 → Phase 1 → Phase 4
+```
+- **결과**: Modrinth 수준 도달 ✅✅✅
+
+### 📄 상세 계획서
+👉 **[UI_UX_IMPROVEMENT_PLAN.md](./UI_UX_IMPROVEMENT_PLAN.md)** 참고
+
+---
+
+## 🚀 이후 선택 옵션
+
+#### 옵션: CurseForge 모드팩 지원 (Phase 8)
 **목적**: CurseForge 모드팩 다운로드 및 설치
 
 **작업 내용**:
