@@ -9,6 +9,21 @@ import { startBackend, stopBackend } from './backend/manager';
 // Set app name
 app.setName('HyeniMC');
 
+// Prevent multiple instances
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  console.log('[Main] Another instance is already running, exiting...');
+  app.quit();
+} else {
+  app.on('second-instance', (event, commandLine, workingDirectory) => {
+    // Someone tried to run a second instance, focus our window instead
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
+}
+
 // Disable certificate verification for Microsoft auth (macOS SSL issue workaround)
 app.commandLine.appendSwitch('ignore-certificate-errors');
 
