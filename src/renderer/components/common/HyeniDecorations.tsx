@@ -6,10 +6,10 @@ import { useState, useEffect } from 'react';
  */
 export function HyeniDecorations() {
   const characterImages = [
-    '/assets/hyeni/character-main.png',
-    '/assets/hyeni/character-main1.png',
-    '/assets/hyeni/character-main2.png',
-    '/assets/hyeni/character-main3.png',
+    './assets/hyeni/character-main.png',
+    './assets/hyeni/character-main1.png',
+    './assets/hyeni/character-main2.png',
+    './assets/hyeni/character-main3.png',
   ];
 
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -83,7 +83,7 @@ export function DecorationCharacter() {
       title="강혜니 치지직 채널 방문하기"
     >
       <img 
-        src="/assets/hyeni/deco-sparkles.png" 
+        src="./assets/hyeni/deco-sparkles.png" 
         alt="Decoration"
         className="w-full h-full object-contain opacity-90 drop-shadow-lg hover:opacity-100"
         draggable={false}
