@@ -8,6 +8,7 @@ import { startBackend, stopBackend } from './backend/manager';
 import { fileWatcher } from './services/file-watcher';
 import { registerCustomProtocol } from './protocol/register';
 import { setupProtocolHandler, handleProtocolUrl } from './protocol/handler';
+import { initAutoUpdater, checkForUpdates } from './auto-updater';
 
 // Set app name
 app.setName('HyeniMC');
@@ -92,6 +93,9 @@ async function createWindow() {
 
   // Set main window for file watcher
   fileWatcher.setMainWindow(mainWindow);
+
+  // Initialize auto-updater
+  initAutoUpdater(mainWindow);
 }
 
 async function initialize() {
@@ -105,8 +109,18 @@ async function initialize() {
     // Create window
     await createWindow();
 
-    // Setup protocol handler (for macOS open-url event)
+    // Setup protocol handler after window is ready
     setupProtocolHandler(mainWindow);
+
+    // Check for updates after startup (with 3 second delay)
+    setTimeout(() => {
+      console.log('[Main] Checking for launcher updates...');
+      checkForUpdates().catch(err => {
+        console.error('[Main] Failed to check for updates:', err);
+      });
+    }, 3000);
+
+    console.log('[Main] App initialization complete');
 
     // Initialize gRPC download stream bridge (global)
     initializeDownloadStreamBridge();

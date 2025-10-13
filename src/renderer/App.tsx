@@ -9,6 +9,8 @@ import { SettingsPage } from './pages/SettingsPage';
 import { useDownloadProgress } from './hooks/useDownloadProgress';
 import { ToastProvider, useToast } from './contexts/ToastContext';
 import { HyeniDecorations } from './components/common/HyeniDecorations';
+import { useLauncherUpdate } from './hooks/useLauncherUpdate';
+import { LauncherUpdateBanner } from './components/launcher/LauncherUpdateBanner';
 
 // Global account context
 interface AccountContextType {
@@ -50,6 +52,20 @@ function App() {
 function MainLayout() {
   const { selectedAccountId, setSelectedAccountId } = useAccount();
   const toast = useToast();
+  
+  // Launcher update state
+  const {
+    updateAvailable,
+    updateInfo,
+    isDownloading,
+    downloadProgress,
+    updateDownloaded,
+    downloadUpdate,
+    installUpdate,
+    dismissUpdate,
+    formatBytes,
+    formatSpeed
+  } = useLauncherUpdate();
 
   // Listen for authentication events
   useEffect(() => {
@@ -79,8 +95,23 @@ function MainLayout() {
 
   return (
     <div className="h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 text-white flex flex-col overflow-hidden">
+      {/* Launcher Update Banner */}
+      {updateAvailable && updateInfo && (
+        <LauncherUpdateBanner
+          updateInfo={updateInfo}
+          isDownloading={isDownloading}
+          downloadProgress={downloadProgress}
+          updateDownloaded={updateDownloaded}
+          onDownload={downloadUpdate}
+          onInstall={installUpdate}
+          onDismiss={dismissUpdate}
+          formatBytes={formatBytes}
+          formatSpeed={formatSpeed}
+        />
+      )}
+
       {/* Header */}
-      <header className="border-b border-gray-800 bg-gray-900/80 backdrop-blur-md z-50 shadow-lg flex-shrink-0">
+      <header className={`border-b border-gray-800 bg-gray-900/80 backdrop-blur-md z-50 shadow-lg flex-shrink-0 ${updateAvailable ? 'mt-0' : ''}`}>
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">

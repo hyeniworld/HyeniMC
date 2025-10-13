@@ -35,6 +35,8 @@
     "axios": "^1.6.0",
     "chokidar": "^4.0.3",
     "clsx": "^2.0.0",
+    "electron-log": "^5.0.1",
+    "electron-updater": "^6.1.7",
     "fs-extra": "^11.2.0",
     "lucide-react": "^0.294.0",
     "minecraft-launcher-core": "^3.18.1",
@@ -81,6 +83,11 @@
   "build": {
     "appId": "com.hyeniworld.hyenimc",
     "productName": "HyeniMC",
+    "publish": {
+      "provider": "github",
+      "owner": "hyeniworld",
+      "repo": "HyeniMC"
+    },
     "asar": true,
     "asarUnpack": [
       "**/*.node"
@@ -89,6 +96,7 @@
     "npmRebuild": false,
     "buildDependenciesFromSource": false,
     "nodeGypRebuild": false,
+    "removePackageScripts": true,
     "files": [
       {
         "from": "dist/main",

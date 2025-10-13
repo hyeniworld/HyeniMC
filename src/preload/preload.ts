@@ -219,20 +219,28 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke(IPC_CHANNELS.MODPACK_SELECT_FILE),
   },
 
-  // HyeniHelper (Custom Mod Updates)
+  // HyeniHelper APIs
   hyeni: {
-    checkUpdate: (profilePath: string, gameVersion: string, loaderType: string): Promise<any> =>
-      ipcRenderer.invoke(IPC_CHANNELS.HYENI_CHECK_UPDATE, profilePath, gameVersion, loaderType),
+    checkForUpdate: (profilePath: string, gameVersion: string, loaderType: string): Promise<any> =>
+      ipcRenderer.invoke('hyeni:check-for-update', profilePath, gameVersion, loaderType),
+    
     installUpdate: (profilePath: string, updateInfo: any): Promise<{ success: boolean; message?: string }> =>
-      ipcRenderer.invoke(IPC_CHANNELS.HYENI_INSTALL_UPDATE, profilePath, updateInfo),
+      ipcRenderer.invoke('hyeni:install-update', profilePath, updateInfo),
   },
 
-  // File Watcher APIs
-  fileWatcher: {
-    start: (profileId: string, gameDirectory: string): Promise<{ success: boolean }> =>
-      ipcRenderer.invoke(IPC_CHANNELS.FILE_WATCH_START, profileId, gameDirectory),
-    stop: (profileId: string): Promise<{ success: boolean }> =>
-      ipcRenderer.invoke(IPC_CHANNELS.FILE_WATCH_STOP, profileId),
+  // Launcher update APIs
+  launcher: {
+    checkForUpdates: (): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke('launcher:check-for-updates'),
+    
+    downloadUpdate: (): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke('launcher:download-update'),
+    
+    quitAndInstall: (): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke('launcher:quit-and-install'),
+    
+    getVersion: (): Promise<{ success: boolean; version: string }> =>
+      ipcRenderer.invoke('launcher:get-version'),
   },
 
   // Event listeners
@@ -371,8 +379,14 @@ declare global {
         selectFile: () => Promise<string | null>;
       };
       hyeni: {
-        checkUpdate: (profilePath: string, gameVersion: string, loaderType: string) => Promise<any>;
+        checkForUpdate: (profilePath: string, gameVersion: string, loaderType: string) => Promise<any>;
         installUpdate: (profilePath: string, updateInfo: any) => Promise<{ success: boolean; message?: string }>;
+      };
+      launcher: {
+        checkForUpdates: () => Promise<{ success: boolean }>;
+        downloadUpdate: () => Promise<{ success: boolean }>;
+        quitAndInstall: () => Promise<{ success: boolean }>;
+        getVersion: () => Promise<{ success: boolean; version: string }>;
       };
       on: (channel: string, callback: (...args: any[]) => void) => () => void;
       once: (channel: string, callback: (...args: any[]) => void) => void;
