@@ -28,7 +28,6 @@
     "backend:build:all": "npm run backend:build:mac-universal && npm run backend:build:win-x64"
   },
   "dependencies": {
-    "@bufbuild/buf": "^1.58.0",
     "@bufbuild/protobuf": "^2.9.0",
     "@grpc/grpc-js": "^1.14.0",
     "@hookform/resolvers": "^3.3.3",
@@ -52,6 +51,7 @@
     "zustand": "^4.4.7"
   },
   "devDependencies": {
+    "@bufbuild/buf": "^1.58.0",
     "@types/adm-zip": "^0.5.7",
     "@types/chokidar": "^1.7.5",
     "@types/fs-extra": "^11.0.4",
@@ -73,6 +73,7 @@
     "postcss": "^8.4.32",
     "prettier": "^3.1.1",
     "tailwindcss": "^3.4.0",
+    "terser": "^5.36.0",
     "typescript": "^5.3.3",
     "vite": "^5.0.8",
     "vitest": "^1.0.4"
@@ -80,43 +81,69 @@
   "build": {
     "appId": "com.hyeniworld.hyenimc",
     "productName": "HyeniMC",
+    "asar": true,
+    "asarUnpack": [
+      "**/*.node"
+    ],
+    "compression": "maximum",
+    "npmRebuild": false,
+    "buildDependenciesFromSource": false,
+    "nodeGypRebuild": false,
     "files": [
       {
         "from": "dist/main",
         "to": "main",
         "filter": [
-          "**/*"
+          "**/*",
+          "!**/*.map",
+          "!**/*.d.ts"
         ]
       },
       {
         "from": "dist/preload",
         "to": "preload",
         "filter": [
-          "**/*"
+          "**/*",
+          "!**/*.map",
+          "!**/*.d.ts"
         ]
       },
       {
         "from": "dist/renderer",
         "to": "renderer",
         "filter": [
-          "**/*"
+          "**/*",
+          "!**/*.map"
         ]
       },
       {
         "from": "dist/shared",
         "to": "shared",
         "filter": [
-          "**/*"
+          "**/*",
+          "!**/*.map",
+          "!**/*.d.ts"
         ]
       },
-      {
-        "from": "node_modules",
-        "to": "node_modules",
-        "filter": [
-          "**/*"
-        ]
-      },
-      "package.json"
+      "package.json",
+      "!node_modules/**/*.md",
+      "!node_modules/**/*.txt",
+      "!node_modules/**/.DS_Store",
+      "!node_modules/**/LICENSE*",
+      "!node_modules/**/README*",
+      "!node_modules/**/CHANGELOG*",
+      "!node_modules/**/*.flow",
+      "!node_modules/**/*.ts",
+      "!node_modules/**/*.d.ts",
+      "!node_modules/**/*.map",
+      "!node_modules/**/test/**",
+      "!node_modules/**/tests/**",
+      "!node_modules/**/__tests__/**",
+      "!node_modules/**/example/**",
+      "!node_modules/**/examples/**",
+      "!node_modules/**/docs/**",
+      "!node_modules/**/.bin/**",
+      "!node_modules/**/.github/**"
     ],
     "mac": {
       "category": "public.app-category.games",
@@ -161,6 +188,13 @@
           ]
         }
       ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "deleteAppDataOnUninstall": false,
+      "differentialPackage": true
     },
     "directories": {
       "output": "release",
