@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "혜니월드 전용 마인크래프트 런처",
   "main": "main/main.js",
-  "author": "HyeniWorld",
+  "author": "deVbug",
   "license": "MIT",
   "private": true,
   "scripts": {
@@ -81,11 +81,11 @@
     "vitest": "^1.0.4"
   },
   "build": {
-    "appId": "com.hyeniworld.hyenimc",
+    "appId": "me.devbug.hyenimc",
     "productName": "HyeniMC",
     "publish": {
       "provider": "github",
-      "owner": "hyeniworld",
+      "owner": "devbug",
       "repo": "HyeniMC"
     },
     "asar": true,
