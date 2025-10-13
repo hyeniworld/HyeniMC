@@ -31,8 +31,18 @@ export default {
       const path = url.pathname;
 
       // Route: Releases API
-      if (path.startsWith('/api/hyenihelper/') || path.startsWith('/download/hyenihelper/')) {
+      if (path.startsWith('/api/mods/') || path.startsWith('/download/mods/')) {
         return await handleReleasesAPI(request, env, corsHeaders);
+      }
+      
+      // Legacy support for hyenihelper
+      if (path.startsWith('/api/hyenihelper/') || path.startsWith('/download/hyenihelper/')) {
+        const newPath = path.replace('/hyenihelper/', '/mods/hyenihelper/');
+        return await handleReleasesAPI(
+          new Request(new URL(newPath, request.url), request),
+          env,
+          corsHeaders
+        );
       }
 
       // Route: Health check
@@ -140,24 +150,31 @@ async function handleCurseForgeProxy(request, env, corsHeaders) {
 }
 
 /**
- * Handle Releases API
+ * Handle Releases API requests
  */
 async function handleReleasesAPI(request, env, corsHeaders) {
   const url = new URL(request.url);
   const path = url.pathname;
 
-  // GET /api/hyenihelper/latest
-  if (path === '/api/hyenihelper/latest') {
-    return await getLatestRelease(env, corsHeaders);
+  // GET /api/mods (모드 목록)
+  if (path === '/api/mods' || path === '/api/mods/') {
+    return await getModsList(env, corsHeaders);
   }
 
-  // GET /api/hyenihelper/versions
-  if (path === '/api/hyenihelper/versions') {
-    return await getVersionsList(env, corsHeaders);
+  // GET /api/mods/{modId}/latest
+  const latestMatch = path.match(/^\/api\/mods\/([^\/]+)\/latest$/);
+  if (latestMatch) {
+    return await getLatestRelease(env, corsHeaders, latestMatch[1]);
   }
 
-  // GET /download/hyenihelper/{version}/{file}
-  if (path.startsWith('/download/hyenihelper/')) {
+  // GET /api/mods/{modId}/versions
+  const versionsMatch = path.match(/^\/api\/mods\/([^\/]+)\/versions$/);
+  if (versionsMatch) {
+    return await getVersionsList(env, corsHeaders, versionsMatch[1]);
+  }
+
+  // GET /download/mods/{modId}/{version}/{file}
+  if (path.startsWith('/download/mods/')) {
     return await downloadFile(request, env, corsHeaders);
   }
 
@@ -169,9 +186,9 @@ async function handleReleasesAPI(request, env, corsHeaders) {
 }
 
 /**
- * Get latest HyeniHelper release
+ * Get all mods list
  */
-async function getLatestRelease(env, corsHeaders) {
+async function getModsList(env, corsHeaders) {
   if (!env.RELEASES) {
     return new Response(JSON.stringify({ 
       error: 'R2 bucket not configured' 
@@ -181,12 +198,55 @@ async function getLatestRelease(env, corsHeaders) {
     });
   }
 
-  const latest = await env.RELEASES.get('hyenihelper/latest.json');
+  // Get registry.json
+  const registry = await env.RELEASES.get('mods/registry.json');
+  
+  if (!registry) {
+    // Fallback: scan mods/ directory
+    const list = await env.RELEASES.list({ prefix: 'mods/', delimiter: '/' });
+    const mods = list.delimitedPrefixes
+      .map(prefix => prefix.replace('mods/', '').replace('/', ''))
+      .filter(name => name.length > 0);
+    
+    return new Response(JSON.stringify({ mods }), {
+      headers: { 
+        ...corsHeaders, 
+        'Content-Type': 'application/json',
+        'Cache-Control': 'public, max-age=600'
+      }
+    });
+  }
+  
+  const data = JSON.parse(await registry.text());
+  
+  return new Response(JSON.stringify(data), {
+    headers: { 
+      ...corsHeaders, 
+      'Content-Type': 'application/json',
+      'Cache-Control': 'public, max-age=600'
+    }
+  });
+}
+
+/**
+ * Get latest release for a specific mod
+ */
+async function getLatestRelease(env, corsHeaders, modId) {
+  if (!env.RELEASES) {
+    return new Response(JSON.stringify({ 
+      error: 'R2 bucket not configured' 
+    }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
+
+  const latest = await env.RELEASES.get(`mods/${modId}/latest.json`);
   
   if (!latest) {
     return new Response(JSON.stringify({ 
       error: 'Latest version not found',
-      message: 'Release information not available yet.'
+      message: `Release information not available for ${modId}.`
     }), {
       status: 404,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -195,14 +255,17 @@ async function getLatestRelease(env, corsHeaders) {
   
   const data = JSON.parse(await latest.text());
   
-  // Add full download URLs
+  // Add relative download URLs (without /download prefix)
+  // Client will prepend the base URL
   if (data.loaders) {
     for (const [loader, info] of Object.entries(data.loaders)) {
-      info.downloadUrl = `/download/${info.downloadPath}`;
+      // downloadPath already contains: mods/hyenihelper/versions/1.0.1/file.jar
+      // Just use it as-is for the client to prepend /download/mods
+      info.downloadUrl = `/${info.downloadPath}`;
     }
   }
   
-  console.log(`[Releases API] Latest version: ${data.version}`);
+  console.log(`[Releases API] ${modId} latest version: ${data.version}`);
   
   return new Response(JSON.stringify(data), {
     headers: { 
@@ -214,9 +277,9 @@ async function getLatestRelease(env, corsHeaders) {
 }
 
 /**
- * Get all versions list
+ * Get all versions list for a specific mod
  */
-async function getVersionsList(env, corsHeaders) {
+async function getVersionsList(env, corsHeaders, modId) {
   if (!env.RELEASES) {
     return new Response(JSON.stringify({ 
       error: 'R2 bucket not configured' 
@@ -226,13 +289,13 @@ async function getVersionsList(env, corsHeaders) {
     });
   }
 
-  // R2 list objects in hyenihelper/ prefix
-  const list = await env.RELEASES.list({ prefix: 'hyenihelper/' });
+  // R2 list objects in mods/{modId}/versions/ prefix
+  const list = await env.RELEASES.list({ prefix: `mods/${modId}/versions/` });
   
   // Extract versions from paths
   const versions = new Set();
   for (const obj of list.objects) {
-    const match = obj.key.match(/hyenihelper\/(\d+\.\d+\.\d+)\//);
+    const match = obj.key.match(/mods\/[^\/]+\/versions\/(\d+\.\d+\.\d+)\//);
     if (match) {
       versions.add(match[1]);
     }
@@ -241,7 +304,7 @@ async function getVersionsList(env, corsHeaders) {
   // Fetch manifest for each version
   const versionList = [];
   for (const version of versions) {
-    const manifestPath = `hyenihelper/${version}/manifest.json`;
+    const manifestPath = `mods/${modId}/versions/${version}/manifest.json`;
     const manifest = await env.RELEASES.get(manifestPath);
     
     if (manifest) {

@@ -10,8 +10,9 @@ import * as fs from 'fs-extra';
 import { app, net } from 'electron';
 import * as crypto from 'crypto';
 
-const RELEASES_API_URL = 'https://hyenimc-worker.workers.dev/api';
-const DOWNLOAD_BASE_URL = 'https://hyenimc-worker.workers.dev/download';
+// Worker API URL (멀티 모드 지원)
+const RELEASES_API_URL = 'https://hyenimc-worker.devbug.workers.dev/api/mods';
+const DOWNLOAD_BASE_URL = 'https://hyenimc-worker.devbug.workers.dev/download/mods';
 
 export interface HyeniHelperUpdateInfo {
   available: boolean;
@@ -122,7 +123,11 @@ export class HyeniUpdater {
       }
       
       // 2. Download new file
-      const downloadUrl = `${DOWNLOAD_BASE_URL}${updateInfo.downloadUrl}?token=${token}`;
+      // downloadUrl format: /mods/hyenihelper/versions/1.0.1/file.jar
+      // Base URL: https://worker.dev/download/mods
+      // Remove leading /mods/ from downloadUrl since base already has /mods
+      const relativePath = updateInfo.downloadUrl.replace(/^\/mods\//, '/');
+      const downloadUrl = `${DOWNLOAD_BASE_URL}${relativePath}?token=${token}`;
       const tempPath = await this.downloadFile(downloadUrl, updateInfo.sha256, onProgress);
       
       // 3. Backup old files
