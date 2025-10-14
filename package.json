@@ -83,6 +83,7 @@
   "build": {
     "appId": "me.devbug.hyeniworld.hyenimc",
     "productName": "HyeniMC",
+    "artifactName": "${productName}-Setup-${version}.${ext}",
     "publish": {
       "provider": "github",
       "owner": "hyeniworld",
