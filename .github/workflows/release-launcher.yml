@@ -28,12 +28,12 @@ jobs:
       
       - name: Create auth config
         run: |
-          cat > src/main/services/auth-config.ts << 'EOF'
+          @"
           export const AUTH_CONFIG = {
             AZURE_CLIENT_ID: '${{ secrets.AZURE_CLIENT_ID }}',
             REDIRECT_URI: 'http://localhost:53682/callback',
           };
-          EOF
+          "@ | Out-File -FilePath src/main/services/auth-config.ts -Encoding utf8
       
       - name: Generate protobuf code
         run: npm run proto:gen
