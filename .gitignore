@@ -7,6 +7,10 @@ pnpm-lock.yaml
 # Build outputs
 dist/
 build/
+!build/icon.*
+!build/*.icns
+!build/*.ico
+!build/*.png
 release/
 out/
 
