@@ -9,6 +9,7 @@ import { fileWatcher } from './services/file-watcher';
 import { registerCustomProtocol } from './protocol/register';
 import { setupProtocolHandler, handleProtocolUrl } from './protocol/handler';
 import { initAutoUpdater, checkForUpdates } from './auto-updater';
+import { detectJavaInstallations } from './services/java-detector';
 
 // Set app name
 app.setName('HyeniMC');
@@ -98,10 +99,76 @@ async function createWindow() {
   initAutoUpdater(mainWindow);
 }
 
+/**
+ * Initialize Java settings on app startup
+ * Detects Java installations and sets default if global settings is empty
+ */
+async function initializeJavaSettings() {
+  try {
+    console.log('[Main] Initializing Java settings...');
+    
+    // Detect Java installations
+    const javaInstallations = await detectJavaInstallations();
+    console.log(`[Main] Detected ${javaInstallations.length} Java installation(s)`);
+    
+    if (javaInstallations.length === 0) {
+      console.warn('[Main] No Java installations detected');
+      return;
+    }
+    
+    // Get current global settings
+    const { settingsRpc } = await import('./grpc/clients');
+    const settingsResponse = await settingsRpc.getSettings();
+    const currentJavaPath = settingsResponse.settings?.java?.javaPath || '';
+    
+    // If java_path is empty, set it to the first detected Java
+    if (!currentJavaPath || currentJavaPath.trim() === '') {
+      const defaultJava = javaInstallations[0];
+      console.log(`[Main] Setting default Java to: ${defaultJava.path} (Java ${defaultJava.majorVersion})`);
+      
+      // Update settings with the detected Java path
+      await settingsRpc.updateSettings({
+        settings: {
+          java: {
+            javaPath: defaultJava.path,
+            memoryMin: settingsResponse.settings?.java?.memoryMin || 1024,
+            memoryMax: settingsResponse.settings?.java?.memoryMax || 4096,
+          },
+          download: settingsResponse.settings?.download || {
+            requestTimeoutMs: 3000,
+            maxRetries: 5,
+            maxParallel: 10,
+          },
+          resolution: settingsResponse.settings?.resolution || {
+            width: 854,
+            height: 480,
+            fullscreen: false,
+          },
+          cache: settingsResponse.settings?.cache || {
+            enabled: true,
+            maxSizeGb: 10,
+            ttlDays: 30,
+          },
+        },
+      });
+      
+      console.log('[Main] Java settings initialized successfully');
+    } else {
+      console.log(`[Main] Java path already set: ${currentJavaPath}`);
+    }
+  } catch (error) {
+    // Don't fail app startup if Java detection fails
+    console.error('[Main] Failed to initialize Java settings:', error);
+  }
+}
+
 async function initialize() {
   try {
     // Start backend gRPC server
     await startBackend();
+    
+    // Initialize Java settings (auto-detect and set default)
+    await initializeJavaSettings();
     
     // Register IPC handlers
     registerIpcHandlers();
