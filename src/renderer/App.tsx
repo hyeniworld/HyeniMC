@@ -173,7 +173,18 @@ function MainLayout() {
       <footer className="border-t border-gray-800 flex-shrink-0">
         <div className="container mx-auto px-6 py-2">
           <p className="text-center text-xs text-gray-600">
-            Made with <span className="text-red-500">❤️</span> for <span className="font-semibold text-gray-500">강혜니</span>
+            Made with <span className="text-red-500">❤️</span> for{' '}
+            <button
+              onClick={() => {
+                if (window.electronAPI) {
+                  window.electronAPI.shell.openExternal('https://chzzk.naver.com/3081b4db8cb8b6c1de194b66a5b81a67');
+                }
+              }}
+              className="font-semibold text-hyeni-pink-400 hover:text-hyeni-pink-300 transition-colors cursor-pointer underline decoration-hyeni-pink-400/50 hover:decoration-hyeni-pink-300"
+              title="강혜니 치지직 채널 방문하기"
+            >
+              강혜니
+            </button>
           </p>
         </div>
       </footer>
