@@ -76,6 +76,20 @@ async function createWindow() {
     mainWindow.setMenuBarVisibility(false);
   }
 
+  // Set Content Security Policy
+  mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          isDev
+            ? "default-src 'self' 'unsafe-inline' http://localhost:* ws://localhost:* data: blob:; script-src 'self' 'unsafe-inline' http://localhost:*; img-src 'self' https: http: data: blob:; connect-src 'self' https: http: ws: wss:; style-src 'self' 'unsafe-inline' http://localhost:*; font-src 'self' data:;"
+            : "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: http: data: blob:; connect-src 'self' https:; font-src 'self' data:;"
+        ]
+      }
+    });
+  });
+
   // Show window when ready
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show();
