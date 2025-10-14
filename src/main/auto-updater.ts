@@ -5,7 +5,7 @@
  */
 
 import { autoUpdater } from 'electron-updater';
-import { BrowserWindow } from 'electron';
+import { BrowserWindow, app } from 'electron';
 import log from 'electron-log';
 
 // Configure logging
@@ -134,8 +134,8 @@ export function quitAndInstall(): void {
 }
 
 /**
- * Get current version
+ * Get current version from package.json
  */
 export function getCurrentVersion(): string {
-  return autoUpdater.currentVersion.version;
+  return app.getVersion();
 }

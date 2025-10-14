@@ -11,6 +11,7 @@ import { ToastProvider, useToast } from './contexts/ToastContext';
 import { HyeniDecorations } from './components/common/HyeniDecorations';
 import { useLauncherUpdate } from './hooks/useLauncherUpdate';
 import { LauncherUpdateBanner } from './components/launcher/LauncherUpdateBanner';
+import packageJson from '../../package.json';
 
 // Global account context
 interface AccountContextType {
@@ -148,7 +149,7 @@ function MainLayout() {
               />
               <Link to="/settings" className="text-sm px-3 py-1 bg-gray-800/60 hover:bg-gray-800 border border-gray-700 rounded-md">설정</Link>
               <span className="text-sm text-gray-400 px-3 py-1 bg-gray-800/50 rounded-full border border-gray-700">
-                v0.1.0
+                v{packageJson.version}
               </span>
             </div>
           </div>
