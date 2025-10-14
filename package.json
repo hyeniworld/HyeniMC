@@ -83,7 +83,6 @@
   "build": {
     "appId": "me.devbug.hyeniworld.hyenimc",
     "productName": "HyeniMC",
-    "artifactName": "${productName}-Setup-${version}.${ext}",
     "publish": {
       "provider": "github",
       "owner": "hyeniworld",
@@ -155,6 +154,7 @@
       "!node_modules/**/.github/**"
     ],
     "mac": {
+      "artifactName": "${productName}-Setup-${version}-${arch}.${ext}",
       "category": "public.app-category.games",
       "icon": "build/icon.icns",
       "x64ArchFiles": "*",
@@ -191,6 +191,7 @@
       }
     },
     "win": {
+      "artifactName": "${productName}-Setup-${version}.${ext}",
       "icon": "build/icon.ico",
       "extraResources": [
         {
