@@ -19,6 +19,7 @@ message GlobalSettings {
   JavaSettings java = 2;
   ResolutionSettings resolution = 3;
   CacheSettings cache = 4;
+  UpdateSettings update = 5;
 }
 
 message DownloadSettings {
@@ -43,4 +44,9 @@ message CacheSettings {
   bool enabled = 1;      // default true
   int32 max_size_gb = 2; // default 10
   int32 ttl_days = 3;    // default 30
+}
+
+message UpdateSettings {
+  int32 check_interval_hours = 1; // default 2
+  bool auto_download = 2;         // default false
 }

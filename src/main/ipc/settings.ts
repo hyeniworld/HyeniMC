@@ -31,6 +31,10 @@ export function registerSettingsHandlers(): void {
         max_size_gb: settings?.cache?.maxSizeGb,
         ttl_days: settings?.cache?.ttlDays,
       },
+      update: {
+        check_interval_hours: settings?.update?.checkIntervalHours,
+        auto_download: settings?.update?.autoDownload,
+      },
     };
   });
 
@@ -59,6 +63,10 @@ export function registerSettingsHandlers(): void {
         enabled: Boolean(settings?.cache?.enabled ?? true),
         maxSizeGb: Number(settings?.cache?.max_size_gb) || 10,
         ttlDays: Number(settings?.cache?.ttl_days) || 30,
+      },
+      update: {
+        checkIntervalHours: Number(settings?.update?.check_interval_hours) || 2,
+        autoDownload: Boolean(settings?.update?.auto_download ?? false),
       },
     };
     

@@ -70,7 +70,7 @@ export function initAutoUpdater(window: BrowserWindow) {
   mainWindow = window;
 
   // Update available
-  autoUpdater.on('update-available', (info) => {
+  autoUpdater.on('update-available', async (info) => {
     log.info('[AutoUpdater] Update available:', info.version);
     
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -80,6 +80,22 @@ export function initAutoUpdater(window: BrowserWindow) {
         releaseDate: info.releaseDate,
         required: false // Can be configured based on version comparison
       });
+    }
+
+    // Check if auto-download is enabled in settings
+    try {
+      const { settingsRpc } = await import('./grpc/clients');
+      const res = await settingsRpc.getSettings();
+      const autoDownload = res.settings?.update?.autoDownload ?? false;
+      
+      if (autoDownload) {
+        log.info('[AutoUpdater] Auto-download is enabled, starting download...');
+        await autoUpdater.downloadUpdate();
+      } else {
+        log.info('[AutoUpdater] Auto-download is disabled, waiting for manual trigger');
+      }
+    } catch (error) {
+      log.error('[AutoUpdater] Failed to check auto-download setting:', error);
     }
   });
 

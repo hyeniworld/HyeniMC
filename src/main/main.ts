@@ -163,6 +163,10 @@ async function initializeJavaSettings() {
             maxSizeGb: 10,
             ttlDays: 30,
           },
+          update: settingsResponse.settings?.update || {
+            checkIntervalHours: 2,
+            autoDownload: false,
+          },
         },
       });
       
@@ -200,6 +204,35 @@ async function initialize() {
         console.error('[Main] Failed to check for updates:', err);
       });
     }, 3000);
+
+    // Setup periodic update check based on settings
+    const setupPeriodicUpdateCheck = async () => {
+      try {
+        const { settingsRpc } = await import('./grpc/clients');
+        const res = await settingsRpc.getSettings();
+        const intervalHours = res.settings?.update?.checkIntervalHours ?? 2;
+        const intervalMs = intervalHours * 60 * 60 * 1000;
+        
+        console.log(`[Main] Setting up periodic update check every ${intervalHours} hour(s)`);
+        
+        setInterval(() => {
+          console.log('[Main] Periodic update check...');
+          checkForUpdates().catch(err => {
+            console.error('[Main] Failed to check for updates:', err);
+          });
+        }, intervalMs);
+      } catch (error) {
+        console.error('[Main] Failed to setup periodic update check, using default (2 hours):', error);
+        // Fallback to 2 hours
+        setInterval(() => {
+          console.log('[Main] Periodic update check...');
+          checkForUpdates().catch(err => {
+            console.error('[Main] Failed to check for updates:', err);
+          });
+        }, 2 * 60 * 60 * 1000);
+      }
+    };
+    setupPeriodicUpdateCheck();
 
     console.log('[Main] App initialization complete');
 

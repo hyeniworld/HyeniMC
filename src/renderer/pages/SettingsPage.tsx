@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { SectionCard } from '../components/common/SectionCard';
 import { Slider } from '../components/common/Slider';
 import { useToast } from '../contexts/ToastContext';
+import { RefreshCw, Download, CheckCircle2 } from 'lucide-react';
 
 type DownloadSettings = {
   request_timeout_ms?: number;
@@ -28,11 +29,17 @@ type CacheSettings = {
   ttl_days?: number;
 };
 
+type UpdateSettings = {
+  check_interval_hours?: number;
+  auto_download?: boolean;
+};
+
 type GlobalSettings = {
   download?: DownloadSettings;
   java?: JavaSettings;
   resolution?: ResolutionSettings;
   cache?: CacheSettings;
+  update?: UpdateSettings;
 };
 
 export const SettingsPage: React.FC = () => {
@@ -42,10 +49,13 @@ export const SettingsPage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState<GlobalSettings>({});
   const [original, setOriginal] = useState<GlobalSettings>({});
-  const [tab, setTab] = useState<'download'|'java'|'resolution'|'cache'>('download');
+  const [tab, setTab] = useState<'download'|'java'|'resolution'|'cache'|'update'>('download');
   const [javaList, setJavaList] = useState<Array<{ path: string; version: string; majorVersion: number; vendor?: string; architecture: string }>>([]);
   const [systemMemory, setSystemMemory] = useState(16384);
   const [cacheStats, setCacheStats] = useState<{ size: number; files: number }>({ size: 0, files: 0 });
+  const [currentVersion, setCurrentVersion] = useState('');
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState<'checking' | 'available' | 'not-available' | 'error' | null>(null);
   const s = settings;
 
   useEffect(() => {
@@ -68,10 +78,38 @@ export const SettingsPage: React.FC = () => {
         // Get cache stats
         const stats = await window.electronAPI.settings.getCacheStats();
         setCacheStats(stats);
+        
+        // Get launcher version
+        const versionResult = await window.electronAPI.launcher.getVersion();
+        if (versionResult.success) {
+          setCurrentVersion(versionResult.version);
+        }
       } finally {
         setLoading(false);
       }
     })();
+
+    // Listen for update events
+    const cleanup1 = window.electronAPI.on('launcher:update-available', () => {
+      setUpdateStatus('available');
+      setCheckingUpdate(false);
+    });
+    
+    const cleanup2 = window.electronAPI.on('launcher:update-not-available', () => {
+      setUpdateStatus('not-available');
+      setCheckingUpdate(false);
+    });
+    
+    const cleanup3 = window.electronAPI.on('launcher:update-error', () => {
+      setUpdateStatus('error');
+      setCheckingUpdate(false);
+    });
+
+    return () => {
+      cleanup1?.();
+      cleanup2?.();
+      cleanup3?.();
+    };
   }, []);
 
   const update = (path: string, value: any) => {
@@ -187,6 +225,7 @@ export const SettingsPage: React.FC = () => {
           <TabButton active={tab==='java'} onClick={() => setTab('java')}>Java</TabButton>
           <TabButton active={tab==='resolution'} onClick={() => setTab('resolution')}>해상도</TabButton>
           <TabButton active={tab==='cache'} onClick={() => setTab('cache')}>캐시</TabButton>
+          <TabButton active={tab==='update'} onClick={() => setTab('update')}>자동 업데이트</TabButton>
         </div>
 
         {tab==='download' && (
@@ -336,6 +375,113 @@ export const SettingsPage: React.FC = () => {
           </SectionCard>
         )}
 
+        {tab==='update' && (
+          <SectionCard title="자동 업데이트" subtitle="런처 업데이트 확인 주기를 설정합니다.">
+            <div className="space-y-6">
+              {/* Current version */}
+              <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-4">
+                <div className="text-sm text-gray-400 mb-2">현재 버전</div>
+                <div className="text-2xl font-semibold text-purple-400">{currentVersion || '불러오는 중...'}</div>
+              </div>
+
+              {/* Check interval */}
+              <div>
+                <span className="text-sm text-gray-300 mb-3 block">업데이트 확인 주기</span>
+                <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
+                  {[
+                    { hours: 1, label: '1시간' },
+                    { hours: 2, label: '2시간' },
+                    { hours: 4, label: '4시간' },
+                    { hours: 6, label: '6시간' },
+                    { hours: 12, label: '12시간' },
+                    { hours: 24, label: '하루' },
+                  ].map(option => (
+                    <button 
+                      key={option.hours} 
+                      onClick={() => update('update.check_interval_hours', option.hours)} 
+                      className={`py-3 text-sm rounded-lg border-2 ${
+                        s.update?.check_interval_hours === option.hours
+                          ? 'border-purple-500 bg-purple-900/30 text-white'
+                          : 'border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-750'
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Auto download */}
+              <div className="flex items-center gap-3">
+                <input 
+                  type="checkbox" 
+                  id="auto-download"
+                  className="w-4 h-4 accent-purple-500" 
+                  checked={s.update?.auto_download ?? false} 
+                  onChange={(e) => update('update.auto_download', e.target.checked)} 
+                />
+                <label htmlFor="auto-download" className="text-sm text-gray-300 select-none cursor-pointer">
+                  업데이트 발견 시 자동 다운로드
+                </label>
+              </div>
+
+              {/* Manual check button */}
+              <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-4">
+                <div className="text-sm text-gray-400 mb-3">수동 업데이트 확인</div>
+                <button
+                  onClick={async () => {
+                    setCheckingUpdate(true);
+                    setUpdateStatus('checking');
+                    try {
+                      await window.electronAPI.launcher.checkForUpdates();
+                      // Wait for the event listener to set the status
+                      setTimeout(() => {
+                        setCheckingUpdate(false);
+                      }, 3000);
+                    } catch (error) {
+                      setUpdateStatus('error');
+                      setCheckingUpdate(false);
+                      toast.error('업데이트 확인 실패', '업데이트 확인 중 오류가 발생했습니다.');
+                    }
+                  }}
+                  disabled={checkingUpdate}
+                  className="w-full py-3 px-4 bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700 disabled:cursor-not-allowed rounded-lg transition-colors flex items-center justify-center gap-2"
+                >
+                  {checkingUpdate ? (
+                    <>
+                      <RefreshCw className="w-5 h-5 animate-spin" />
+                      <span>확인 중...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-5 h-5" />
+                      <span>업데이트 확인</span>
+                    </>
+                  )}
+                </button>
+                
+                {updateStatus === 'available' && (
+                  <div className="mt-3 p-3 bg-green-900/20 border border-green-500/30 rounded-lg text-sm text-green-300">
+                    <CheckCircle2 className="w-4 h-4 inline mr-2" />
+                    새로운 업데이트를 사용할 수 있습니다!
+                  </div>
+                )}
+                {updateStatus === 'not-available' && (
+                  <div className="mt-3 p-3 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-400">
+                    <CheckCircle2 className="w-4 h-4 inline mr-2" />
+                    최신 버전을 사용 중입니다.
+                  </div>
+                )}
+                {updateStatus === 'error' && (
+                  <div className="mt-3 p-3 bg-red-900/20 border border-red-500/30 rounded-lg text-sm text-red-300">
+                    업데이트 확인 중 오류가 발생했습니다.
+                  </div>
+                )}
+              </div>
+            </div>
+          </SectionCard>
+        )}
+
         {tab==='cache' && (
           <SectionCard title="캐시" subtitle="공유 캐시(에셋/라이브러리)의 용량과 TTL을 관리합니다.">
             <div className="space-y-6">
@@ -438,6 +584,10 @@ function fillDefaults(gs: GlobalSettings): GlobalSettings {
     enabled: gs.cache?.enabled ?? true,
     max_size_gb: gs.cache?.max_size_gb ?? 10,
     ttl_days: gs.cache?.ttl_days ?? 30,
+  };
+  out.update = {
+    check_interval_hours: gs.update?.check_interval_hours ?? 2,
+    auto_download: gs.update?.auto_download ?? false,
   };
   return out;
 }
