@@ -49,7 +49,7 @@ export function useHyeniUpdate({
     try {
       console.log('[useHyeniUpdate] Checking for updates...');
       
-      const info = await window.electronAPI.hyeni.checkUpdate(
+      const info = await window.electronAPI.hyeni.checkForUpdate(
         profilePath,
         gameVersion,
         loaderType

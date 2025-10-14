@@ -231,10 +231,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // HyeniHelper APIs
   hyeni: {
     checkForUpdate: (profilePath: string, gameVersion: string, loaderType: string): Promise<any> =>
-      ipcRenderer.invoke('hyeni:check-for-update', profilePath, gameVersion, loaderType),
+      ipcRenderer.invoke(IPC_CHANNELS.HYENI_CHECK_UPDATE, profilePath, gameVersion, loaderType),
     
     installUpdate: (profilePath: string, updateInfo: any): Promise<{ success: boolean; message?: string }> =>
-      ipcRenderer.invoke('hyeni:install-update', profilePath, updateInfo),
+      ipcRenderer.invoke(IPC_CHANNELS.HYENI_INSTALL_UPDATE, profilePath, updateInfo),
   },
 
   // Launcher update APIs
