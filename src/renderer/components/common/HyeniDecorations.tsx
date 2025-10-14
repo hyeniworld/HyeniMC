@@ -12,27 +12,18 @@ export function HyeniDecorations() {
     './assets/hyeni/character-main3.png',
   ];
 
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const [fadeOut, setFadeOut] = useState(false);
+  const [currentIndex, setCurrentIndex] = useState(0);
 
   useEffect(() => {
     // 5초마다 이미지 전환
     const interval = setInterval(() => {
-      // 페이드아웃 시작
-      setFadeOut(true);
-      
-      // 500ms 후 이미지 변경 및 페이드인
-      setTimeout(() => {
-        setCurrentImageIndex((prevIndex) => {
-          // 현재 인덱스를 제외한 랜덤 인덱스 선택
-          const availableIndices = characterImages
-            .map((_, idx) => idx)
-            .filter(idx => idx !== prevIndex);
-          const randomIndex = availableIndices[Math.floor(Math.random() * availableIndices.length)];
-          return randomIndex;
-        });
-        setFadeOut(false);
-      }, 500);
+      setCurrentIndex((prev) => {
+        // 현재 인덱스를 제외한 랜덤 선택
+        const availableIndices = characterImages
+          .map((_, idx) => idx)
+          .filter(idx => idx !== prev);
+        return availableIndices[Math.floor(Math.random() * availableIndices.length)];
+      });
     }, 5000);
 
     return () => clearInterval(interval);
@@ -40,20 +31,26 @@ export function HyeniDecorations() {
 
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden flex items-end justify-center">
-      {/* 메인 캐릭터 - 세로 100% 채우기, 비율 유지 */}
-      <img 
-        src={characterImages[currentImageIndex]}
-        alt="Hyeni Character"
-        style={{ 
-          height: '100%',
-          aspectRatio: '600 / 800',
-          maxWidth: 'none'
-        }}
-        className={`drop-shadow-2xl transition-opacity duration-500 ${
-          fadeOut ? 'opacity-0' : 'opacity-95'
-        }`}
-        draggable={false}
-      />
+      <div className="relative h-full flex items-end justify-center">
+        {characterImages.map((src, index) => (
+          <img 
+            key={index}
+            src={src}
+            alt="Hyeni Character"
+            style={{ 
+              height: '100%',
+              aspectRatio: '600 / 800',
+              maxWidth: 'none',
+              position: 'absolute',
+              bottom: 0
+            }}
+            className={`drop-shadow-2xl transition-opacity duration-1000 ease-in-out ${
+              currentIndex === index ? 'opacity-95' : 'opacity-0'
+            }`}
+            draggable={false}
+          />
+        ))}
+      </div>
 
       {/* 그라데이션 오버레이 */}
       <div className="absolute inset-0 bg-gradient-to-br from-pink-900/10 via-transparent to-purple-900/10 pointer-events-none -z-10" />

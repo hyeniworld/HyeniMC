@@ -95,4 +95,17 @@
   .animate-bounce-slow {
     animation: bounce-slow 8s ease-in-out infinite;
   }
+
+  @keyframes crossFadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 0.95;
+    }
+  }
+
+  .animate-crossfade-in {
+    animation: crossFadeIn 1000ms ease-in-out forwards;
+  }
 }
