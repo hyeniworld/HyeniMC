@@ -46,7 +46,7 @@
 - **Node.js** 18+
 - **Go** 1.21+
 - **Java** 17+ (게임 실행용)
-- **Azure AD 앱** (Microsoft 로그인용) - [빠른 설정 가이드](./QUICKSTART.md)
+- **Azure AD 앱** (Microsoft 로그인용) - [빠른 설정 가이드](docs/guides/QUICKSTART.md)
 
 ### 개발 환경 설정
 
@@ -64,7 +64,7 @@ go build -o ../../../bin/backend main.go
 cd ../../..
 
 # 4. Microsoft 로그인 설정
-# SETUP_GUIDE.md 참조하여 Azure AD 앱 등록 후
+# docs/guides/SETUP_GUIDE.md 참조하여 Azure AD 앱 등록 후
 cd src/main/services
 cp auth-config.example.ts auth-config.ts
 # auth-config.ts 파일에 Client ID 입력
@@ -154,11 +154,18 @@ HyeniMC/
 
 ## 📚 문서
 
-- **[설계 문서](./DESIGN.md)** - 시스템 아키텍처 및 기술 스택
-- **[테스트 가이드](./TESTING.md)** ⭐ - 기능별 테스트 항목 및 방법
-- **[테마 시스템](./THEME_SYSTEM.md)** 🎨 - 강혜니 테마 및 커스터마이징 가이드
-- **[진행 상황](./PROGRESS.md)** - 개발 진행 상황 및 완료된 기능
-- **[빠른 시작](./QUICKSTART.md)** - Microsoft OAuth 설정 가이드
+모든 문서는 [docs/](docs/) 디렉토리에 정리되어 있습니다.
+
+### 빠른 링크
+- **[프로젝트 구조](docs/PROJECT_STRUCTURE.md)** 📁 - 전체 디렉토리 구조 및 파일 설명
+- **[빠른 시작 가이드](docs/guides/QUICKSTART.md)** - Microsoft OAuth 설정
+- **[개발 가이드](docs/development/DEVELOPMENT.md)** - 개발 환경 설정
+- **[버전 관리](docs/deployment/VERSION_MANAGEMENT.md)** ⭐ - 릴리즈 및 배포 가이드
+- **[테스트 가이드](docs/development/TESTING.md)** - 기능별 테스트 방법
+- **[아키텍처](docs/architecture/DESIGN.md)** - 시스템 설계 및 기술 스택
+
+### 전체 문서 목록
+📖 [docs/README.md](docs/README.md) - 모든 문서 목록 및 구조
 
 ---
 
