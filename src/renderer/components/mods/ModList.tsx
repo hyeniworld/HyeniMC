@@ -429,6 +429,7 @@ export const ModList: React.FC<ModListProps> = ({ profileId }) => {
         <ModSearchModal
           isOpen={showSearchModal}
           profileId={profileId}
+          profile={profile}
           gameVersion={profile.gameVersion}
           loaderType={profile.loaderType}
           onClose={() => setShowSearchModal(false)}

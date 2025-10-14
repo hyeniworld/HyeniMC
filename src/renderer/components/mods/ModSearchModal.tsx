@@ -13,7 +13,7 @@ interface ModSearchModalProps {
   onInstallSuccess?: () => void;
 }
 
-export function ModSearchModal({ isOpen, onClose, profileId, profile, onInstallSuccess }: ModSearchModalProps) {
+export function ModSearchModal({ isOpen, onClose, profileId, profile, gameVersion, loaderType, onInstallSuccess }: ModSearchModalProps) {
   const toast = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<ModSearchResult[]>([]);
