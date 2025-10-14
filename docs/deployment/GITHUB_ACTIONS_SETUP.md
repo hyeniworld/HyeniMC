@@ -34,6 +34,8 @@ GitHub Actions는 다음 작업을 자동으로 수행합니다:
 |------|-------|------|
 | `AZURE_CLIENT_ID` | `your-client-id-here` | Azure Portal의 Microsoft OAuth Client ID |
 
+> 💡 **참고**: `GITHUB_TOKEN`은 GitHub Actions에서 자동으로 제공되므로 별도 설정이 필요 없습니다.
+
 ### 2. Azure Client ID 찾기
 
 1. [Azure Portal](https://portal.azure.com) 접속

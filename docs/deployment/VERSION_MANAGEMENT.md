@@ -257,6 +257,8 @@ git commit -m "feat!: Microsoft 인증 시스템으로 전환"
 
 > ⚠️ **중요**: 이 Secret이 없으면 빌드가 실패합니다!
 
+> 💡 **참고**: `GITHUB_TOKEN`은 자동으로 제공되므로 별도 설정 불필요
+
 ### 트리거
 
 ```yaml

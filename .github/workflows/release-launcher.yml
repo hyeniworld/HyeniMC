@@ -43,6 +43,8 @@ jobs:
       
       - name: Build and package
         run: npm run package:win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -89,6 +91,8 @@ jobs:
       
       - name: Build and package
         run: npm run package:mac
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
