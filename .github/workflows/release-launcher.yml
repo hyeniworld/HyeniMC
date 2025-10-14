@@ -26,6 +26,9 @@ jobs:
       - name: Install dependencies
         run: npm install
       
+      - name: Generate protobuf code
+        run: npm run proto:gen
+      
       - name: Build backend (Windows)
         run: npm run backend:build:win-x64
       
@@ -59,6 +62,9 @@ jobs:
       
       - name: Install dependencies
         run: npm install
+      
+      - name: Generate protobuf code
+        run: npm run proto:gen
       
       - name: Build backend (macOS)
         run: npm run backend:build:mac-universal
