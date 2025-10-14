@@ -45,7 +45,7 @@ jobs:
         run: npm run backend:build:win-x64
       
       - name: Build and package
-        run: npm run package:win
+        run: npm run build && npx electron-builder --win --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
@@ -93,7 +93,7 @@ jobs:
         run: npm run backend:build:mac-universal
       
       - name: Build and package
-        run: npm run package:mac
+        run: npm run build && npx electron-builder --mac --arm64 --x64 --universal --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       

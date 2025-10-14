@@ -81,11 +81,11 @@
     "vitest": "^1.0.4"
   },
   "build": {
-    "appId": "me.devbug.hyenimc",
+    "appId": "me.devbug.hyeniworld.hyenimc",
     "productName": "HyeniMC",
     "publish": {
       "provider": "github",
-      "owner": "devbug",
+      "owner": "hyeniworld",
       "repo": "HyeniMC"
     },
     "asar": true,
