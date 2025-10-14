@@ -52,6 +52,7 @@ function App() {
 function MainLayout() {
   const { selectedAccountId, setSelectedAccountId } = useAccount();
   const toast = useToast();
+  const [isMacOS, setIsMacOS] = useState(false);
   
   // Launcher update state
   const {
@@ -66,6 +67,12 @@ function MainLayout() {
     formatBytes,
     formatSpeed
   } = useLauncherUpdate();
+
+  // Detect macOS
+  useEffect(() => {
+    // Check if running on macOS
+    setIsMacOS(navigator.platform.toLowerCase().includes('mac'));
+  }, []);
 
   // Listen for authentication events
   useEffect(() => {
@@ -112,9 +119,17 @@ function MainLayout() {
 
       {/* Header */}
       <header className={`border-b border-gray-800 bg-gray-900/80 backdrop-blur-md z-50 shadow-lg flex-shrink-0 ${updateAvailable ? 'mt-0' : ''}`}>
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+        <div className="container mx-auto px-6 py-4 relative">
+          {/* macOS: Draggable area for window movement - covers entire header */}
+          {isMacOS && (
+            <div 
+              className="absolute inset-0" 
+              style={{ WebkitAppRegion: 'drag' } as any}
+            />
+          )}
+          
+          <div className="flex items-center justify-between relative z-10">
+            <div className={`flex items-center gap-3 ${isMacOS ? 'ml-20' : ''}`}>
               <div className="w-10 h-10 bg-gradient-to-br from-hyeni-pink-600 via-hyeni-pink-500 to-hyeni-pink-600 rounded-xl shadow-lg flex items-center justify-center">
                 <Sparkles className="w-6 h-6" />
               </div>
@@ -125,7 +140,7 @@ function MainLayout() {
                 <p className="text-xs text-gray-500">혜니월드 전용 런처</p>
               </div>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 relative" style={{ WebkitAppRegion: 'no-drag' } as any}>
               {/* Account Manager */}
               <AccountManager
                 selectedAccountId={selectedAccountId}
