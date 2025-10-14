@@ -14,7 +14,7 @@
     "build:renderer": "vite build",
     "build:main": "tsc -p tsconfig.main.json",
     "package": "npm run build && electron-builder",
-    "package:mac": "npm run backend:build:mac-arm64 && npm run backend:build:mac-x64 && npm run build && electron-builder --mac",
+    "package:mac": "npm run backend:build:mac-arm64 && npm run backend:build:mac-x64 && npm run backend:build:mac-universal && npm run build && electron-builder --mac --arm64 --x64 --universal",
     "package:win": "npm run backend:build:win-x64 && npm run build && electron-builder --win",
     "test": "vitest",
     "test:ui": "vitest --ui",
@@ -23,7 +23,7 @@
     "proto:gen": "cd proto && buf generate",
     "backend:build:mac-arm64": "cd backend && GOOS=darwin GOARCH=arm64 go build -o bin/hyenimc-backend-arm64 ./cmd/hyenimc",
     "backend:build:mac-x64": "cd backend && GOOS=darwin GOARCH=amd64 go build -o bin/hyenimc-backend-x64 ./cmd/hyenimc",
-    "backend:build:mac-universal": "npm run backend:build:mac-arm64 && npm run backend:build:mac-x64 && lipo -create -output backend/bin/hyenimc-backend backend/bin/hyenimc-backend-arm64 backend/bin/hyenimc-backend-x64",
+    "backend:build:mac-universal": "npm run backend:build:mac-arm64 && npm run backend:build:mac-x64 && lipo -create -output backend/bin/hyenimc-backend-universal backend/bin/hyenimc-backend-arm64 backend/bin/hyenimc-backend-x64",
     "backend:build:win-x64": "cd backend && go build -o bin/hyenimc-backend.exe ./cmd/hyenimc",
     "backend:build:all": "npm run backend:build:mac-universal && npm run backend:build:win-x64"
   },
@@ -159,11 +159,19 @@
       "x64ArchFiles":"*",
       "extraResources": [
         {
-          "from": "backend/bin/hyenimc-backend",
+          "from": "backend/bin/hyenimc-backend-${arch}",
           "to": "backend/hyenimc-backend"
         }
       ],
       "target": [
+        {
+          "target": "dmg",
+          "arch": "arm64"
+        },
+        {
+          "target": "dmg",
+          "arch": "x64"
+        },
         {
           "target": "dmg",
           "arch": "universal"
