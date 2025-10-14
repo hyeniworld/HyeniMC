@@ -4,13 +4,51 @@
  * Manages launcher updates using electron-updater
  */
 
-import { autoUpdater } from 'electron-updater';
 import { BrowserWindow, app } from 'electron';
 import log from 'electron-log';
+
+// Enable dev mode for testing updates in development
+// MUST be done BEFORE importing electron-updater
+if (process.env.NODE_ENV === 'development') {
+  const path = require('path');
+  const fs = require('fs');
+  
+  log.info('[AutoUpdater] Running in development mode - enabling update checks');
+  
+  // Read package.json to get correct version
+  const packageJson = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'));
+  const devVersion = packageJson.version;
+  log.info(`[AutoUpdater] Dev version from package.json: ${devVersion}`);
+  
+  // Override app.getVersion BEFORE electron-updater is imported
+  app.getVersion = () => devVersion;
+  
+  // Force dev mode to check for updates
+  Object.defineProperty(app, 'isPackaged', {
+    get() {
+      return true;
+    }
+  });
+  
+  log.info(`[AutoUpdater] Current version set to: ${app.getVersion()}`);
+}
+
+// Import electron-updater AFTER setting up dev mode
+import { autoUpdater } from 'electron-updater';
 
 // Configure logging
 autoUpdater.logger = log;
 (autoUpdater.logger as typeof log).transports.file.level = 'info';
+
+// Set update config path for development
+if (process.env.NODE_ENV === 'development') {
+  const path = require('path');
+  const devConfigPath = path.join(process.cwd(), 'dev-app-update.yml');
+  log.info(`[AutoUpdater] Using dev config: ${devConfigPath}`);
+  
+  // @ts-ignore - updateConfigPath is available but not in types
+  autoUpdater.updateConfigPath = devConfigPath;
+}
 
 // Disable auto-download by default (manual control)
 autoUpdater.autoDownload = false;

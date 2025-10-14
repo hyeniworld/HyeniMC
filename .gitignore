@@ -37,6 +37,9 @@ Thumbs.db
 # Electron-builder output
 /dist_electron/
 
+# Dev update config (for testing auto-update in dev mode)
+dev-app-update.yml
+
 # Local configuration (contains sensitive data)
 src/main/services/auth-config.ts
 

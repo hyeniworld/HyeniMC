@@ -119,7 +119,7 @@ function MainLayout() {
       )}
 
       {/* Header */}
-      <header className={`border-b border-gray-800 bg-gray-900/80 backdrop-blur-md z-50 shadow-lg flex-shrink-0 ${updateAvailable ? 'mt-0' : ''}`}>
+      <header className={`border-b border-gray-800 bg-gray-900/80 backdrop-blur-md z-50 shadow-lg flex-shrink-0 transition-all duration-300 ${updateAvailable ? 'mt-[68px]' : ''}`}>
         <div className="container mx-auto px-6 py-4 relative">
           {/* macOS: Draggable area for window movement - covers entire header */}
           {isMacOS && (

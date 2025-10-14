@@ -28,40 +28,43 @@ export function useLauncherUpdate() {
   const [checking, setChecking] = useState(false);
 
   useEffect(() => {
+    console.log('[LauncherUpdate] Registering event listeners...');
+    
     // Update available
-    const handleUpdateAvailable = (_event: any, info: LauncherUpdateInfo) => {
-      console.log('[LauncherUpdate] Update available:', info);
+    const handleUpdateAvailable = (info: LauncherUpdateInfo) => {
+      console.log('[LauncherUpdate] ✅ Update available event received:', info);
       setUpdateAvailable(true);
       setUpdateInfo(info);
       setError(null);
+      setChecking(false);
     };
 
     // Update not available
-    const handleUpdateNotAvailable = (_event: any, info: { version: string }) => {
-      console.log('[LauncherUpdate] No update available:', info.version);
+    const handleUpdateNotAvailable = (info: { version: string }) => {
+      console.log('[LauncherUpdate] ℹ️ No update available:', info.version);
       setUpdateAvailable(false);
       setUpdateInfo(null);
       setChecking(false);
     };
 
     // Download progress
-    const handleDownloadProgress = (_event: any, progress: DownloadProgress) => {
-      console.log('[LauncherUpdate] Download progress:', progress.percent);
+    const handleDownloadProgress = (progress: DownloadProgress) => {
+      console.log('[LauncherUpdate] 📥 Download progress:', progress.percent + '%');
       setDownloadProgress(progress);
       setIsDownloading(true);
     };
 
     // Update downloaded
-    const handleUpdateDownloaded = (_event: any, info: { version: string }) => {
-      console.log('[LauncherUpdate] Update downloaded:', info.version);
+    const handleUpdateDownloaded = (info: { version: string }) => {
+      console.log('[LauncherUpdate] ✅ Update downloaded:', info.version);
       setUpdateDownloaded(true);
       setIsDownloading(false);
       setDownloadProgress(null);
     };
 
     // Error
-    const handleUpdateError = (_event: any, info: { message: string }) => {
-      console.error('[LauncherUpdate] Error:', info.message);
+    const handleUpdateError = (info: { message: string }) => {
+      console.error('[LauncherUpdate] ❌ Error:', info.message);
       setError(info.message);
       setIsDownloading(false);
       setChecking(false);
@@ -94,11 +97,13 @@ export function useLauncherUpdate() {
 
   const checkForUpdates = async () => {
     try {
+      console.log('[LauncherUpdate] 🔍 Checking for updates...');
       setChecking(true);
       setError(null);
-      await window.electronAPI.launcher.checkForUpdates();
+      await (window.electronAPI as any).launcher?.checkForUpdates();
+      console.log('[LauncherUpdate] ✅ Check request sent');
     } catch (err) {
-      console.error('[LauncherUpdate] Check failed:', err);
+      console.error('[LauncherUpdate] ❌ Check failed:', err);
       setError(err instanceof Error ? err.message : '업데이트 확인 실패');
       setChecking(false);
     }
@@ -106,19 +111,21 @@ export function useLauncherUpdate() {
 
   const downloadUpdate = async () => {
     try {
+      console.log('[LauncherUpdate] 📥 Starting download...');
       setError(null);
-      await window.electronAPI.launcher.downloadUpdate();
+      await (window.electronAPI as any).launcher?.downloadUpdate();
     } catch (err) {
-      console.error('[LauncherUpdate] Download failed:', err);
+      console.error('[LauncherUpdate] ❌ Download failed:', err);
       setError(err instanceof Error ? err.message : '다운로드 실패');
     }
   };
 
   const installUpdate = () => {
     try {
-      window.electronAPI.launcher.quitAndInstall();
+      console.log('[LauncherUpdate] 🔄 Installing update and restarting...');
+      (window.electronAPI as any).launcher?.quitAndInstall();
     } catch (err) {
-      console.error('[LauncherUpdate] Install failed:', err);
+      console.error('[LauncherUpdate] ❌ Install failed:', err);
       setError(err instanceof Error ? err.message : '설치 실패');
     }
   };

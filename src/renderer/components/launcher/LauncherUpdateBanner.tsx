@@ -31,9 +31,20 @@ export function LauncherUpdateBanner({
   formatBytes,
   formatSpeed
 }: LauncherUpdateBannerProps) {
+  // Strip HTML tags from release notes
+  const stripHtml = (html: string): string => {
+    const tmp = document.createElement('DIV');
+    tmp.innerHTML = html;
+    return tmp.textContent || tmp.innerText || '';
+  };
+
+  const cleanReleaseNotes = updateInfo.releaseNotes 
+    ? stripHtml(updateInfo.releaseNotes).trim() || '새로운 기능 및 개선사항'
+    : '새로운 기능 및 개선사항';
+
   return (
-    <div className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg">
-      <div className="container mx-auto px-4 py-3">
+    <div className="fixed top-0 left-0 right-0 z-[100] bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-2xl border-b-2 border-blue-400 animate-in slide-in-from-top duration-300">
+      <div className="container mx-auto px-4 py-3.5">
         <div className="flex items-center justify-between gap-4">
           {/* Left: Info */}
           <div className="flex items-center gap-3 flex-1">
@@ -43,7 +54,7 @@ export function LauncherUpdateBanner({
                 🎉 HyeniMC v{updateInfo.version} 업데이트
               </h3>
               <p className="text-xs sm:text-sm text-blue-100 truncate">
-                {updateInfo.releaseNotes || '새로운 기능 및 개선사항'}
+                {cleanReleaseNotes}
               </p>
             </div>
           </div>
