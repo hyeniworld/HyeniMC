@@ -63,12 +63,19 @@ declare global {
         openExternal: (url: string) => Promise<void>;
       };
       mod: {
-        list: (profileId: string, forceRefresh?: boolean) => Promise<any>;
-        toggle: (modId: string, enabled: boolean) => Promise<void>;
-        refreshCache: (profileId: string) => Promise<void>;
-        search: (query: string, gameVersion?: string, loaderType?: string) => Promise<any>;
-        install: (profileId: string, source: string, projectId: string, versionId: string) => Promise<any>;
-        remove: (profileId: string, modId: string) => Promise<void>;
+        list: (profileId: string) => Promise<any[]>;
+        search: (query: string, filters?: any) => Promise<{ hits: any[]; total: number }>;
+        getDetails: (modId: string, source?: 'modrinth' | 'curseforge') => Promise<any>;
+        getVersions: (modId: string, gameVersion?: string, loaderType?: string, source?: 'modrinth' | 'curseforge') => Promise<any[]>;
+        install: (profileId: string, modId: string, versionId: string, source?: 'modrinth' | 'curseforge') => Promise<{ success: boolean; fileName: string }>;
+        checkDependencies: (profileId: string, modId: string, versionId: string, gameVersion: string, loaderType: string, source?: 'modrinth' | 'curseforge') => Promise<any>;
+        installDependencies: (profileId: string, dependencies: any[]) => Promise<any>;
+        checkUpdates: (profileId: string, gameVersion: string, loaderType: string) => Promise<any[]>;
+        updateMod: (profileId: string, modId: string, versionId: string, source: 'modrinth' | 'curseforge') => Promise<{ success: boolean; fileName: string }>;
+        update: (profileId: string, update: any) => Promise<{ success: boolean }>;
+        updateAll: (profileId: string, updates: any[]) => Promise<any>;
+        toggle: (profileId: string, fileName: string, enabled: boolean) => Promise<{ success: boolean }>;
+        remove: (profileId: string, fileName: string) => Promise<{ success: boolean }>;
       };
       modpack: {
         search: (query: string, gameVersion?: string) => Promise<any[]>;
@@ -81,16 +88,22 @@ declare global {
         selectFile: () => Promise<string | null>;
       };
       resourcepack: {
-        list: (profileId: string) => Promise<any>;
-        install: (profileId: string, filePath: string) => Promise<void>;
-        installUrl: (profileId: string, url: string) => Promise<void>;
-        remove: (profileId: string, id: string) => Promise<void>;
+        list: (profileId: string) => Promise<any[]>;
+        enable: (profileId: string, fileName: string) => Promise<{ success: boolean }>;
+        disable: (profileId: string, fileName: string) => Promise<{ success: boolean }>;
+        delete: (profileId: string, fileName: string) => Promise<{ success: boolean }>;
+        install: (profileId: string, filePath: string) => Promise<{ success: boolean }>;
+        installUrl: (profileId: string, url: string) => Promise<{ success: boolean }>;
+        selectFile: () => Promise<string | null>;
       };
       shaderpack: {
-        list: (profileId: string) => Promise<any>;
-        install: (profileId: string, filePath: string) => Promise<void>;
-        installUrl: (profileId: string, url: string) => Promise<void>;
-        remove: (profileId: string, id: string) => Promise<void>;
+        list: (profileId: string) => Promise<any[]>;
+        enable: (profileId: string, fileName: string, isDirectory: boolean) => Promise<{ success: boolean }>;
+        disable: (profileId: string, fileName: string, isDirectory: boolean) => Promise<{ success: boolean }>;
+        delete: (profileId: string, fileName: string, isDirectory: boolean) => Promise<{ success: boolean }>;
+        install: (profileId: string, filePath: string) => Promise<{ success: boolean }>;
+        installUrl: (profileId: string, url: string) => Promise<{ success: boolean }>;
+        selectFile: () => Promise<string | null>;
       };
       game: {
         stop: (versionId: string) => Promise<{ success: boolean }>;
@@ -106,8 +119,14 @@ declare global {
         stop: (profileId: string) => Promise<{ success: boolean }>;
       };
       hyeni: {
-        checkUpdate: (profilePath: string, gameVersion: string, loaderType: string) => Promise<any>;
+        checkForUpdate: (profilePath: string, gameVersion: string, loaderType: string) => Promise<any>;
         installUpdate: (profilePath: string, updateInfo: any) => Promise<{ success: boolean; message?: string }>;
+      };
+      launcher: {
+        checkForUpdates: () => Promise<{ success: boolean }>;
+        downloadUpdate: () => Promise<{ success: boolean }>;
+        quitAndInstall: () => Promise<{ success: boolean }>;
+        getVersion: () => Promise<{ success: boolean; version: string }>;
       };
       on: (channel: string, callback: (...args: any[]) => void) => () => void;
       once: (channel: string, callback: (...args: any[]) => void) => void;
