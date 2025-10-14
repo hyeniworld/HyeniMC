@@ -6,12 +6,8 @@ on:
       - 'v*.*.*'
 
 jobs:
-  release:
-    runs-on: ${{ matrix.os }}
-    
-    strategy:
-      matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
+  release-windows:
+    runs-on: windows-latest
     
     steps:
       - name: Check out code
@@ -22,23 +18,86 @@ jobs:
         with:
           node-version: '18'
       
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+      
       - name: Install dependencies
         run: npm install
       
-      - name: Build
-        run: npm run build
+      - name: Build backend (Windows)
+        run: npm run backend:build:win-x64
       
-      - name: Package
-        run: npm run package
+      - name: Build and package
+        run: npm run package:win
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: windows-release
+          path: |
+            release/*.exe
+            release/latest.yml
+  
+  release-macos:
+    runs-on: macos-latest
+    
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+      
+      - name: Install dependencies
+        run: npm install
+      
+      - name: Build backend (macOS)
+        run: npm run backend:build:mac-universal
+      
+      - name: Build and package
+        run: npm run package:mac
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: macos-release
+          path: |
+            release/*.dmg
+            release/latest-mac.yml
+  
+  create-release:
+    needs: [release-windows, release-macos]
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: windows-release
+          path: release/
+      
+      - name: Download macOS artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: macos-release
+          path: release/
       
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            dist/*.exe
-            dist/*.dmg
-            dist/*.AppImage
-            dist/latest*.yml
+            release/*.exe
+            release/*.dmg
+            release/latest*.yml
           draft: false
           prerelease: false
           generate_release_notes: true
