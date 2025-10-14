@@ -13,10 +13,21 @@ export interface JavaInstallation {
   architecture: string;
 }
 
+// Cache for Java installations
+let cachedJavaInstallations: JavaInstallation[] | null = null;
+
 /**
  * Detect Java installations on the system
+ * @param forceRefresh - Force re-detection even if cache exists
  */
-export async function detectJavaInstallations(): Promise<JavaInstallation[]> {
+export async function detectJavaInstallations(forceRefresh = false): Promise<JavaInstallation[]> {
+  // Return cached result if available and not forcing refresh
+  if (!forceRefresh && cachedJavaInstallations !== null) {
+    console.log(`[Java Detector] Returning ${cachedJavaInstallations.length} cached Java installation(s)`);
+    return cachedJavaInstallations;
+  }
+
+  console.log('[Java Detector] Detecting Java installations...');
   const installations: JavaInstallation[] = [];
   const platform = process.platform;
 
@@ -35,7 +46,26 @@ export async function detectJavaInstallations(): Promise<JavaInstallation[]> {
     console.error('[Java Detector] Error detecting Java:', error);
   }
 
+  // Cache the result
+  cachedJavaInstallations = installations;
+  console.log(`[Java Detector] Cached ${installations.length} Java installation(s)`);
+
   return installations;
+}
+
+/**
+ * Get cached Java installations without re-detection
+ */
+export function getCachedJavaInstallations(): JavaInstallation[] {
+  return cachedJavaInstallations || [];
+}
+
+/**
+ * Clear Java installation cache
+ */
+export function clearJavaCache(): void {
+  cachedJavaInstallations = null;
+  console.log('[Java Detector] Cache cleared');
 }
 
 /**

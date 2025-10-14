@@ -76,14 +76,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // Java APIs
   java: {
-    detect: (): Promise<Array<{
+    detect: (forceRefresh?: boolean): Promise<Array<{
       path: string;
       version: string;
       majorVersion: number;
       vendor?: string;
       architecture: string;
     }>> => 
-      ipcRenderer.invoke(IPC_CHANNELS.JAVA_DETECT),
+      ipcRenderer.invoke(IPC_CHANNELS.JAVA_DETECT, forceRefresh),
+    
+    getCached: (): Promise<Array<{
+      path: string;
+      version: string;
+      majorVersion: number;
+      vendor?: string;
+      architecture: string;
+    }>> => 
+      ipcRenderer.invoke('java:get-cached'),
     
     getRecommended: (minecraftVersion: string): Promise<number> => 
       ipcRenderer.invoke(IPC_CHANNELS.JAVA_GET_RECOMMENDED, minecraftVersion),
@@ -298,7 +307,14 @@ declare global {
         latest: () => Promise<string>;
       };
       java: {
-        detect: () => Promise<Array<{
+        detect: (forceRefresh?: boolean) => Promise<Array<{
+          path: string;
+          version: string;
+          majorVersion: number;
+          vendor?: string;
+          architecture: string;
+        }>>;
+        getCached: () => Promise<Array<{
           path: string;
           version: string;
           majorVersion: number;

@@ -61,9 +61,9 @@ export const SettingsPage: React.FC = () => {
         setSettings(filled);
         setOriginal(filled);
         
-        // Auto-detect Java
-        const javaInstalls = await window.electronAPI.java.detect();
-        setJavaList(javaInstalls || []);
+        // Get cached Java installations (no re-detection)
+        const cachedJava = await window.electronAPI.java.getCached();
+        setJavaList(cachedJava || []);
         
         // Get cache stats
         const stats = await window.electronAPI.settings.getCacheStats();
@@ -224,7 +224,7 @@ export const SettingsPage: React.FC = () => {
         )}
 
         {tab==='java' && (
-          <SectionCard title="Java" subtitle="프로필에서 미설정 시 사용됩니다." action={<button onClick={async()=>{ const list=await window.electronAPI.java.detect(); setJavaList(list||[]); }} className="px-3 py-1.5 text-sm bg-gray-800 border border-gray-700 rounded-md hover:bg-gray-750">재감지</button>}>
+          <SectionCard title="Java" subtitle="프로필에서 미설정 시 사용됩니다." action={<button onClick={async()=>{ const list=await window.electronAPI.java.detect(true); setJavaList(list||[]); }} className="px-3 py-1.5 text-sm bg-gray-800 border border-gray-700 rounded-md hover:bg-gray-750">재감지</button>}>
             <div className="space-y-6">
               <div>
                 <div className="flex items-center justify-between mb-3">
@@ -251,7 +251,8 @@ export const SettingsPage: React.FC = () => {
                   </div>
                 ) : (
                   <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-4 text-center mb-4">
-                    <p className="text-sm text-gray-400">감지된 Java가 없습니다. 재감지 버튼을 눌러주세요.</p>
+                    <p className="text-sm text-gray-400">감지된 Java가 없습니다.</p>
+                    <p className="text-xs text-gray-500 mt-1">"재감지" 버튼을 눌러 Java를 검색하거나, 아래에 직접 경로를 입력하세요.</p>
                   </div>
                 )}
                 <label className="flex flex-col gap-1">

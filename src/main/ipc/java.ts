@@ -1,21 +1,33 @@
 import { ipcMain } from 'electron';
 import { IPC_CHANNELS } from '../../shared/constants';
-import { detectJavaInstallations, getRecommendedJavaVersion, isJavaCompatible } from '../services/java-detector';
+import { detectJavaInstallations, getCachedJavaInstallations, getRecommendedJavaVersion, isJavaCompatible } from '../services/java-detector';
 
 /**
  * Register Java-related IPC handlers
  */
 export function registerJavaHandlers(): void {
-  // Detect Java installations
-  ipcMain.handle(IPC_CHANNELS.JAVA_DETECT, async () => {
+  // Detect Java installations (with force refresh option)
+  ipcMain.handle(IPC_CHANNELS.JAVA_DETECT, async (event, forceRefresh = false) => {
     try {
-      console.log('[IPC Java] Detecting Java installations');
-      const installations = await detectJavaInstallations();
+      console.log(`[IPC Java] Detecting Java installations (forceRefresh: ${forceRefresh})`);
+      const installations = await detectJavaInstallations(forceRefresh);
       console.log(`[IPC Java] Found ${installations.length} Java installation(s)`);
       return installations;
     } catch (err) {
       console.error('[IPC Java] Failed to detect Java:', err);
       throw new Error(err instanceof Error ? err.message : 'Failed to detect Java');
+    }
+  });
+
+  // Get cached Java installations (no re-detection)
+  ipcMain.handle('java:get-cached', async () => {
+    try {
+      const installations = getCachedJavaInstallations();
+      console.log(`[IPC Java] Returning ${installations.length} cached Java installation(s)`);
+      return installations;
+    } catch (err) {
+      console.error('[IPC Java] Failed to get cached Java:', err);
+      throw new Error(err instanceof Error ? err.message : 'Failed to get cached Java');
     }
   });
 

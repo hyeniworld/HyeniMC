@@ -35,7 +35,14 @@ declare global {
         latest: () => Promise<string>;
       };
       java: {
-        detect: () => Promise<Array<{
+        detect: (forceRefresh?: boolean) => Promise<Array<{
+          path: string;
+          version: string;
+          majorVersion: number;
+          vendor?: string;
+          architecture: string;
+        }>>;
+        getCached: () => Promise<Array<{
           path: string;
           version: string;
           majorVersion: number;
