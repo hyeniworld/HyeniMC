@@ -72,6 +72,7 @@
 - **Go** 1.21+
 - **Java** 17+ (게임 실행용)
 - **Azure AD 앱** (Microsoft 로그인용) - [빠른 설정 가이드](docs/guides/QUICKSTART.md)
+- **Buf CLI** (Protobuf 코드 생성용) - `npm install`로 자동 설치됨
 
 ### 개발 환경 설정
 
@@ -83,10 +84,8 @@ cd HyeniMC
 # 2. 의존성 설치
 npm install
 
-# 3. 백엔드 빌드
-cd src/main/backend
-go build -o ../../../bin/backend main.go
-cd ../../..
+# 3. Protobuf 코드 생성
+npm run proto:gen
 
 # 4. Microsoft 로그인 설정
 # docs/guides/SETUP_GUIDE.md 참조하여 Azure AD 앱 등록 후
@@ -95,21 +94,39 @@ cp auth-config.example.ts auth-config.ts
 # auth-config.ts 파일에 Client ID 입력
 cd ../../..
 
-# 5. 개발 모드 실행
+# 5. 백엔드 빌드
+npm run backend:build:mac-universal  # macOS
+# 또는
+npm run backend:build:win-x64        # Windows
+
+# 6. 개발 모드 실행
 npm run dev
 ```
 
 ### 빌드 및 패키징
 
 ```bash
+# Protobuf 코드 생성 (필수)
+npm run proto:gen
+
 # 프로덕션 빌드
 npm run build
 
-# 플랫폼별 패키징
+# 플랫폼별 패키징 (백엔드 빌드 포함)
 npm run package:mac    # macOS
 npm run package:win    # Windows
 npm run package:linux  # Linux
 ```
+
+### GitHub Actions 자동 배포
+
+릴리즈를 위해서는 GitHub Secrets 설정이 필요합니다:
+
+1. **GitHub 저장소 → Settings → Secrets and variables → Actions**
+2. 다음 Secret 추가:
+   - `AZURE_CLIENT_ID`: Azure Portal의 Microsoft OAuth Client ID
+
+자세한 내용은 [버전 관리 가이드](docs/deployment/VERSION_MANAGEMENT.md)를 참조하세요.
 
 ---
 

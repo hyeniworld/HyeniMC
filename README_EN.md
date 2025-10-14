@@ -72,6 +72,7 @@ A profile-based Minecraft launcher for the HyeniWorld community.
 - **Go** 1.21+
 - **Java** 17+ (for running the game)
 - **Azure AD App** (for Microsoft login) - [Quick Setup Guide](docs/guides/QUICKSTART.md)
+- **Buf CLI** (for Protobuf code generation) - Automatically installed via `npm install`
 
 ### Development Setup
 
@@ -83,10 +84,8 @@ cd HyeniMC
 # 2. Install dependencies
 npm install
 
-# 3. Build backend
-cd src/main/backend
-go build -o ../../../bin/backend main.go
-cd ../../..
+# 3. Generate Protobuf code
+npm run proto:gen
 
 # 4. Microsoft login setup
 # Register Azure AD app following docs/guides/SETUP_GUIDE.md
@@ -95,21 +94,39 @@ cp auth-config.example.ts auth-config.ts
 # Enter Client ID in auth-config.ts
 cd ../../..
 
-# 5. Run in development mode
+# 5. Build backend
+npm run backend:build:mac-universal  # macOS
+# or
+npm run backend:build:win-x64        # Windows
+
+# 6. Run in development mode
 npm run dev
 ```
 
 ### Build & Package
 
 ```bash
+# Generate Protobuf code (required)
+npm run proto:gen
+
 # Production build
 npm run build
 
-# Platform-specific packaging
+# Platform-specific packaging (includes backend build)
 npm run package:mac    # macOS
 npm run package:win    # Windows
 npm run package:linux  # Linux
 ```
+
+### GitHub Actions Automated Deployment
+
+For releases, GitHub Secrets configuration is required:
+
+1. **GitHub Repository → Settings → Secrets and variables → Actions**
+2. Add the following Secret:
+   - `AZURE_CLIENT_ID`: Microsoft OAuth Client ID from Azure Portal
+
+For more details, refer to the [Version Management Guide](docs/deployment/VERSION_MANAGEMENT.md).
 
 ---
 

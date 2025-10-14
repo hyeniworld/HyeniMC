@@ -243,6 +243,20 @@ git commit -m "feat!: Microsoft 인증 시스템으로 전환"
 
 ## 🔧 GitHub Actions 워크플로우
 
+### 사전 요구사항
+
+**GitHub Secrets 설정 필수**
+
+릴리즈 전에 GitHub 저장소에 다음 Secret을 추가해야 합니다:
+
+1. **GitHub 저장소 → Settings → Secrets and variables → Actions**
+2. **New repository secret** 클릭
+3. 다음 Secret 추가:
+   - **Name**: `AZURE_CLIENT_ID`
+   - **Value**: Azure Portal의 Microsoft OAuth Client ID
+
+> ⚠️ **중요**: 이 Secret이 없으면 빌드가 실패합니다!
+
 ### 트리거
 
 ```yaml
@@ -254,26 +268,42 @@ on:
 
 ### 빌드 프로세스
 
-1. **Windows 빌드**
-   - Go 백엔드 빌드 (Windows x64)
-   - Electron 앱 패키징
-   - `.exe` 파일 생성
+각 플랫폼 빌드는 다음 단계를 거칩니다:
 
-2. **macOS 빌드**
-   - Go 백엔드 빌드 (Universal Binary)
-   - Electron 앱 패키징
-   - `.dmg` 파일 생성
+1. **환경 설정**
+   - Node.js 18 설치
+   - Go 1.21 설치
+   - 의존성 설치 (`npm install`)
 
-3. **Release 생성**
+2. **인증 설정**
+   - GitHub Secrets에서 `AZURE_CLIENT_ID` 가져오기
+   - `auth-config.ts` 파일 동적 생성
+
+3. **코드 생성**
+   - Protobuf 코드 생성 (`npm run proto:gen`)
+   - gRPC 클라이언트/서버 코드 생성
+
+4. **백엔드 빌드**
+   - **Windows**: Go 백엔드 빌드 (Windows x64)
+   - **macOS**: Go 백엔드 빌드 (Universal Binary - ARM64 + x64)
+
+5. **프론트엔드 빌드 및 패키징**
+   - TypeScript 컴파일
+   - React 앱 빌드
+   - Electron 앱 패키징
+   - **Windows**: `.exe` 파일 생성
+   - **macOS**: `.dmg` 파일 생성
+
+6. **Release 생성**
    - 모든 빌드 아티팩트 수집
    - GitHub Release 생성
-   - `latest.yml` 업로드
+   - `latest.yml` / `latest-mac.yml` 업로드
 
 ### 빌드 시간
 
-- Windows: ~10분
-- macOS: ~15분
-- 총 소요 시간: ~20분
+- Windows: ~10-15분
+- macOS: ~15-20분
+- 총 소요 시간: ~20-25분
 
 ---
 
@@ -367,7 +397,37 @@ git push origin :refs/tags/v0.1.0
 1. Go 버전 호환성 (1.21+)
 2. Node.js 버전 (18+)
 3. 백엔드 빌드 스크립트 정상 작동
-4. GitHub Secrets 설정 확인
+4. **GitHub Secrets 설정 확인** ⭐
+
+**일반적인 빌드 오류**:
+
+#### 오류 1: `auth-config.ts` 파일을 찾을 수 없음
+```
+Error: Cannot find module './auth-config'
+```
+
+**원인**: GitHub Secrets에 `AZURE_CLIENT_ID`가 설정되지 않음
+
+**해결**:
+1. GitHub 저장소 → Settings → Secrets and variables → Actions
+2. `AZURE_CLIENT_ID` Secret 추가
+3. 값: Azure Portal의 Client ID
+
+#### 오류 2: Protobuf 코드 생성 실패
+```
+package hyenimc/backend/gen/launcher is not in std
+```
+
+**원인**: `npm run proto:gen` 단계가 실행되지 않음
+
+**해결**: 워크플로우 파일에 protobuf 생성 단계가 포함되어 있는지 확인
+
+#### 오류 3: Actions artifact v3 deprecated
+```
+actions/upload-artifact: v3 is deprecated
+```
+
+**해결**: 워크플로우에서 `actions/upload-artifact@v4` 사용
 
 **로그 확인**:
 ```

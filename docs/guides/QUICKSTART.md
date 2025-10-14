@@ -38,7 +38,19 @@ copy auth-config.example.ts auth-config.ts
 # auth-config.ts 열어서 Client ID 입력
 ```
 
-### 3️⃣ 실행 및 테스트
+### 3️⃣ 코드 생성 및 빌드
+
+```bash
+# Protobuf 코드 생성 (필수)
+npm run proto:gen
+
+# 백엔드 빌드
+npm run backend:build:mac-universal  # macOS
+# 또는
+npm run backend:build:win-x64        # Windows
+```
+
+### 4️⃣ 실행 및 테스트
 
 ```bash
 npm run dev

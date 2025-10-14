@@ -5,7 +5,7 @@
 ### 1. 의존성 설치
 
 ```bash
-# Node.js 의존성 설치
+# Node.js 의존성 설치 (Buf CLI 포함)
 npm install
 
 # Go 의존성 설치
@@ -14,7 +14,20 @@ go mod download
 cd ..
 ```
 
-### 2. 백엔드 빌드
+### 2. Protobuf 코드 생성
+
+```bash
+# gRPC 클라이언트/서버 코드 생성
+npm run proto:gen
+```
+
+이 명령은 다음 파일들을 생성합니다:
+- `backend/gen/launcher/*.pb.go` - Go gRPC 서버 코드
+- `src/main/gen/launcher/*.ts` - TypeScript gRPC 클라이언트 코드
+
+> ⚠️ **중요**: 백엔드 빌드 전에 반드시 실행해야 합니다!
+
+### 3. 백엔드 빌드
 
 ```bash
 # macOS (현재 아키텍처에 맞게 빌드)
@@ -28,7 +41,7 @@ npm run backend:build:win-x64
 npm run backend:build:all
 ```
 
-### 3. 개발 서버 실행
+### 4. 개발 서버 실행
 
 ```bash
 # Vite 개발 서버와 Electron을 동시에 실행
@@ -132,17 +145,22 @@ npm run build
 ### 프로덕션 패키징
 
 ```bash
-# 현재 플랫폼용 패키지
+# 1. Protobuf 코드 생성 (필수)
+npm run proto:gen
+
+# 2. 현재 플랫폼용 패키지
 npm run package
 
-# macOS용
+# 3. macOS용 (백엔드 빌드 포함)
 npm run package:mac
 
-# Windows용
+# 4. Windows용 (백엔드 빌드 포함)
 npm run package:win
 ```
 
 패키징된 앱은 `release/` 디렉토리에 생성됩니다.
+
+> 💡 **팁**: `package:mac`과 `package:win` 명령은 자동으로 백엔드를 빌드합니다.
 
 ## 코드 스타일
 
@@ -178,12 +196,22 @@ npm run test:ui
 
 ### 백엔드 서버가 시작되지 않음
 
-1. 백엔드 바이너리가 빌드되었는지 확인:
+1. Protobuf 코드가 생성되었는지 확인:
+   ```bash
+   ls -la backend/gen/launcher/
+   ```
+
+2. Protobuf 코드 생성:
+   ```bash
+   npm run proto:gen
+   ```
+
+3. 백엔드 바이너리가 빌드되었는지 확인:
    ```bash
    ls -la backend/bin/
    ```
 
-2. 다시 빌드:
+4. 다시 빌드:
    ```bash
    npm run backend:build:mac-arm64
    ```
