@@ -1,10 +1,10 @@
 {
   "name": "hyenimc",
   "version": "0.1.0",
-  "description": "혜니월드 전용 마인크래프트 런처",
+  "description": "혜니월드 전용 마인크래프트 런처 (강혜니 이미지 저작권 보호)",
   "main": "main/main.js",
   "author": "deVbug",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE.md",
   "private": true,
   "scripts": {
     "dev": "npm run build:main && concurrently \"npm run dev:vite\" \"npm run dev:electron\"",
