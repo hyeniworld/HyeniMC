@@ -159,4 +159,11 @@ export const IPC_EVENTS = {
   // Auth Events (Protocol Handler)
   AUTH_SUCCESS: 'auth:success',
   AUTH_ERROR: 'auth:error',
+  
+  // Launcher Update Events
+  LAUNCHER_UPDATE_AVAILABLE: 'launcher:update-available',
+  LAUNCHER_UPDATE_NOT_AVAILABLE: 'launcher:update-not-available',
+  LAUNCHER_DOWNLOAD_PROGRESS: 'launcher:download-progress',
+  LAUNCHER_UPDATE_DOWNLOADED: 'launcher:update-downloaded',
+  LAUNCHER_UPDATE_ERROR: 'launcher:update-error',
 } as const;
