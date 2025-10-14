@@ -156,6 +156,7 @@
     "mac": {
       "category": "public.app-category.games",
       "icon": "build/icon.icns",
+      "x64ArchFiles":"*",
       "extraResources": [
         {
           "from": "backend/bin/hyenimc-backend",
