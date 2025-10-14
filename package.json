@@ -83,7 +83,11 @@
   "build": {
     "appId": "me.devbug.hyenimc",
     "productName": "HyeniMC",
-    "publish": null,
+    "publish": {
+      "provider": "github",
+      "owner": "devbug",
+      "repo": "HyeniMC"
+    },
     "asar": true,
     "asarUnpack": [
       "**/*.node"
