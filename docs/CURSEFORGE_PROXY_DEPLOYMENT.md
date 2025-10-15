@@ -1,22 +1,24 @@
-# CurseForge 프록시 배포 가이드
+# HyeniMC Worker 배포 가이드
 
-> **작성일**: 2025-10-12  
+> **작성일**: 2025-10-15 (업데이트)  
 > **작성자**: HyeniMC Development Team  
-> **목적**: CurseForge API 키를 안전하게 보호하기 위한 Cloudflare Workers 프록시 배포
+> **목적**: CurseForge API 프록시 + 모드 배포 (R2) 통합 Worker 배포
 
 ---
 
 ## 📋 개요
 
-HyeniMC 런처는 CurseForge API를 사용하여 모드를 검색/다운로드합니다. API 키를 클라이언트에 포함하면 탈취 위험이 있으므로, Cloudflare Workers를 이용한 프록시 서버를 구축하여 API 키를 서버에서만 관리합니다.
+HyeniMC Worker는 두 가지 주요 기능을 제공합니다:
+1. **CurseForge API 프록시**: API 키를 안전하게 보호
+2. **모드 배포 (R2)**: HyeniHelper 등 커스텀 모드 배포
 
 ### 아키텍처
 ```
 런처 클라이언트
     ↓
-Cloudflare Workers (프록시)
-    ↓ (API 키 추가)
-CurseForge API
+Cloudflare Workers (hyenimc-worker)
+    ├─ CurseForge API 프록시 (API 키 추가)
+    └─ R2 모드 배포 (토큰 인증)
 ```
 
 ---
@@ -188,9 +190,9 @@ Total Upload: 2.59 KiB / gzip: 0.96 KiB
 Your worker has access to the following bindings:
 - KV Namespaces:
   - RATE_LIMIT: 49ce1206ab5641d69ca96345b1650207
-Uploaded hyenimc-curseforge-proxy (3.39 sec)
-Deployed hyenimc-curseforge-proxy triggers (1.19 sec)
-  https://hyenimc-curseforge-proxy.YOUR_USERNAME.workers.dev
+Uploaded hyenimc-worker (3.39 sec)
+Deployed hyenimc-worker triggers (1.19 sec)
+  https://hyenimc-worker.YOUR_USERNAME.workers.dev
 Current Version ID: ff0ed90d-4b65-4c0b-bb6b-951fdc90c0d7
 ```
 
@@ -198,31 +200,30 @@ Current Version ID: ff0ed90d-4b65-4c0b-bb6b-951fdc90c0d7
 
 출력된 URL을 복사하세요:
 ```
-https://hyenimc-curseforge-proxy.YOUR_USERNAME.workers.dev
+https://hyenimc-worker.YOUR_USERNAME.workers.dev
 ```
 
 **예시 (실제 배포):**
 ```
-https://hyenimc-curseforge-proxy.devbug.workers.dev
+https://hyenimc-worker.devbug.workers.dev
 ```
 
 ---
 
 ### Step 8: 런처에 프록시 URL 설정
 
-#### 8.1 파일 수정
+#### 8.1 환경 변수 설정
 
-**파일**: `d:\git\HyeniMC\src\main\services\curseforge-api.ts`
+**파일**: `d:\git\HyeniMC\.env`
 
-**13번째 줄 수정:**
+`.env.example` 파일을 `.env`로 복사하고 실제 Worker URL 입력:
 
-```typescript
-// Before
-const PROXY_URL = process.env.CURSEFORGE_PROXY_URL || 'https://hyenimc-curseforge-proxy.YOUR_USERNAME.workers.dev';
-
-// After (Step 7에서 복사한 실제 URL로 교체)
-const PROXY_URL = process.env.CURSEFORGE_PROXY_URL || 'https://hyenimc-curseforge-proxy.devbug.workers.dev';
+```bash
+# .env
+CURSEFORGE_PROXY_URL=https://hyenimc-worker.YOUR_USERNAME.workers.dev
 ```
+
+⚠️ **중요**: `.env` 파일은 `.gitignore`에 포함되어 있으므로 GitHub에 커밋되지 않습니다.
 
 ---
 
@@ -251,7 +252,7 @@ dist/renderer/assets/index-BzXvmyOl.js   304.98 kB
 배포된 Workers URL을 브라우저에서 열어보세요:
 
 ```
-https://hyenimc-curseforge-proxy.YOUR_USERNAME.workers.dev/mods/search?gameId=432&searchFilter=sodium
+https://hyenimc-worker.YOUR_USERNAME.workers.dev/mods/search?gameId=432&searchFilter=sodium
 ```
 
 **성공 시:**
@@ -309,7 +310,7 @@ npm run dev
 
 **예상 콘솔 출력:**
 ```
-[CurseForge] Using proxy server: https://hyenimc-curseforge-proxy.devbug.workers.dev
+[CurseForge] Using proxy server: https://hyenimc-worker.devbug.workers.dev
 [CurseForge] Searching mods: "sodium"
 [CurseForge] Found 15 mods
 ```
@@ -322,7 +323,7 @@ npm run dev
 
 1. https://dash.cloudflare.com/ 접속
 2. "Workers & Pages" 메뉴 클릭
-3. `hyenimc-curseforge-proxy` 클릭
+3. `hyenimc-worker` 클릭
 
 **확인 가능한 정보:**
 - ✅ 요청 수 (시간당/일일)

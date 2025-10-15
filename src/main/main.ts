@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from 'electron';
 import * as path from 'path';
+import { config } from 'dotenv';
 import { registerIpcHandlers } from './ipc/handlers';
 import { initializeDownloadStreamBridge, shutdownDownloadStreamBridge } from './ipc/downloadStream';
 import { initializeInstanceLogBridge, shutdownInstanceLogBridge } from './ipc/instanceStream';
@@ -10,6 +11,21 @@ import { registerCustomProtocol } from './protocol/register';
 import { setupProtocolHandler, handleProtocolUrl } from './protocol/handler';
 import { initAutoUpdater, checkForUpdates } from './auto-updater';
 import { detectJavaInstallations } from './services/java-detector';
+
+// Load environment variables from .env file
+// In development: project root, In production: app root
+const isDevelopment = process.env.NODE_ENV === 'development' || !app.isPackaged;
+const projectRoot = isDevelopment 
+  ? path.join(__dirname, '../../')  // dist/main -> project root
+  : process.resourcesPath;
+
+const envPath = path.join(projectRoot, '.env');
+
+config({ path: envPath });
+
+console.log('[Main] Development mode:', isDevelopment);
+console.log('[Main] Loading .env from:', envPath);
+console.log('[Main] HYENIMC_WORKER_URL:', process.env.HYENIMC_WORKER_URL);
 
 // Set app name
 app.setName('HyeniMC');

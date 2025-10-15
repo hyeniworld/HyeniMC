@@ -1,6 +1,8 @@
-# HyeniMC CurseForge Proxy
+# HyeniMC Worker
 
-This Cloudflare Worker acts as a proxy for CurseForge API requests to protect the API key.
+Cloudflare Worker providing two main services:
+1. **CurseForge API Proxy**: Protects API key from client exposure
+2. **Mod Distribution (R2)**: Serves custom mods (e.g., HyeniHelper) with token authentication
 
 ## Setup
 
@@ -25,14 +27,25 @@ wrangler kv:namespace create "RATE_LIMIT"
 # Note the ID and update wrangler.toml
 ```
 
-### 4. Set API Key Secret
+### 4. Create R2 Bucket (for mod distribution)
 
 ```bash
-wrangler secret put CURSEFORGE_API_KEY
-# Enter your CurseForge API key when prompted
+wrangler r2 bucket create hyenimc-releases
 ```
 
-### 5. Deploy
+### 5. Set Secrets
+
+```bash
+# CurseForge API Key
+wrangler secret put CURSEFORGE_API_KEY
+
+# Token validation API URL
+wrangler secret put TOKEN_CHECK_API_URL
+```
+
+See `ENV_SETUP.md` for detailed instructions.
+
+### 6. Deploy
 
 ```bash
 wrangler publish
@@ -60,12 +73,24 @@ done
 
 ## Endpoints
 
+### CurseForge Proxy
 All CurseForge API v1 endpoints are supported:
 
 - `GET /mods/search` - Search mods
 - `GET /mods/{modId}` - Get mod details
 - `GET /mods/{modId}/files` - Get mod files
 - And more...
+
+### Mod Distribution (R2)
+
+- `GET /api/mods` - List all available mods
+- `GET /api/mods/{modId}/latest` - Get latest version info
+- `GET /api/mods/{modId}/versions` - List all versions
+- `GET /download/mods/{modId}/{version}/{file}?token=xxx` - Download mod file (requires token)
+
+### Health Check
+
+- `GET /health` - Service status
 
 ## Monitoring
 

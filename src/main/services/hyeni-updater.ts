@@ -10,9 +10,26 @@ import * as fs from 'fs-extra';
 import { app, net } from 'electron';
 import * as crypto from 'crypto';
 
-// Worker API URL (멀티 모드 지원)
-const RELEASES_API_URL = 'https://hyenimc-worker.devbug.workers.dev/api/mods';
-const DOWNLOAD_BASE_URL = 'https://hyenimc-worker.devbug.workers.dev/download/mods';
+// Worker API URL (환경 변수에서 로드)
+// HyeniMC Worker는 CurseForge 프록시와 모드 배포(R2) 기능을 모두 제공
+function getWorkerBaseUrl(): string {
+  const url = process.env.HYENIMC_WORKER_URL;
+  
+  if (!url || url === 'https://YOUR_WORKER_URL.workers.dev') {
+    console.error('[HyeniUpdater] Worker URL not configured! Set HYENIMC_WORKER_URL environment variable.');
+    return 'https://YOUR_WORKER_URL.workers.dev';
+  }
+  
+  return url;
+}
+
+function getReleasesApiUrl(): string {
+  return `${getWorkerBaseUrl()}/api/mods`;
+}
+
+function getDownloadBaseUrl(): string {
+  return `${getWorkerBaseUrl()}/download/mods`;
+}
 
 export interface HyeniHelperUpdateInfo {
   available: boolean;
@@ -127,7 +144,7 @@ export class HyeniUpdater {
       // Base URL: https://worker.dev/download/mods
       // Remove leading /mods/ from downloadUrl since base already has /mods
       const relativePath = updateInfo.downloadUrl.replace(/^\/mods\//, '/');
-      const downloadUrl = `${DOWNLOAD_BASE_URL}${relativePath}?token=${token}`;
+      const downloadUrl = `${getDownloadBaseUrl()}${relativePath}?token=${token}`;
       const tempPath = await this.downloadFile(downloadUrl, updateInfo.sha256, onProgress);
       
       // 3. Backup old files
@@ -244,7 +261,7 @@ export class HyeniUpdater {
    * Fetch latest release info from API
    */
   private async fetchLatestRelease(): Promise<LatestReleaseResponse | null> {
-    const url = `${RELEASES_API_URL}/hyenihelper/latest`;
+    const url = `${getReleasesApiUrl()}/hyenihelper/latest`;
     
     return new Promise((resolve) => {
       const request = net.request(url);

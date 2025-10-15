@@ -33,8 +33,11 @@ GitHub Actions는 다음 작업을 자동으로 수행합니다:
 | Name | Value | 설명 |
 |------|-------|------|
 | `AZURE_CLIENT_ID` | `your-client-id-here` | Azure Portal의 Microsoft OAuth Client ID |
+| `HYENIMC_WORKER_URL` | `https://hyenimc-worker.YOUR_ACCOUNT.workers.dev` | HyeniMC Worker URL |
 
 > 💡 **참고**: `GITHUB_TOKEN`은 GitHub Actions에서 자동으로 제공되므로 별도 설정이 필요 없습니다.
+
+> 📝 **상세 가이드**: [GITHUB_ACTIONS_SECRETS.md](./GITHUB_ACTIONS_SECRETS.md) 참조
 
 ### 2. Azure Client ID 찾기
 
@@ -49,9 +52,10 @@ Secret이 올바르게 설정되었는지 확인:
 
 - Settings → Secrets and variables → Actions
 - `AZURE_CLIENT_ID`가 목록에 표시되어야 함
+- `HYENIMC_WORKER_URL`이 목록에 표시되어야 함
 - 값은 보안상 표시되지 않음 (정상)
 
-> ⚠️ **중요**: 이 Secret이 없으면 빌드가 실패합니다!
+> ⚠️ **중요**: 이 Secret들이 없으면 빌드가 실패합니다!
 
 ---
 
@@ -91,10 +95,12 @@ on:
 4. ✅ 의존성 설치 (`npm install`)
 5. ✅ 인증 설정 파일 생성 (`auth-config.ts`)
    - GitHub Secrets에서 `AZURE_CLIENT_ID` 가져오기
-6. ✅ Protobuf 코드 생성 (`npm run proto:gen`)
-7. ✅ Go 백엔드 빌드 (`npm run backend:build:win-x64`)
-8. ✅ Electron 앱 패키징 (`npm run package:win`)
-9. ✅ 아티팩트 업로드 (`actions/upload-artifact@v4`)
+6. ✅ 환경 변수 파일 생성 (`.env`)
+   - GitHub Secrets에서 `CURSEFORGE_PROXY_URL` 가져오기
+7. ✅ Protobuf 코드 생성 (`npm run proto:gen`)
+8. ✅ Go 백엔드 빌드 (`npm run backend:build:win-x64`)
+9. ✅ Electron 앱 패키징 (`npm run package:win`)
+10. ✅ 아티팩트 업로드 (`actions/upload-artifact@v4`)
    - `HyeniMC-Setup-*.exe`
    - `latest.yml`
 
@@ -108,11 +114,12 @@ on:
 3. ✅ Go 1.21 설치
 4. ✅ 의존성 설치
 5. ✅ 인증 설정 파일 생성
-6. ✅ Protobuf 코드 생성
-7. ✅ Go 백엔드 빌드 (`npm run backend:build:mac-universal`)
+6. ✅ 환경 변수 파일 생성 (`.env`)
+7. ✅ Protobuf 코드 생성
+8. ✅ Go 백엔드 빌드 (`npm run backend:build:mac-universal`)
    - ARM64 + x64 Universal Binary
-8. ✅ Electron 앱 패키징 (`npm run package:mac`)
-9. ✅ 아티팩트 업로드
+9. ✅ Electron 앱 패키징 (`npm run package:mac`)
+10. ✅ 아티팩트 업로드
    - `HyeniMC-*.dmg`
    - `latest-mac.yml`
 
@@ -306,6 +313,8 @@ permissions:
 릴리즈 전 확인사항:
 
 - [ ] GitHub Secrets에 `AZURE_CLIENT_ID` 설정됨
+- [ ] GitHub Secrets에 `HYENIMC_WORKER_URL` 설정됨
+- [ ] HyeniMC Worker가 정상 배포되어 있음
 - [ ] 워크플로우 파일이 최신 버전 (`v4` 사용)
 - [ ] 로컬에서 빌드 테스트 완료
 - [ ] `package.json` 버전 업데이트됨

@@ -8,10 +8,25 @@ import type {
   LoaderType 
 } from '../../shared/types/profile';
 
-// Cloudflare Workers Proxy URL (replace with your actual deployment URL)
-// TODO: Update this URL after deploying to Cloudflare Workers
-const PROXY_URL = process.env.CURSEFORGE_PROXY_URL || 'https://hyenimc-curseforge-proxy.devbug.workers.dev';
-const USE_PROXY = process.env.NODE_ENV === 'production' || !process.env.CURSEFORGE_API_KEY;
+// HyeniMC Worker URL (CurseForge API Proxy + Mod Distribution)
+// Set HYENIMC_WORKER_URL environment variable to override
+// In production builds, this should be set via GitHub Actions secrets
+function getProxyUrl(): string {
+  // For production builds, the URL is injected at build time via environment variables
+  // For development, it's loaded from .env file
+  const url = process.env.HYENIMC_WORKER_URL;
+  
+  if (!url || url === 'https://YOUR_WORKER_URL.workers.dev') {
+    console.error('[CurseForge] HYENIMC_WORKER_URL not configured! Please set environment variable.');
+    return 'https://YOUR_WORKER_URL.workers.dev';
+  }
+  
+  return url;
+}
+
+function shouldUseProxy(): boolean {
+  return process.env.NODE_ENV === 'production' || !process.env.CURSEFORGE_API_KEY;
+}
 
 /**
  * Generate or retrieve launcher ID for rate limiting
@@ -42,15 +57,17 @@ export class CurseForgeAPI {
   constructor(apiKey?: string) {
     // Determine if we should use proxy
     this.apiKey = apiKey || process.env.CURSEFORGE_API_KEY || '';
-    this.useProxy = USE_PROXY || !this.apiKey;
+    this.useProxy = shouldUseProxy() || !this.apiKey;
+    
+    const proxyUrl = getProxyUrl();
     
     if (this.useProxy) {
-      console.log('[CurseForge] Using proxy server:', PROXY_URL);
+      console.log('[CurseForge] Using proxy server:', proxyUrl);
     } else {
       console.log('[CurseForge] Using direct API access (development mode)');
     }
 
-    const baseURL = this.useProxy ? PROXY_URL : 'https://api.curseforge.com/v1';
+    const baseURL = this.useProxy ? proxyUrl : 'https://api.curseforge.com/v1';
     const headers: any = {
       'Accept': 'application/json',
     };

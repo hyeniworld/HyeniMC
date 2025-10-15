@@ -11,11 +11,37 @@ import { ModUpdater } from '../services/mod-updater';
 import { getProfileInstanceDir } from '../utils/paths';
 import type { ModSearchFilters } from '../../shared/types/profile';
 
-const modrinthAPI = new ModrinthAPI();
-const curseforgeAPI = new CurseForgeAPI();
-const modAggregator = new ModAggregator();
-const dependencyResolver = new DependencyResolver();
-const modUpdater = new ModUpdater();
+// Lazy initialization to ensure environment variables are loaded first
+let modrinthAPI: ModrinthAPI;
+let curseforgeAPI: CurseForgeAPI;
+let modAggregator: ModAggregator;
+let dependencyResolver: DependencyResolver;
+let modUpdater: ModUpdater;
+
+function getModrinthAPI(): ModrinthAPI {
+  if (!modrinthAPI) modrinthAPI = new ModrinthAPI();
+  return modrinthAPI;
+}
+
+function getCurseForgeAPI(): CurseForgeAPI {
+  if (!curseforgeAPI) curseforgeAPI = new CurseForgeAPI();
+  return curseforgeAPI;
+}
+
+function getModAggregator(): ModAggregator {
+  if (!modAggregator) modAggregator = new ModAggregator();
+  return modAggregator;
+}
+
+function getDependencyResolver(): DependencyResolver {
+  if (!dependencyResolver) dependencyResolver = new DependencyResolver();
+  return dependencyResolver;
+}
+
+function getModUpdater(): ModUpdater {
+  if (!modUpdater) modUpdater = new ModUpdater();
+  return modUpdater;
+}
 
 /**
  * Register mod-related IPC handlers
@@ -92,20 +118,20 @@ export function registerModHandlers(): void {
       
       // Single source search to avoid ID/source conflicts
       if (source === 'curseforge') {
-        if (!curseforgeAPI.isConfigured()) {
+        if (!getCurseForgeAPI().isConfigured()) {
           console.warn('[IPC Mod] CurseForge not configured, falling back to Modrinth');
-          return await modrinthAPI.searchMods(query, filters);
+          return await getModrinthAPI().searchMods(query, filters);
         }
-        const result = await curseforgeAPI.searchMods(query, filters);
+        const result = await getCurseForgeAPI().searchMods(query, filters);
         console.log(`[IPC Mod] Found ${result.hits.length} CurseForge mods`);
         return result;
       } else if (source === 'modrinth') {
-        const result = await modrinthAPI.searchMods(query, filters);
+        const result = await getModrinthAPI().searchMods(query, filters);
         console.log(`[IPC Mod] Found ${result.hits.length} Modrinth mods`);
         return result;
       } else {
         // Default to Modrinth for 'both' to avoid source conflicts
-        const result = await modrinthAPI.searchMods(query, filters);
+        const result = await getModrinthAPI().searchMods(query, filters);
         console.log(`[IPC Mod] Found ${result.hits.length} mods (defaulting to Modrinth)`);
         return result;
       }
@@ -121,10 +147,10 @@ export function registerModHandlers(): void {
       console.log(`[IPC Mod] Getting mod details: ${modId} from ${source}`);
       
       if (source === 'curseforge') {
-        const details = await curseforgeAPI.getModDetails(modId);
+        const details = await getCurseForgeAPI().getModDetails(modId);
         return details;
       } else {
-        const details = await modrinthAPI.getModDetails(modId);
+        const details = await getModrinthAPI().getModDetails(modId);
         return details;
       }
     } catch (error) {
@@ -139,10 +165,10 @@ export function registerModHandlers(): void {
       console.log(`[IPC Mod] Getting mod versions: ${modId} from ${source}`, { gameVersion, loaderType });
       
       if (source === 'curseforge') {
-        const versions = await curseforgeAPI.getModVersions(modId, gameVersion, loaderType as any);
+        const versions = await getCurseForgeAPI().getModVersions(modId, gameVersion, loaderType as any);
         return versions;
       } else {
-        const versions = await modrinthAPI.getModVersions(modId, gameVersion, loaderType as any);
+        const versions = await getModrinthAPI().getModVersions(modId, gameVersion, loaderType as any);
         return versions;
       }
     } catch (error) {
@@ -165,10 +191,10 @@ export function registerModHandlers(): void {
       // Get version details from appropriate source
       let version;
       if (source === 'curseforge') {
-        const versions = await curseforgeAPI.getModVersions(modId);
+        const versions = await getCurseForgeAPI().getModVersions(modId);
         version = versions.find(v => v.id === versionId);
       } else {
-        const versions = await modrinthAPI.getModVersions(modId);
+        const versions = await getModrinthAPI().getModVersions(modId);
         version = versions.find(v => v.id === versionId);
       }
       

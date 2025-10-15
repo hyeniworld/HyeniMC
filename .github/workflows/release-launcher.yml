@@ -38,6 +38,12 @@ jobs:
           };
           "@ | Out-File -FilePath src/main/services/auth-config.ts -Encoding utf8
       
+      - name: Create .env file
+        run: |
+          @"
+          HYENIMC_WORKER_URL=${{ secrets.HYENIMC_WORKER_URL }}
+          "@ | Out-File -FilePath .env -Encoding utf8
+      
       - name: Generate protobuf code
         run: npm run proto:gen
       
@@ -85,6 +91,12 @@ jobs:
             AZURE_CLIENT_ID: '${{ secrets.AZURE_CLIENT_ID }}',
             REDIRECT_URI: 'http://localhost:53682/callback',
           };
+          EOF
+      
+      - name: Create .env file
+        run: |
+          cat > .env << 'EOF'
+          HYENIMC_WORKER_URL=${{ secrets.HYENIMC_WORKER_URL }}
           EOF
       
       - name: Generate protobuf code

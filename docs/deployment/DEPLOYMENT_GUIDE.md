@@ -1,6 +1,6 @@
-# CurseForge 프록시 배포 가이드
+# HyeniMC Worker 배포 가이드
 
-HyeniMC 런처에서 CurseForge API를 안전하게 사용하기 위한 프록시 서버 배포 가이드입니다.
+HyeniMC Worker는 CurseForge API 프록시와 모드 배포 (R2) 기능을 제공하는 통합 Worker입니다.
 
 ## 📋 사전 준비
 
@@ -81,7 +81,7 @@ npx wrangler publish
 ```
 ✨  Success! Uploaded 1 module.
 ✨ Deployment complete! Your worker is available at:
-   https://hyenimc-curseforge-proxy.your-account.workers.dev
+   https://hyenimc-worker.your-account.workers.dev
 ```
 
 ## 🔧 런처 설정
@@ -90,17 +90,20 @@ npx wrangler publish
 
 배포된 Workers URL을 런처에 설정합니다:
 
-**옵션 1: 환경변수 (개발)**
+**환경 변수 사용 (권장)**
+
+1. `.env.example`을 `.env`로 복사:
 ```bash
-# .env 파일
-CURSEFORGE_PROXY_URL=https://hyenimc-curseforge-proxy.your-account.workers.dev
+cp .env.example .env
 ```
 
-**옵션 2: 코드 수정 (프로덕션)**
-```typescript
-// src/main/services/curseforge-api.ts
-const PROXY_URL = 'https://hyenimc-curseforge-proxy.your-account.workers.dev';
+2. `.env` 파일에 실제 Worker URL 입력:
+```bash
+# .env
+CURSEFORGE_PROXY_URL=https://hyenimc-worker.your-account.workers.dev
 ```
+
+⚠️ **보안**: `.env` 파일은 `.gitignore`에 포함되어 GitHub에 커밋되지 않습니다.
 
 ### Step 7: 빌드 및 테스트
 
@@ -117,7 +120,7 @@ npm run dev
 
 1. [Cloudflare Dashboard](https://dash.cloudflare.com/)
 2. Workers & Pages 메뉴
-3. `hyenimc-curseforge-proxy` 클릭
+3. `hyenimc-worker` 클릭
 
 확인 가능한 정보:
 - ✅ 요청 수 (시간당/일일)
