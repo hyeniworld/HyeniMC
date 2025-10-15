@@ -18,7 +18,22 @@ npm install -g wrangler
 wrangler login
 ```
 
-### 3. Create KV Namespace
+### 3. Configure wrangler.toml
+
+```bash
+# Copy example config
+cp wrangler.toml.example wrangler.toml
+
+# Edit wrangler.toml and update:
+# 1. WORKER_URL - Your deployed worker URL
+# 2. KV namespace ID (after creating in step 4)
+# 3. account_id, zone_id, and worker_name in [worker] section
+# 4. bucket_name in [bucket] section
+```
+
+**Important**: Update `WORKER_URL` in `[vars]` section to match your deployed worker URL.
+
+### 4. Create KV Namespace
 
 ```bash
 # Create KV namespace for rate limiting
@@ -27,13 +42,13 @@ wrangler kv:namespace create "RATE_LIMIT"
 # Note the ID and update wrangler.toml
 ```
 
-### 4. Create R2 Bucket (for mod distribution)
+### 5. Create R2 Bucket (for mod distribution)
 
 ```bash
 wrangler r2 bucket create hyenimc-releases
 ```
 
-### 5. Set Secrets
+### 6. Set Secrets
 
 ```bash
 # CurseForge API Key
@@ -45,7 +60,7 @@ wrangler secret put TOKEN_CHECK_API_URL
 
 See `ENV_SETUP.md` for detailed instructions.
 
-### 6. Deploy
+### 7. Deploy
 
 ```bash
 wrangler publish

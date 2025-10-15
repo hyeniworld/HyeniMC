@@ -236,8 +236,11 @@ Write-Host "   • 버전: $Version" -ForegroundColor Gray
 Write-Host "   • 로더: $($loaders.Keys -join ', ')" -ForegroundColor Gray
 Write-Host "   • 파일 수: $($loaders.Count + 1) (JAR + manifest)" -ForegroundColor Gray
 Write-Host ""
+# Worker URL 가져오기
+$workerUrl = & "$PSScriptRoot\scripts\Get-WorkerUrl.ps1"
+
 Write-Host "🔗 API 엔드포인트:" -ForegroundColor White
-Write-Host "   https://hyenimc-worker.devbug.workers.dev/api/mods/$ModId/latest" -ForegroundColor Blue
+Write-Host "   $workerUrl/api/mods/$ModId/latest" -ForegroundColor Blue
 Write-Host ""
 
 # 임시 파일 정리

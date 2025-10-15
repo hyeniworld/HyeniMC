@@ -36,10 +36,13 @@ Write-Host "━━━━━━━━━━━━━━━━━━━━━━�
 Write-Host "📦 모드 ID: $ModId" -ForegroundColor White
 Write-Host ""
 
+# Worker URL 가져오기
+$workerUrl = & "$PSScriptRoot\scripts\Get-WorkerUrl.ps1"
+
 # 현재 latest.json 확인
 Write-Host "📡 현재 버전 확인 중..." -ForegroundColor Cyan
 
-$apiUrl = "https://hyenimc-worker.devbug.workers.dev/api/mods/$ModId/latest"
+$apiUrl = "$workerUrl/api/mods/$ModId/latest"
 
 try {
     $currentLatest = Invoke-RestMethod -Uri $apiUrl -Method Get
@@ -54,7 +57,7 @@ try {
 # 사용 가능한 버전 목록 조회
 Write-Host "📋 사용 가능한 버전 목록 조회 중..." -ForegroundColor Cyan
 
-$versionsUrl = "https://hyenimc-worker.devbug.workers.dev/api/mods/$ModId/versions"
+$versionsUrl = "$workerUrl/api/mods/$ModId/versions"
 
 try {
     $versionsResponse = Invoke-RestMethod -Uri $versionsUrl -Method Get
@@ -219,7 +222,7 @@ Write-Host "   • 이전: v$($currentLatest.version)" -ForegroundColor Gray
 Write-Host "   • 현재: v$Version" -ForegroundColor Gray
 Write-Host ""
 Write-Host "🔗 확인:" -ForegroundColor White
-Write-Host "   curl https://hyenimc-worker.devbug.workers.dev/api/mods/$ModId/latest" -ForegroundColor Blue
+Write-Host "   curl $workerUrl/api/mods/$ModId/latest" -ForegroundColor Blue
 Write-Host ""
 Write-Host "💡 런처 사용자들은 자동으로 v$Version 로 업데이트됩니다." -ForegroundColor Yellow
 Write-Host ""

@@ -39,10 +39,13 @@ Write-Host ""
 # 각 모드의 latest.json 다운로드
 $mods = @()
 
+# Worker URL 가져오기
+$workerUrl = & "$PSScriptRoot\scripts\Get-WorkerUrl.ps1"
+
 foreach ($modId in $modIds) {
     Write-Host "📦 $modId 정보 수집 중..." -ForegroundColor Cyan
     
-    $apiUrl = "https://hyenimc-worker.devbug.workers.dev/api/mods/$modId/latest"
+    $apiUrl = "$workerUrl/api/mods/$modId/latest"
     
     try {
         $response = Invoke-RestMethod -Uri $apiUrl -Method Get

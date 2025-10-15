@@ -2,13 +2,20 @@ name = "hyenimc-worker"
 main = "src/index.js"
 compatibility_date = "2024-01-01"
 
+# Worker URL (used by deployment scripts)
+# Update this to match your deployed Worker URL
+# Format: https://your-worker-name.your-account.workers.dev
+[vars]
+WORKER_URL = "https://hyenimc-worker.YOUR_ACCOUNT.workers.dev"
+
 # KV namespace for rate limiting
+# Create with: wrangler kv:namespace create "RATE_LIMIT"
 kv_namespaces = [
-  { binding = "RATE_LIMIT", id = "49ce1206ab5641d69ca96345b1650207" }
+  { binding = "RATE_LIMIT", id = "YOUR_KV_NAMESPACE_ID" }
 ]
 
 # R2 bucket for releases (HyeniHelper mod distribution)
-# Create bucket: wrangler r2 bucket create hyenimc-releases
+# Create with: wrangler r2 bucket create hyenimc-releases
 r2_buckets = [
   { binding = "RELEASES", bucket_name = "hyenimc-releases" }
 ]

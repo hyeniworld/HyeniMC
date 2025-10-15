@@ -25,10 +25,13 @@ Write-Host "━━━━━━━━━━━━━━━━━━━━━━�
 Write-Host "📦 모드 ID: $ModId" -ForegroundColor White
 Write-Host ""
 
+# Worker URL 가져오기
+$workerUrl = & "$PSScriptRoot\scripts\Get-WorkerUrl.ps1"
+
 # 현재 latest 버전 확인
 Write-Host "🔍 현재 버전 확인 중..." -ForegroundColor Cyan
 
-$apiUrl = "https://hyenimc-worker.devbug.workers.dev/api/mods/$ModId/latest"
+$apiUrl = "$workerUrl/api/mods/$ModId/latest"
 
 try {
     $currentLatest = Invoke-RestMethod -Uri $apiUrl -Method Get
@@ -44,7 +47,7 @@ Write-Host ""
 # 모든 버전 조회
 Write-Host "📡 모든 버전 조회 중..." -ForegroundColor Cyan
 
-$versionsUrl = "https://hyenimc-worker.devbug.workers.dev/api/mods/$ModId/versions"
+$versionsUrl = "$workerUrl/api/mods/$ModId/versions"
 
 try {
     $versionsResponse = Invoke-RestMethod -Uri $versionsUrl -Method Get
