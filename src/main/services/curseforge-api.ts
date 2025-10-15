@@ -9,16 +9,13 @@ import type {
 } from '../../shared/types/profile';
 
 // HyeniMC Worker URL (CurseForge API Proxy + Mod Distribution)
-// Set HYENIMC_WORKER_URL environment variable to override
-// In production builds, this should be set via GitHub Actions secrets
+// IMPORTANT: This URL should NOT be public to prevent abuse of free tier limits
+// Set via HYENIMC_WORKER_URL environment variable
 function getProxyUrl(): string {
-  // For production builds, the URL is injected at build time via environment variables
-  // For development, it's loaded from .env file
   const url = process.env.HYENIMC_WORKER_URL;
   
-  if (!url || url === 'https://YOUR_WORKER_URL.workers.dev') {
-    console.error('[CurseForge] HYENIMC_WORKER_URL not configured! Please set environment variable.');
-    return 'https://YOUR_WORKER_URL.workers.dev';
+  if (!url) {
+    throw new Error('HYENIMC_WORKER_URL environment variable is not set. Please configure it in .env file.');
   }
   
   return url;

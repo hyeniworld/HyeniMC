@@ -12,6 +12,8 @@ Microsoft 인증을 위한 Azure Client ID
 ### 2. `HYENIMC_WORKER_URL`
 배포된 HyeniMC Worker URL (CurseForge Proxy + Mod Distribution)
 
+**중요**: 이 URL은 Cloudflare Workers 무료 티어 남용 방지를 위해 공개하지 않습니다.
+
 **예시**: `https://hyenimc-worker.YOUR_ACCOUNT.workers.dev`
 
 ## Secrets 설정 방법
@@ -25,9 +27,16 @@ Microsoft 인증을 위한 Azure Client ID
 ### 2. Secret 추가
 
 1. **New repository secret** 버튼 클릭
-2. Secret 정보 입력:
-   - **Name**: `HYENIMC_WORKER_URL`
-   - **Value**: `https://hyenimc-worker.YOUR_ACCOUNT.workers.dev`
+2. 다음 Secrets 추가:
+
+**AZURE_CLIENT_ID**
+- **Name**: `AZURE_CLIENT_ID`
+- **Value**: Azure Portal의 Client ID
+
+**HYENIMC_WORKER_URL**
+- **Name**: `HYENIMC_WORKER_URL`
+- **Value**: `https://hyenimc-worker.YOUR_ACCOUNT.workers.dev`
+
 3. **Add secret** 클릭
 
 ### 3. 설정 확인
@@ -40,9 +49,18 @@ Microsoft 인증을 위한 Azure Client ID
 
 ## 빌드 워크플로우
 
-GitHub Actions는 다음과 같이 `.env` 파일을 자동 생성합니다:
+GitHub Actions는 다음 파일들을 자동 생성합니다:
 
 ```yaml
+- name: Create auth config
+  run: |
+    cat > src/main/services/auth-config.ts << 'EOF'
+    export const AUTH_CONFIG = {
+      AZURE_CLIENT_ID: '${{ secrets.AZURE_CLIENT_ID }}',
+      REDIRECT_URI: 'http://localhost:53682/callback',
+    };
+    EOF
+
 - name: Create .env file
   run: |
     cat > .env << 'EOF'
@@ -58,7 +76,7 @@ GitHub Actions는 다음과 같이 `.env` 파일을 자동 생성합니다:
 # .env 파일 생성
 cp .env.example .env
 
-# 실제 Worker URL 입력
+# .env 파일에 실제 Worker URL 입력
 # HYENIMC_WORKER_URL=https://hyenimc-worker.YOUR_ACCOUNT.workers.dev
 
 # 빌드 테스트
@@ -73,7 +91,7 @@ npm run build
 
 ## 문제 해결
 
-### 문제: "HYENIMC_WORKER_URL is not defined"
+### 문제: "HYENIMC_WORKER_URL is not set"
 
 **원인**: GitHub Secret이 설정되지 않음
 
@@ -81,14 +99,13 @@ npm run build
 1. GitHub Repository Settings > Secrets and variables > Actions
 2. `HYENIMC_WORKER_URL` Secret 추가
 
-### 문제: "Worker URL is invalid"
+### 문제: "AZURE_CLIENT_ID is not defined"
 
-**원인**: Worker URL 형식이 잘못됨
+**원인**: GitHub Secret이 설정되지 않음
 
 **해결**:
-- URL 형식 확인: `https://hyenimc-worker.YOUR_ACCOUNT.workers.dev`
-- 프로토콜(`https://`) 포함 확인
-- 끝에 슬래시(`/`) 없이 입력
+1. GitHub Repository Settings > Secrets and variables > Actions
+2. `AZURE_CLIENT_ID` Secret 추가
 
 ### 문제: 빌드는 성공하지만 런처가 Worker에 연결 안 됨
 

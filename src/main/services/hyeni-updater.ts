@@ -10,25 +10,25 @@ import * as fs from 'fs-extra';
 import { app, net } from 'electron';
 import * as crypto from 'crypto';
 
-// Worker API URL (환경 변수에서 로드)
-// HyeniMC Worker는 CurseForge 프록시와 모드 배포(R2) 기능을 모두 제공
-function getWorkerBaseUrl(): string {
+// HyeniMC Worker URL (CurseForge API Proxy + Mod Distribution)
+// IMPORTANT: This URL should NOT be public to prevent abuse of free tier limits
+// Set via HYENIMC_WORKER_URL environment variable
+function getWorkerUrl(): string {
   const url = process.env.HYENIMC_WORKER_URL;
   
-  if (!url || url === 'https://YOUR_WORKER_URL.workers.dev') {
-    console.error('[HyeniUpdater] Worker URL not configured! Set HYENIMC_WORKER_URL environment variable.');
-    return 'https://YOUR_WORKER_URL.workers.dev';
+  if (!url) {
+    throw new Error('HYENIMC_WORKER_URL environment variable is not set. Please configure it in .env file.');
   }
   
   return url;
 }
 
 function getReleasesApiUrl(): string {
-  return `${getWorkerBaseUrl()}/api/mods`;
+  return `${getWorkerUrl()}/api/mods`;
 }
 
 function getDownloadBaseUrl(): string {
-  return `${getWorkerBaseUrl()}/download/mods`;
+  return `${getWorkerUrl()}/download/mods`;
 }
 
 export interface HyeniHelperUpdateInfo {

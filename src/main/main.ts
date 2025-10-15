@@ -1,6 +1,5 @@
 import { app, BrowserWindow } from 'electron';
 import * as path from 'path';
-import { config } from 'dotenv';
 import { registerIpcHandlers } from './ipc/handlers';
 import { initializeDownloadStreamBridge, shutdownDownloadStreamBridge } from './ipc/downloadStream';
 import { initializeInstanceLogBridge, shutdownInstanceLogBridge } from './ipc/instanceStream';
@@ -13,19 +12,23 @@ import { initAutoUpdater, checkForUpdates } from './auto-updater';
 import { detectJavaInstallations } from './services/java-detector';
 
 // Load environment variables from .env file
-// In development: project root, In production: app root
 const isDevelopment = process.env.NODE_ENV === 'development' || !app.isPackaged;
-const projectRoot = isDevelopment 
-  ? path.join(__dirname, '../../')  // dist/main -> project root
-  : process.resourcesPath;
 
-const envPath = path.join(projectRoot, '.env');
-
-config({ path: envPath });
-
-console.log('[Main] Development mode:', isDevelopment);
-console.log('[Main] Loading .env from:', envPath);
-console.log('[Main] HYENIMC_WORKER_URL:', process.env.HYENIMC_WORKER_URL);
+try {
+  const { config } = require('dotenv');
+  const envPath = isDevelopment 
+    ? path.join(__dirname, '../../.env')  // Development: project root
+    : path.join(process.resourcesPath, 'app.asar', '.env');  // Production: inside asar
+  
+  config({ path: envPath });
+  
+  console.log('[Main] Mode:', isDevelopment ? 'Development' : 'Production');
+  console.log('[Main] Loading .env from:', envPath);
+  console.log('[Main] HYENIMC_WORKER_URL:', process.env.HYENIMC_WORKER_URL ? 'configured' : 'NOT SET');
+} catch (error) {
+  console.error('[Main] Failed to load .env:', error);
+  console.error('[Main] CRITICAL: HYENIMC_WORKER_URL must be set!');
+}
 
 // Set app name
 app.setName('HyeniMC');

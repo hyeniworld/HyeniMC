@@ -33,7 +33,7 @@ GitHub Actions는 다음 작업을 자동으로 수행합니다:
 | Name | Value | 설명 |
 |------|-------|------|
 | `AZURE_CLIENT_ID` | `your-client-id-here` | Azure Portal의 Microsoft OAuth Client ID |
-| `HYENIMC_WORKER_URL` | `https://hyenimc-worker.YOUR_ACCOUNT.workers.dev` | HyeniMC Worker URL |
+| `HYENIMC_WORKER_URL` | `https://hyenimc-worker.YOUR_ACCOUNT.workers.dev` | HyeniMC Worker URL (비공개) |
 
 > 💡 **참고**: `GITHUB_TOKEN`은 GitHub Actions에서 자동으로 제공되므로 별도 설정이 필요 없습니다.
 
@@ -55,7 +55,7 @@ Secret이 올바르게 설정되었는지 확인:
 - `HYENIMC_WORKER_URL`이 목록에 표시되어야 함
 - 값은 보안상 표시되지 않음 (정상)
 
-> ⚠️ **중요**: 이 Secret들이 없으면 빌드가 실패합니다!
+> ⚠️ **중요**: 이 Secrets이 없으면 빌드가 실패합니다!
 
 ---
 
@@ -96,7 +96,7 @@ on:
 5. ✅ 인증 설정 파일 생성 (`auth-config.ts`)
    - GitHub Secrets에서 `AZURE_CLIENT_ID` 가져오기
 6. ✅ 환경 변수 파일 생성 (`.env`)
-   - GitHub Secrets에서 `CURSEFORGE_PROXY_URL` 가져오기
+   - GitHub Secrets에서 `HYENIMC_WORKER_URL` 가져오기
 7. ✅ Protobuf 코드 생성 (`npm run proto:gen`)
 8. ✅ Go 백엔드 빌드 (`npm run backend:build:win-x64`)
 9. ✅ Electron 앱 패키징 (`npm run package:win`)
