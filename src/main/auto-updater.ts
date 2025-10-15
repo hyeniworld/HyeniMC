@@ -43,11 +43,20 @@ autoUpdater.logger = log;
 // Set update config path for development
 if (process.env.NODE_ENV === 'development') {
   const path = require('path');
+  const fs = require('fs');
   const devConfigPath = path.join(process.cwd(), 'dev-app-update.yml');
-  log.info(`[AutoUpdater] Using dev config: ${devConfigPath}`);
   
-  // @ts-ignore - updateConfigPath is available but not in types
-  autoUpdater.updateConfigPath = devConfigPath;
+  // Only set config path if the file exists
+  if (fs.existsSync(devConfigPath)) {
+    log.info(`[AutoUpdater] Using dev config: ${devConfigPath}`);
+    // @ts-ignore - updateConfigPath is available but not in types
+    autoUpdater.updateConfigPath = devConfigPath;
+  } else {
+    log.info(`[AutoUpdater] Dev config not found, skipping update checks in development`);
+    // Disable update checks in development if config doesn't exist
+    autoUpdater.autoDownload = false;
+    autoUpdater.autoInstallOnAppQuit = false;
+  }
 }
 
 // Disable auto-download by default (manual control)
@@ -153,6 +162,18 @@ export function initAutoUpdater(window: BrowserWindow) {
  * Check for updates manually
  */
 export async function checkForUpdates(): Promise<void> {
+  // Skip update checks in development if config file doesn't exist
+  if (process.env.NODE_ENV === 'development') {
+    const path = require('path');
+    const fs = require('fs');
+    const devConfigPath = path.join(process.cwd(), 'dev-app-update.yml');
+    
+    if (!fs.existsSync(devConfigPath)) {
+      log.info('[AutoUpdater] Skipping update check in development (no dev-app-update.yml)');
+      return;
+    }
+  }
+  
   try {
     log.info('[AutoUpdater] Checking for updates...');
     await autoUpdater.checkForUpdates();
