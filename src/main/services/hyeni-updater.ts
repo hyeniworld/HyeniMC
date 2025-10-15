@@ -9,15 +9,14 @@ import * as path from 'path';
 import * as fs from 'fs-extra';
 import { app, net } from 'electron';
 import * as crypto from 'crypto';
+import { ENV_CONFIG } from '../config/env-config';
 
 // HyeniMC Worker URL (CurseForge API Proxy + Mod Distribution)
-// IMPORTANT: This URL should NOT be public to prevent abuse of free tier limits
-// Set via HYENIMC_WORKER_URL environment variable
 function getWorkerUrl(): string {
-  const url = process.env.HYENIMC_WORKER_URL;
+  const url = ENV_CONFIG.HYENIMC_WORKER_URL;
   
   if (!url) {
-    throw new Error('HYENIMC_WORKER_URL environment variable is not set. Please configure it in .env file.');
+    throw new Error('HYENIMC_WORKER_URL is not configured. Please check your .env file.');
   }
   
   return url;

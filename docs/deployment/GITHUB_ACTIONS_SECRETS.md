@@ -49,24 +49,25 @@ Microsoft 인증을 위한 Azure Client ID
 
 ## 빌드 워크플로우
 
-GitHub Actions는 다음 파일들을 자동 생성합니다:
+GitHub Actions는 `.env` 파일을 생성하고 자동으로 TypeScript 설정 파일들을 생성합니다:
 
 ```yaml
-- name: Create auth config
-  run: |
-    cat > src/main/services/auth-config.ts << 'EOF'
-    export const AUTH_CONFIG = {
-      AZURE_CLIENT_ID: '${{ secrets.AZURE_CLIENT_ID }}',
-      REDIRECT_URI: 'http://localhost:53682/callback',
-    };
-    EOF
-
+# 1. .env 파일 생성 (모든 환경변수 통합)
 - name: Create .env file
   run: |
     cat > .env << 'EOF'
     HYENIMC_WORKER_URL=${{ secrets.HYENIMC_WORKER_URL }}
+    AZURE_CLIENT_ID=${{ secrets.AZURE_CLIENT_ID }}
     EOF
+
+# 2. TypeScript 설정 파일 자동 생성
+- name: Generate config files
+  run: npm run generate:config
 ```
+
+이 스크립트가 자동으로 다음 파일들을 생성합니다:
+- `src/main/services/auth-config.ts` (AZURE_CLIENT_ID에서 생성)
+- `src/main/config/env-config.ts` (HYENIMC_WORKER_URL 등에서 생성)
 
 ## 테스트
 
@@ -91,21 +92,21 @@ npm run build
 
 ## 문제 해결
 
-### 문제: "HYENIMC_WORKER_URL is not set"
+### 문제: "HYENIMC_WORKER_URL is not configured"
 
-**원인**: GitHub Secret이 설정되지 않음
-
-**해결**:
-1. GitHub Repository Settings > Secrets and variables > Actions
-2. `HYENIMC_WORKER_URL` Secret 추가
-
-### 문제: "AZURE_CLIENT_ID is not defined"
-
-**원인**: GitHub Secret이 설정되지 않음
+**원인**: .env 파일에 HYENIMC_WORKER_URL이 설정되지 않음
 
 **해결**:
-1. GitHub Repository Settings > Secrets and variables > Actions
-2. `AZURE_CLIENT_ID` Secret 추가
+1. 로컬: `.env` 파일에 `HYENIMC_WORKER_URL=...` 추가
+2. GitHub Actions: `HYENIMC_WORKER_URL` Secret 추가
+
+### 문제: "AZURE_CLIENT_ID가 설정되지 않았습니다"
+
+**원인**: .env 파일에 AZURE_CLIENT_ID가 설정되지 않음
+
+**해결**:
+1. 로컬: `.env` 파일에 `AZURE_CLIENT_ID=...` 추가
+2. GitHub Actions: `AZURE_CLIENT_ID` Secret 추가
 
 ### 문제: 빌드는 성공하지만 런처가 Worker에 연결 안 됨
 
@@ -155,13 +156,15 @@ npm run build
 
 ### 추가 환경 변수
 
-필요한 경우 추가 환경 변수를 설정할 수 있습니다:
+필요한 경우 .env 파일에 추가 환경 변수를 설정할 수 있습니다:
 
 ```yaml
 - name: Create .env file
   run: |
     cat > .env << 'EOF'
     HYENIMC_WORKER_URL=${{ secrets.HYENIMC_WORKER_URL }}
+    AZURE_CLIENT_ID=${{ secrets.AZURE_CLIENT_ID }}
+    CURSEFORGE_API_KEY=${{ secrets.CURSEFORGE_API_KEY }}
     NODE_ENV=production
     LOG_LEVEL=info
     EOF

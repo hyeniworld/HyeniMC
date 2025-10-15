@@ -7,22 +7,21 @@ import type {
   ModSearchFilters,
   LoaderType 
 } from '../../shared/types/profile';
+import { ENV_CONFIG } from '../config/env-config';
 
 // HyeniMC Worker URL (CurseForge API Proxy + Mod Distribution)
-// IMPORTANT: This URL should NOT be public to prevent abuse of free tier limits
-// Set via HYENIMC_WORKER_URL environment variable
 function getProxyUrl(): string {
-  const url = process.env.HYENIMC_WORKER_URL;
+  const url = ENV_CONFIG.HYENIMC_WORKER_URL;
   
   if (!url) {
-    throw new Error('HYENIMC_WORKER_URL environment variable is not set. Please configure it in .env file.');
+    throw new Error('HYENIMC_WORKER_URL is not configured. Please check your .env file.');
   }
   
   return url;
 }
 
 function shouldUseProxy(): boolean {
-  return process.env.NODE_ENV === 'production' || !process.env.CURSEFORGE_API_KEY;
+  return process.env.NODE_ENV === 'production' || !ENV_CONFIG.CURSEFORGE_API_KEY;
 }
 
 /**
@@ -53,7 +52,7 @@ export class CurseForgeAPI {
 
   constructor(apiKey?: string) {
     // Determine if we should use proxy
-    this.apiKey = apiKey || process.env.CURSEFORGE_API_KEY || '';
+    this.apiKey = apiKey || ENV_CONFIG.CURSEFORGE_API_KEY || '';
     this.useProxy = shouldUseProxy() || !this.apiKey;
     
     const proxyUrl = getProxyUrl();

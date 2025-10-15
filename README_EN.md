@@ -84,15 +84,15 @@ cd HyeniMC
 # 2. Install dependencies
 npm install
 
-# 3. Generate Protobuf code
-npm run proto:gen
+# 3. Environment setup
+cp .env.example .env
+# Edit .env file and enter:
+# - HYENIMC_WORKER_URL: Your Cloudflare Worker URL
+# - AZURE_CLIENT_ID: Your Azure OAuth Client ID
+# See .env.example for detailed instructions
 
-# 4. Microsoft login setup
-# Register Azure AD app following docs/guides/SETUP_GUIDE.md
-cd src/main/services
-cp auth-config.example.ts auth-config.ts
-# Enter Client ID in auth-config.ts
-cd ../../..
+# 4. Generate Protobuf code
+npm run proto:gen
 
 # 5. Build backend
 npm run backend:build:mac-universal  # macOS
@@ -123,7 +123,8 @@ npm run package:linux  # Linux
 For releases, GitHub Secrets configuration is required:
 
 1. **GitHub Repository → Settings → Secrets and variables → Actions**
-2. Add the following Secret:
+2. Add the following Secrets:
+   - `HYENIMC_WORKER_URL`: Your Cloudflare Worker URL
    - `AZURE_CLIENT_ID`: Microsoft OAuth Client ID from Azure Portal
 
 For more details, refer to the [Version Management Guide](docs/deployment/VERSION_MANAGEMENT.md).

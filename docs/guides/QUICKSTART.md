@@ -23,19 +23,20 @@ Microsoft 로그인 설정을 3분 안에!
    - 리디렉션 URI: `http://localhost:3000/auth/callback` (공용 클라이언트)
 4. **등록** → **Client ID 복사**
 
-### 2️⃣ 설정 파일 생성
+### 2️⃣ 환경변수 설정
 
-**macOS/Linux**:
 ```bash
-./scripts/setup-auth.sh
-# Client ID 입력하면 끝!
+# .env 파일 생성
+cp .env.example .env
+
+# .env 파일 편집 (텍스트 에디터로 열기)
+# HYENIMC_WORKER_URL과 AZURE_CLIENT_ID 입력
 ```
 
-**Windows**:
-```bash
-cd src/main/services
-copy auth-config.example.ts auth-config.ts
-# auth-config.ts 열어서 Client ID 입력
+**.env 파일 내용**:
+```env
+HYENIMC_WORKER_URL=https://your-worker.workers.dev
+AZURE_CLIENT_ID=여기에_복사한_Client_ID_붙여넣기
 ```
 
 ### 3️⃣ 코드 생성 및 빌드
@@ -78,8 +79,8 @@ A: Azure Portal에서 계정 유형을 "개인 Microsoft 계정" 또는 "모든 
 ### Q: Client ID를 어디서 찾나요?
 A: Azure Portal → 앱 등록 → 개요 → "애플리케이션 (클라이언트) ID"
 
-### Q: auth-config.ts 파일이 없어요
-A: `./scripts/setup-auth.sh` 실행하거나 `auth-config.example.ts`를 복사
+### Q: .env 파일이 없어요
+A: `.env.example`을 복사해서 `.env`로 만들고 값을 입력하세요
 
 ---
 

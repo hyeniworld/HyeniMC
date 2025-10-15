@@ -84,15 +84,15 @@ cd HyeniMC
 # 2. 의존성 설치
 npm install
 
-# 3. Protobuf 코드 생성
-npm run proto:gen
+# 3. 환경변수 설정
+cp .env.example .env
+# .env 파일 편집하여 다음 값 입력:
+# - HYENIMC_WORKER_URL: Cloudflare Worker 주소
+# - AZURE_CLIENT_ID: Azure Portal의 Client ID
+# 자세한 설정 방법은 .env.example 파일 참조
 
-# 4. Microsoft 로그인 설정
-# docs/guides/SETUP_GUIDE.md 참조하여 Azure AD 앱 등록 후
-cd src/main/services
-cp auth-config.example.ts auth-config.ts
-# auth-config.ts 파일에 Client ID 입력
-cd ../../..
+# 4. Protobuf 코드 생성
+npm run proto:gen
 
 # 5. 백엔드 빌드
 npm run backend:build:mac-universal  # macOS
@@ -124,6 +124,7 @@ npm run package:linux  # Linux
 
 1. **GitHub 저장소 → Settings → Secrets and variables → Actions**
 2. 다음 Secret 추가:
+   - `HYENIMC_WORKER_URL`: Cloudflare Worker 주소
    - `AZURE_CLIENT_ID`: Azure Portal의 Microsoft OAuth Client ID
 
 자세한 내용은 [버전 관리 가이드](docs/deployment/VERSION_MANAGEMENT.md)를 참조하세요.

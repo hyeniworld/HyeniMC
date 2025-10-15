@@ -40,8 +40,9 @@ Thumbs.db
 # Dev update config (for testing auto-update in dev mode)
 dev-app-update.yml
 
-# Local configuration (contains sensitive data)
+# Local configuration (auto-generated from .env, contains sensitive data)
 src/main/services/auth-config.ts
+src/main/config/env-config.ts
 
 # macOS
 .DS_Store

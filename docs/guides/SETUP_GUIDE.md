@@ -92,65 +92,47 @@ URI: http://localhost:3000/auth/callback
 
 ---
 
-## 💻 Client ID 설정
+## 💻 환경변수 설정 (.env)
 
-### ⭐ 로컬 설정 파일 사용 (권장)
-
-**자동 설정 (macOS/Linux)**:
+### 프로젝트 루트에 .env 파일 생성
 
 ```bash
-# 대화형 설정 스크립트 실행
-./scripts/setup-auth.sh
+# 1. 예제 파일 복사
+cp .env.example .env
+
+# 2. 텍스트 에디터로 열기
+code .env  # VS Code
+# 또는 다른 에디터 사용
 ```
 
-스크립트가 자동으로:
-1. `auth-config.ts` 파일 생성
-2. Client ID 입력 받기
-3. 파일에 자동으로 반영
+### .env 파일 편집
 
-**수동 설정 (Windows 또는 선호 시)**:
+`.env` 파일에 다음 값들을 입력하세요:
 
-```bash
-# 1. 설정 파일 복사
-cd src/main/services
-cp auth-config.example.ts auth-config.ts
+```env
+# Cloudflare Worker 주소
+HYENIMC_WORKER_URL=https://your-worker.YOUR_ACCOUNT.workers.dev
 
-# 2. 에디터로 auth-config.ts 열기
-code auth-config.ts  # VS Code
+# Azure OAuth Client ID
+AZURE_CLIENT_ID=a1b2c3d4-e5f6-g7h8-i9j0-k1l2m3n4o5p6
+
+# 선택사항: CurseForge API Key (개발용)
+# CURSEFORGE_API_KEY=your_api_key_here
 ```
 
-`auth-config.ts` 파일에서:
+### 자동 설정 파일 생성
 
-```typescript
-export const AUTH_CONFIG = {
-  // Azure Portal에서 복사한 Client ID를 여기에 입력
-  AZURE_CLIENT_ID: 'a1b2c3d4-e5f6-g7h8-i9j0-k1l2m3n4o5p6',  // ← 여기 수정
-  
-  REDIRECT_URI: 'http://localhost:3000/auth/callback',
-};
-```
+`.env` 파일을 저장하면 `npm run dev` 또는 `npm run build` 실행 시
+자동으로 다음 파일들이 생성됩니다:
+- `src/main/services/auth-config.ts` (AZURE_CLIENT_ID에서 생성)
+- `src/main/config/env-config.ts` (HYENIMC_WORKER_URL 등에서 생성)
 
 **장점**: 
-- ✅ **Git 안전**: `auth-config.ts`는 `.gitignore`에 포함되어 커밋 안 됨
-- ✅ **빌드 자동**: 빌드 시 자동으로 포함됨
-- ✅ **팀 협업**: 각 개발자가 자신의 Client ID 사용 가능
-- ✅ **환경 변수 불필요**: 터미널 설정 없이 바로 동작
-
----
-
-### 대체 방법: 환경 변수 (선택사항)
-
-설정 파일 없이 환경 변수만으로도 가능:
-
-**macOS/Linux**:
-```bash
-export AZURE_CLIENT_ID="여기에_Client_ID_붙여넣기"
-```
-
-**Windows (PowerShell)**:
-```powershell
-$env:AZURE_CLIENT_ID="여기에_Client_ID_붙여넣기"
-```
+- ✅ **한 곳에서 관리**: 모든 환경변수를 .env 한 파일로 관리
+- ✅ **Git 안전**: `.env`는 `.gitignore`에 포함되어 커밋 안 됨
+- ✅ **자동 빌드**: 빌드 시 자동으로 TypeScript 파일로 변환
+- ✅ **팀 협업**: 각 개발자가 자신의 Worker/Client ID 사용 가능
+- ✅ **표준 방식**: 다른 프로젝트들과 동일한 .env 패턴
 
 ---
 
@@ -204,17 +186,14 @@ A: 개인 Microsoft 계정 (Outlook, Hotmail 등)으로 로그인하면 무료�
 A: "모든 조직 디렉터리의 계정 및 개인 Microsoft 계정" 선택하면 됩니다.
 
 ### Q: Client ID를 어디에 입력하나요?
-A: 환경 변수로 설정합니다. 코드에 직접 입력하지 마세요!
+A: 프로젝트 루트의 `.env` 파일에 `AZURE_CLIENT_ID=...` 형태로 입력합니다.
 
 ### Q: 여전히 안 되는데요?
 A:
-1. 환경 변수가 제대로 설정되었는지 확인
-   ```bash
-   echo $AZURE_CLIENT_ID  # macOS/Linux
-   echo %AZURE_CLIENT_ID%  # Windows
-   ```
-2. 개발 서버 재시작
-3. Azure Portal 설정 재확인
+1. `.env` 파일이 제대로 설정되었는지 확인
+2. `npm run generate:config` 실행해서 설정 파일 생성 확인
+3. 개발 서버 재시작
+4. Azure Portal 설정 재확인
 
 ---
 
@@ -231,13 +210,14 @@ A:
 런처를 다른 사용자에게 배포하기 전:
 
 - [ ] Azure AD 앱 등록 완료
-- [ ] `src/main/services/auth-config.ts` 파일 생성 및 Client ID 입력
+- [ ] Cloudflare Worker 배포 완료
+- [ ] `.env` 파일 생성 및 값 입력 (HYENIMC_WORKER_URL, AZURE_CLIENT_ID)
 - [ ] 로컬에서 Microsoft 로그인 테스트 성공
-- [ ] 빌드: `npm run build`
-- [ ] 패키징: `npm run package` (electron-builder)
+- [ ] 빌드: `npm run build` (자동으로 generate:config 실행됨)
+- [ ] 패키징: `npm run package`
 - [ ] 패키징된 앱에서 Microsoft 로그인 재테스트
 
-**중요**: `auth-config.ts` 파일은 Git에 커밋되지 않으므로 빌드 서버에서도 별도로 생성해야 합니다!
+**중요**: `.env` 파일은 Git에 커밋되지 않으므로 CI/CD에서 GitHub Secrets로 생성해야 합니다!
 
 ---
 

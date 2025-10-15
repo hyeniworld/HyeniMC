@@ -29,20 +29,15 @@ jobs:
       - name: Install dependencies
         run: npm install
       
-      - name: Create auth config
-        run: |
-          @"
-          export const AUTH_CONFIG = {
-            AZURE_CLIENT_ID: '${{ secrets.AZURE_CLIENT_ID }}',
-            REDIRECT_URI: 'http://localhost:53682/callback',
-          };
-          "@ | Out-File -FilePath src/main/services/auth-config.ts -Encoding utf8
-      
       - name: Create .env file
         run: |
           @"
           HYENIMC_WORKER_URL=${{ secrets.HYENIMC_WORKER_URL }}
+          AZURE_CLIENT_ID=${{ secrets.AZURE_CLIENT_ID }}
           "@ | Out-File -FilePath .env -Encoding utf8
+      
+      - name: Generate config files
+        run: npm run generate:config
       
       - name: Generate protobuf code
         run: npm run proto:gen
@@ -84,20 +79,15 @@ jobs:
       - name: Install dependencies
         run: npm install
       
-      - name: Create auth config
-        run: |
-          cat > src/main/services/auth-config.ts << 'EOF'
-          export const AUTH_CONFIG = {
-            AZURE_CLIENT_ID: '${{ secrets.AZURE_CLIENT_ID }}',
-            REDIRECT_URI: 'http://localhost:53682/callback',
-          };
-          EOF
-      
       - name: Create .env file
         run: |
           cat > .env << 'EOF'
           HYENIMC_WORKER_URL=${{ secrets.HYENIMC_WORKER_URL }}
+          AZURE_CLIENT_ID=${{ secrets.AZURE_CLIENT_ID }}
           EOF
+      
+      - name: Generate config files
+        run: npm run generate:config
       
       - name: Generate protobuf code
         run: npm run proto:gen

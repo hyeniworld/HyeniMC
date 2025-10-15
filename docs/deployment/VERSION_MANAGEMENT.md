@@ -247,15 +247,17 @@ git commit -m "feat!: Microsoft 인증 시스템으로 전환"
 
 **GitHub Secrets 설정 필수**
 
-릴리즈 전에 GitHub 저장소에 다음 Secret을 추가해야 합니다:
+릴리즈 전에 GitHub 저장소에 다음 Secrets를 추가해야 합니다:
 
 1. **GitHub 저장소 → Settings → Secrets and variables → Actions**
 2. **New repository secret** 클릭
-3. 다음 Secret 추가:
+3. 다음 Secrets 추가:
+   - **Name**: `HYENIMC_WORKER_URL`
+   - **Value**: 배포된 Cloudflare Worker URL
    - **Name**: `AZURE_CLIENT_ID`
    - **Value**: Azure Portal의 Microsoft OAuth Client ID
 
-> ⚠️ **중요**: 이 Secret이 없으면 빌드가 실패합니다!
+> ⚠️ **중요**: 이 Secrets이 없으면 빌드가 실패합니다!
 
 > 💡 **참고**: `GITHUB_TOKEN`은 자동으로 제공되므로 별도 설정 불필요
 
@@ -277,9 +279,10 @@ on:
    - Go 1.21 설치
    - 의존성 설치 (`npm install`)
 
-2. **인증 설정**
-   - GitHub Secrets에서 `AZURE_CLIENT_ID` 가져오기
-   - `auth-config.ts` 파일 동적 생성
+2. **환경변수 설정**
+   - GitHub Secrets에서 환경변수 가져오기
+   - `.env` 파일 동적 생성 (HYENIMC_WORKER_URL, AZURE_CLIENT_ID)
+   - `npm run generate:config`로 TypeScript 설정 파일 자동 생성
 
 3. **코드 생성**
    - Protobuf 코드 생성 (`npm run proto:gen`)
@@ -403,17 +406,20 @@ git push origin :refs/tags/v0.1.0
 
 **일반적인 빌드 오류**:
 
-#### 오류 1: `auth-config.ts` 파일을 찾을 수 없음
+#### 오류 1: 환경변수 설정 파일을 찾을 수 없음
 ```
+Error: Cannot find module './config/env-config'
 Error: Cannot find module './auth-config'
 ```
 
-**원인**: GitHub Secrets에 `AZURE_CLIENT_ID`가 설정되지 않음
+**원인**: GitHub Secrets에 필수 환경변수가 설정되지 않음
 
 **해결**:
 1. GitHub 저장소 → Settings → Secrets and variables → Actions
-2. `AZURE_CLIENT_ID` Secret 추가
-3. 값: Azure Portal의 Client ID
+2. 다음 Secrets 추가:
+   - `HYENIMC_WORKER_URL`
+   - `AZURE_CLIENT_ID`
+3. 워크플로우에 `npm run generate:config` 단계 포함 확인
 
 #### 오류 2: Protobuf 코드 생성 실패
 ```

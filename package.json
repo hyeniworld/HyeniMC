@@ -7,9 +7,12 @@
   "license": "SEE LICENSE IN LICENSE.md",
   "private": true,
   "scripts": {
+    "generate:config": "node scripts/generate-config.js",
+    "predev": "npm run generate:config",
     "dev": "npm run build:main && concurrently \"npm run dev:vite\" \"npm run dev:electron\"",
     "dev:vite": "vite",
     "dev:electron": "cross-env NODE_ENV=development electron ./dist/main/main.js",
+    "prebuild": "npm run generate:config",
     "build": "npm run build:renderer && npm run build:main",
     "build:renderer": "vite build",
     "build:main": "tsc -p tsconfig.main.json",
@@ -35,7 +38,6 @@
     "axios": "^1.6.0",
     "chokidar": "^4.0.3",
     "clsx": "^2.0.0",
-    "dotenv": "^17.2.3",
     "electron-log": "^5.0.1",
     "electron-updater": "^6.1.7",
     "fs-extra": "^11.2.0",
@@ -134,7 +136,6 @@
           "!**/*.d.ts"
         ]
       },
-      ".env",
       "package.json",
       "!node_modules/**/*.md",
       "!node_modules/**/*.txt",

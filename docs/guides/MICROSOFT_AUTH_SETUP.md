@@ -81,40 +81,44 @@ URI: http://localhost:3000/auth/callback
 
 ## 🔑 HyeniMC 설정
 
-### 방법 1: 환경 변수 설정 (권장)
+### .env 파일로 설정 (권장)
 
-**macOS/Linux:**
+프로젝트 루트에 `.env` 파일을 생성하고 편집:
+
 ```bash
-export AZURE_CLIENT_ID="YOUR_CLIENT_ID_HERE"
+# 1. 예제 파일 복사
+cp .env.example .env
+
+# 2. 텍스트 에디터로 열기
+code .env
 ```
 
-**Windows (PowerShell):**
-```powershell
-$env:AZURE_CLIENT_ID="YOUR_CLIENT_ID_HERE"
-```
-
-**Windows (CMD):**
-```cmd
-set AZURE_CLIENT_ID=YOUR_CLIENT_ID_HERE
-```
-
-### 방법 2: .env 파일 생성
-
-프로젝트 루트에 `.env` 파일 생성:
+`.env` 파일 내용:
 
 ```env
-AZURE_CLIENT_ID=YOUR_CLIENT_ID_HERE
+# Cloudflare Worker 주소
+HYENIMC_WORKER_URL=https://your-worker.YOUR_ACCOUNT.workers.dev
+
+# Azure OAuth Client ID
+AZURE_CLIENT_ID=a1b2c3d4-e5f6-g7h8-i9j0-k1l2m3n4o5p6
+
+# 선택사항: CurseForge API Key (개발용)
+# CURSEFORGE_API_KEY=your_api_key_here
 ```
 
-### 방법 3: 코드에 직접 입력 (개발용만)
+### 자동 설정 파일 생성
 
-`src/main/services/microsoft-auth.ts` 파일 수정:
+`.env` 저장 후 `npm run dev` 또는 `npm run build` 실행 시
+자동으로 TypeScript 설정 파일들이 생성됩니다:
+- `src/main/services/auth-config.ts`
+- `src/main/config/env-config.ts`
 
-```typescript
-const AZURE_CLIENT_ID = 'YOUR_CLIENT_ID_HERE';
-```
+**장점**:
+- ✅ **한 곳에서 관리**: 모든 환경변수를 .env로 통합
+- ✅ **Git 안전**: .env는 .gitignore로 보호
+- ✅ **표준 방식**: 다른 Node.js 프로젝트와 동일한 패턴
 
-**⚠️ 주의**: 공개 저장소에 올리지 마세요!
+**⚠️ 주의**: .env 파일은 공개 저장소에 올리지 마세요!
 
 ---
 

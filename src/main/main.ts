@@ -10,25 +10,12 @@ import { registerCustomProtocol } from './protocol/register';
 import { setupProtocolHandler, handleProtocolUrl } from './protocol/handler';
 import { initAutoUpdater, checkForUpdates } from './auto-updater';
 import { detectJavaInstallations } from './services/java-detector';
+import { ENV_CONFIG } from './config/env-config';
 
-// Load environment variables from .env file
 const isDevelopment = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
-try {
-  const { config } = require('dotenv');
-  const envPath = isDevelopment 
-    ? path.join(__dirname, '../../.env')  // Development: project root
-    : path.join(process.resourcesPath, 'app.asar', '.env');  // Production: inside asar
-  
-  config({ path: envPath });
-  
-  console.log('[Main] Mode:', isDevelopment ? 'Development' : 'Production');
-  console.log('[Main] Loading .env from:', envPath);
-  console.log('[Main] HYENIMC_WORKER_URL:', process.env.HYENIMC_WORKER_URL ? 'configured' : 'NOT SET');
-} catch (error) {
-  console.error('[Main] Failed to load .env:', error);
-  console.error('[Main] CRITICAL: HYENIMC_WORKER_URL must be set!');
-}
+console.log('[Main] Mode:', isDevelopment ? 'Development' : 'Production');
+console.log('[Main] HYENIMC_WORKER_URL:', ENV_CONFIG.HYENIMC_WORKER_URL ? 'configured' : 'NOT SET');
 
 // Set app name
 app.setName('HyeniMC');
