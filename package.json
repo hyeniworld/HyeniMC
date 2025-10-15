@@ -176,6 +176,18 @@
         {
           "target": "dmg",
           "arch": "universal"
+        },
+        {
+          "target": "zip",
+          "arch": "arm64"
+        },
+        {
+          "target": "zip",
+          "arch": "x64"
+        },
+        {
+          "target": "zip",
+          "arch": "universal"
         }
       ],
       "extendInfo": {

@@ -104,6 +104,7 @@ jobs:
           name: macos-release
           path: |
             release/*.dmg
+            release/*.zip
             release/*.blockmap
             release/latest-mac.yml
   
@@ -130,6 +131,7 @@ jobs:
           files: |
             release/*.exe
             release/*.dmg
+            release/*.zip
             release/*.blockmap
             release/*.yml
           draft: false
