@@ -1,7 +1,9 @@
-import axios, { AxiosProgressEvent } from 'axios';
+import { AxiosProgressEvent } from 'axios';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import { HttpClient } from '../utils/http-client';
+import { Semaphore } from '../utils/semaphore';
 
 export interface DownloadTask {
   id: string;
@@ -32,11 +34,15 @@ type ProgressCallback = (progress: DownloadProgress) => void;
 export class DownloadManager {
   private tasks: Map<string, DownloadTask> = new Map();
   private activeTasks: Set<string> = new Set();
-  private maxConcurrent: number;
+  private downloadSemaphore: Semaphore;
+  private ioSemaphore: Semaphore;
   private progressCallbacks: Map<string, ProgressCallback> = new Map();
+  private httpClient = HttpClient.getInstance();
 
-  constructor(maxConcurrent: number = 5) {
-    this.maxConcurrent = maxConcurrent;
+  constructor(maxConcurrentDownloads: number = 10, maxConcurrentWrites: number = 10) {
+    // Modrinth 방식: 다운로드와 I/O를 별도로 제어
+    this.downloadSemaphore = new Semaphore(maxConcurrentDownloads);
+    this.ioSemaphore = new Semaphore(maxConcurrentWrites);
   }
 
   /**
@@ -65,6 +71,7 @@ export class DownloadManager {
 
   /**
    * Start downloading all pending tasks
+   * Modrinth 방식: 모든 작업을 즉시 시작하고 Semaphore로 동시성 제어
    */
   async startAll(onProgress?: ProgressCallback): Promise<void> {
     const pendingTasks = Array.from(this.tasks.values()).filter(
@@ -72,18 +79,11 @@ export class DownloadManager {
     );
 
     const totalTasks = pendingTasks.length;
-    // Track which tasks we're downloading in this batch
     const taskIds = new Set(pendingTasks.map(t => t.id));
-
-    const chunks: DownloadTask[][] = [];
-    for (let i = 0; i < pendingTasks.length; i += this.maxConcurrent) {
-      chunks.push(pendingTasks.slice(i, i + this.maxConcurrent));
-    }
 
     // Wrap progress callback to include overall progress
     const wrappedCallback: ProgressCallback | undefined = onProgress
       ? (progress) => {
-          // Only count tasks from this batch that are completed
           const completed = Array.from(this.tasks.values()).filter(
             (t) => taskIds.has(t.id) && t.status === 'completed'
           ).length;
@@ -97,15 +97,15 @@ export class DownloadManager {
         }
       : undefined;
 
-    for (const chunk of chunks) {
-      await Promise.all(
-        chunk.map((task) => this.downloadTask(task, wrappedCallback))
-      );
-    }
+    // 모든 작업을 동시에 시작 (Semaphore가 동시성 제어)
+    await Promise.all(
+      pendingTasks.map((task) => this.downloadTask(task, wrappedCallback))
+    );
   }
 
   /**
    * Download a single task
+   * Modrinth 방식: Semaphore로 동시성 제어, 빠른 재시도
    */
   private async downloadTask(
     task: DownloadTask,
@@ -119,9 +119,6 @@ export class DownloadManager {
         task.status = 'downloading';
         this.activeTasks.add(task.id);
 
-        // Ensure directory exists
-        await fs.mkdir(path.dirname(task.destination), { recursive: true });
-
         // Check if file already exists with correct checksum
         if (task.checksum && (await this.verifyChecksum(task.destination, task.checksum, task.checksumType))) {
           console.log(`[Download] File already exists with correct checksum: ${task.destination}`);
@@ -131,8 +128,10 @@ export class DownloadManager {
           return;
         }
         
-        // Attempt download
-        await this.performDownload(task, onProgress);
+        // Semaphore로 다운로드 제어
+        await this.downloadSemaphore.run(async () => {
+          await this.performDownload(task, onProgress);
+        });
         
         // Verify checksum
         if (task.checksum) {
@@ -156,9 +155,8 @@ export class DownloadManager {
         console.error(`[Download] Attempt ${attempt + 1}/${maxRetries} failed for ${task.url}:`, error);
         
         if (attempt < maxRetries - 1) {
-          // Wait before retry (exponential backoff)
-          const waitTime = Math.min(1000 * Math.pow(2, attempt), 5000);
-          console.log(`[Download] Retrying in ${waitTime}ms...`);
+          // Modrinth 방식: 즉시 재시도 (서버 에러만 재시도)
+          const waitTime = 100; // 100ms 짧은 대기
           await new Promise(resolve => setTimeout(resolve, waitTime));
         }
       }
@@ -173,16 +171,20 @@ export class DownloadManager {
   
   /**
    * Perform the actual download
+   * Keep-Alive 연결 재사용으로 성능 향상
    */
   private async performDownload(
     task: DownloadTask,
     onProgress?: ProgressCallback
   ): Promise<void> {
-    // Download file
     let lastUpdate = Date.now();
     let lastLoaded = 0;
 
-    const response = await axios({
+    // Ensure directory exists
+    await fs.mkdir(path.dirname(task.destination), { recursive: true });
+
+    // HTTP Keep-Alive 클라이언트 사용
+    const response = await this.httpClient({
       method: 'GET',
       url: task.url,
       responseType: 'stream',
@@ -194,7 +196,6 @@ export class DownloadManager {
         const loadedDiff = loaded - lastLoaded;
 
         if (timeDiff >= 0.5) {
-          // Update every 0.5 seconds
           const speed = loadedDiff / timeDiff;
           const progress = total > 0 ? (loaded / total) * 100 : 0;
 
@@ -216,15 +217,19 @@ export class DownloadManager {
       },
     });
 
-    // Write to file
-    const writer = await fs.open(task.destination, 'w');
-    const stream = response.data;
+    // Semaphore로 I/O 제어하여 파일 쓰기
+    await this.ioSemaphore.run(async () => {
+      const writer = await fs.open(task.destination, 'w');
+      const stream = response.data;
 
-    for await (const chunk of stream) {
-      await writer.write(chunk);
-    }
-
-    await writer.close();
+      try {
+        for await (const chunk of stream) {
+          await writer.write(chunk);
+        }
+      } finally {
+        await writer.close();
+      }
+    });
   }
 
   /**
@@ -285,5 +290,22 @@ export class DownloadManager {
   clearAll(): void {
     this.tasks.clear();
     this.activeTasks.clear();
+  }
+
+  /**
+   * Get download statistics
+   */
+  getStats(): {
+    activeDownloads: number;
+    waitingDownloads: number;
+    activeWrites: number;
+    waitingWrites: number;
+  } {
+    return {
+      activeDownloads: this.downloadSemaphore.availablePermits(),
+      waitingDownloads: this.downloadSemaphore.queueLength(),
+      activeWrites: this.ioSemaphore.availablePermits(),
+      waitingWrites: this.ioSemaphore.queueLength(),
+    };
   }
 }

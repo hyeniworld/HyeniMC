@@ -345,7 +345,7 @@ export class ModUpdater {
 
       // 새 버전 다운로드
       const { DownloadManager } = await import('./download-manager');
-      const downloadManager = new DownloadManager();
+      const downloadManager = new DownloadManager(10, 10); // 기본 동시성 설정
 
       // Get latest version details based on source
       let version;

@@ -205,7 +205,7 @@ export class DependencyResolver {
         }
 
         const { DownloadManager } = await import('./download-manager');
-        const downloadManager = new DownloadManager();
+        const downloadManager = new DownloadManager(10, 10); // 기본 동시성 설정
         const modsDir = `${gameDir}/mods`;
 
         // Ensure mods directory exists

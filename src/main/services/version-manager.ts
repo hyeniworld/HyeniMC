@@ -93,8 +93,8 @@ export class VersionManager {
     // Use shared directories if provided, otherwise use instance-local
     this.librariesDir = librariesDir || path.join(instanceDir, 'libraries');
     this.assetsDir = assetsDir || path.join(instanceDir, 'assets');
-    // Increase concurrent downloads for better speed
-    this.downloadManager = new DownloadManager(20);
+    // Modrinth 방식: 다운로드 20개, 파일 쓰기 10개 동시 처리
+    this.downloadManager = new DownloadManager(20, 10);
   }
 
   /**
