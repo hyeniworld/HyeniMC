@@ -67,3 +67,4 @@ backend/bin/
 src/main/gen/
 
 .wrangler
+.dev.vars

@@ -368,7 +368,7 @@ async function downloadFile(request, env, corsHeaders) {
   }
   
   // Validate token
-  if (!isValidToken(token)) {
+  if (!(await isValidToken(token, env))) {
     return new Response(JSON.stringify({ 
       error: 'Unauthorized',
       message: '유효하지 않은 토큰입니다.' 
@@ -410,17 +410,49 @@ async function downloadFile(request, env, corsHeaders) {
 
 /**
  * Validate token
- * TODO: Enhance with actual verification (Discord API, DB, etc.)
+ * @param {string} token - Token to validate
+ * @param {object} env - Environment variables
  */
-function isValidToken(token) {
+async function isValidToken(token, env) {
   // Basic validation
   if (!token || token.length < 10) {
     return false;
   }
-  
-  // Accept alphanumeric tokens
-  const tokenPattern = /^[a-zA-Z0-9_-]+$/;
-  return tokenPattern.test(token);
+
+  // Check if TOKEN_CHECK_API_URL is configured
+  if (!env.TOKEN_CHECK_API_URL) {
+    console.error('TOKEN_CHECK_API_URL environment variable not configured');
+    return false;
+  }
+
+  try {
+    const resp = await fetch(env.TOKEN_CHECK_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ token: token }),
+    });
+
+    if (!resp.ok) {
+      console.error(`Token check API error - status: ${resp.status}`);
+      return false;
+    }
+
+    const apiResponse = await resp.json();
+
+    // Check whitelist status
+    if (!apiResponse.result) {
+      console.log(`Token check denied - token: ${token.substring(0, 8)}..., message: ${apiResponse.reason}`);
+      return false;
+    }
+
+    console.log(`Token check success - token: ${token.substring(0, 8)}...`);
+    return true;
+  } catch (error) {
+    console.error(`Token check failed - error: ${error.message}`);
+    return false;
+  }
 }
 
 /**
