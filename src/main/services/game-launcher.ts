@@ -69,6 +69,13 @@ export class GameLauncher {
       throw new Error(`프로필 ${options.versionId}이(가) 이미 실행 중입니다!`);
     }
 
+    // Auto-fix invalid memory settings from profile
+    if (options.minMemory && options.maxMemory && options.minMemory > options.maxMemory) {
+      console.warn(`[Game Launcher] Invalid memory settings detected: min(${options.minMemory}MB) > max(${options.maxMemory}MB). Auto-correcting...`);
+      options.maxMemory = options.minMemory;
+      console.log(`[Game Launcher] Corrected memory settings: min=${options.minMemory}MB, max=${options.maxMemory}MB`);
+    }
+
     console.log(`[Game Launcher] Launching Minecraft ${options.versionId}`);
 
     // Build JVM arguments

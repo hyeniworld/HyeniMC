@@ -50,7 +50,7 @@ func (s *Service) Get() (*GlobalSettings, error) {
 		all = defaults
 	}
 
-	return &GlobalSettings{
+	settings := &GlobalSettings{
 		JavaPath:    all[KeyJavaPath],
 		MemoryMin:   parseInt32(all[KeyMemoryMin], DefaultMemoryMin),
 		MemoryMax:   parseInt32(all[KeyMemoryMax], DefaultMemoryMax),
@@ -66,7 +66,16 @@ func (s *Service) Get() (*GlobalSettings, error) {
 		CacheEnabled:   parseBool(all[KeyCacheEnabled], DefaultCacheEnabled),
 		CacheMaxSizeGB: parseInt32(all[KeyCacheMaxSizeGB], DefaultCacheMaxSizeGB),
 		CacheTTLDays:   parseInt32(all[KeyCacheTTLDays], DefaultCacheTTLDays),
-	}, nil
+	}
+	
+	// Auto-fix invalid memory settings from old data
+	if settings.MemoryMin > settings.MemoryMax {
+		settings.MemoryMax = settings.MemoryMin
+		// Save the corrected values
+		s.repo.Set(KeyMemoryMax, fmt.Sprintf("%d", settings.MemoryMax))
+	}
+	
+	return settings, nil
 }
 
 // Update updates global settings

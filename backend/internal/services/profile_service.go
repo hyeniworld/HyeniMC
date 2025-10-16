@@ -93,12 +93,44 @@ func (s *ProfileService) CreateProfile(ctx context.Context, req *domain.CreatePr
 
 // GetProfile retrieves a profile by ID
 func (s *ProfileService) GetProfile(ctx context.Context, id string) (*domain.Profile, error) {
-	return s.repo.Get(id)
+	profile, err := s.repo.Get(id)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Auto-fix invalid memory settings from old data
+	if profile.Memory.Min > 0 && profile.Memory.Max > 0 && profile.Memory.Min > profile.Memory.Max {
+		profile.Memory.Max = profile.Memory.Min
+		// Save the corrected values
+		if updateErr := s.repo.Update(profile); updateErr != nil {
+			// Log but don't fail - return the corrected profile anyway
+			fmt.Printf("Warning: Failed to save corrected memory settings for profile %s: %v\n", id, updateErr)
+		}
+	}
+	
+	return profile, nil
 }
 
 // ListProfiles retrieves all profiles
 func (s *ProfileService) ListProfiles(ctx context.Context) ([]*domain.Profile, error) {
-	return s.repo.List()
+	profiles, err := s.repo.List()
+	if err != nil {
+		return nil, err
+	}
+	
+	// Auto-fix invalid memory settings from old data for all profiles
+	for _, profile := range profiles {
+		if profile.Memory.Min > 0 && profile.Memory.Max > 0 && profile.Memory.Min > profile.Memory.Max {
+			profile.Memory.Max = profile.Memory.Min
+			// Save the corrected values
+			if updateErr := s.repo.Update(profile); updateErr != nil {
+				// Log but don't fail - return the corrected profile anyway
+				fmt.Printf("Warning: Failed to save corrected memory settings for profile %s: %v\n", profile.ID, updateErr)
+			}
+		}
+	}
+	
+	return profiles, nil
 }
 
 // UpdateProfile updates an existing profile
