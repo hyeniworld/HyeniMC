@@ -51,13 +51,21 @@ for MOD_ID in "$@"; do
     fi
     
     # Parse JSON (simple parsing)
-    VERSION=$(echo "$RESPONSE" | grep -oP '"version"\s*:\s*"\K[^"]+')
-    GAME_VERSIONS=$(echo "$RESPONSE" | grep -oP '"gameVersions"\s*:\s*\[\s*"\K[^"]+')
+    VERSION=$(echo "$RESPONSE" | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+    GAME_VERSIONS=$(echo "$RESPONSE" | sed -n 's/.*"gameVersions"[[:space:]]*:[[:space:]]*\[[[:space:]]*"\([^"]*\)".*/\1/p')
+    REQUIRED=$(echo "$RESPONSE" | sed -n 's/.*"required"[[:space:]]*:[[:space:]]*\([^,}]*\).*/\1/p' | tr -d ' ')
+    
+    # Parse loaders (extract keys from loaders object)
+    LOADERS=$(echo "$RESPONSE" | grep -o '"loaders"[[:space:]]*:[[:space:]]*{[^}]*}' | grep -o '"[^"]*"[[:space:]]*:[[:space:]]*{' | grep -o '"[^"]*"' | head -1 | tr -d '"')
     
     if [ -z "$VERSION" ]; then
         echo -e "${RED}   ❌ 실패: 버전 정보를 찾을 수 없습니다.${NC}"
         continue
     fi
+    
+    # Set defaults if not found
+    [ -z "$REQUIRED" ] && REQUIRED="false"
+    [ -z "$LOADERS" ] && LOADERS="fabric"
     
     # Capitalize first letter of mod name
     MOD_NAME=$(echo "$MOD_ID" | sed 's/^\(.\)/\U\1/')
@@ -74,7 +82,10 @@ for MOD_ID in "$@"; do
       "name": "$MOD_NAME",
       "description": "HyeniMC $MOD_ID mod",
       "latestVersion": "$VERSION",
-      "gameVersions": ["$GAME_VERSIONS"]
+      "gameVersions": ["$GAME_VERSIONS"],
+      "loaders": ["$LOADERS"],
+      "required": $REQUIRED,
+      "category": "gameplay"
     }
 EOF
 )
@@ -112,7 +123,7 @@ echo -e "${GREEN}   ✅ 생성 완료${NC}"
 # Upload to R2
 echo -e "${CYAN}📤 R2에 업로드 중...${NC}"
 
-if ! wrangler r2 object put "hyenimc-releases/registry.json" --remote --file "$REGISTRY_PATH" 2>&1 > /dev/null; then
+if ! wrangler r2 object put "hyenimc-releases/mods/registry.json" --remote --file "$REGISTRY_PATH" 2>&1 > /dev/null; then
     echo -e "${RED}   ❌ 업로드 실패${NC}"
     exit 1
 fi

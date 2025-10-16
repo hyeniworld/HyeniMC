@@ -80,7 +80,7 @@ if ! CURRENT_LATEST=$(curl -s "$API_URL" 2>&1); then
     exit 1
 fi
 
-CURRENT_VERSION=$(echo "$CURRENT_LATEST" | grep -oP '"version"\s*:\s*"\K[^"]+')
+CURRENT_VERSION=$(echo "$CURRENT_LATEST" | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
 echo -e "${GREEN}   ✅ 현재 버전: $CURRENT_VERSION${NC}"
 echo ""
 
@@ -93,7 +93,7 @@ if ! VERSIONS_RESPONSE=$(curl -s "$VERSIONS_URL" 2>&1); then
     exit 1
 fi
 
-VERSIONS=$(echo "$VERSIONS_RESPONSE" | grep -oP '"version"\s*:\s*"\K[^"]+' | sort -rV)
+VERSIONS=$(echo "$VERSIONS_RESPONSE" | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | sort -rV)
 
 if [ -z "$VERSIONS" ]; then
     echo -e "${RED}   ❌ 사용 가능한 버전이 없습니다.${NC}"

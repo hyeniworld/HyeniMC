@@ -18,14 +18,17 @@ if [ ! -f "$WRANGLER_TOML" ]; then
     exit 1
 fi
 
-# Try to extract WORKER_URL from [vars] section
+# Try to extract WORKER_URL from comment
+# Format: # WORKER_URL = "https://..."
 WORKER_URL=$(awk '
-    /^\[vars\]/ { in_vars=1; next }
-    /^\[/ { in_vars=0 }
-    in_vars && /^WORKER_URL/ {
-        match($0, /"([^"]+)"/, arr)
-        print arr[1]
-        exit
+    /^#[[:space:]]*WORKER_URL[[:space:]]*=/ {
+        if (match($0, /"([^"]+)"/)) {
+            start = index($0, "\"") + 1
+            rest = substr($0, start)
+            end = index(rest, "\"") - 1
+            print substr(rest, 1, end)
+            exit
+        }
     }
 ' "$WRANGLER_TOML")
 
@@ -52,7 +55,7 @@ ACCOUNT_NAME="${CLOUDFLARE_ACCOUNT_NAME}"
 if [ -z "$ACCOUNT_NAME" ]; then
     # Try wrangler whoami
     if command -v wrangler &> /dev/null; then
-        ACCOUNT_NAME=$(wrangler whoami 2>&1 | grep -oP 'Account Name:\s*\K.+' | xargs)
+        ACCOUNT_NAME=$(wrangler whoami 2>&1 | sed -n 's/.*Account Name:[[:space:]]*\(.*\)/\1/p' | xargs)
     fi
 fi
 

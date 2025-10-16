@@ -70,7 +70,7 @@ echo -e "${CYAN}🔍 현재 버전 확인 중...${NC}"
 API_URL="$WORKER_URL/api/mods/$MOD_ID/latest"
 
 if CURRENT_LATEST=$(curl -s "$API_URL" 2>&1); then
-    CURRENT_VERSION=$(echo "$CURRENT_LATEST" | grep -oP '"version"\s*:\s*"\K[^"]+' || echo "")
+    CURRENT_VERSION=$(echo "$CURRENT_LATEST" | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
     if [ -n "$CURRENT_VERSION" ]; then
         echo -e "${GREEN}   ✅ 현재 버전: $CURRENT_VERSION${NC}"
     else
@@ -93,7 +93,7 @@ if ! VERSIONS_RESPONSE=$(curl -s "$VERSIONS_URL" 2>&1); then
 fi
 
 # Parse versions (simple JSON parsing)
-VERSIONS=$(echo "$VERSIONS_RESPONSE" | grep -oP '"version"\s*:\s*"\K[^"]+' | sort -rV)
+VERSIONS=$(echo "$VERSIONS_RESPONSE" | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | sort -rV)
 
 if [ -z "$VERSIONS" ]; then
     echo -e "${YELLOW}   ⚠️  배포된 버전이 없습니다.${NC}"
