@@ -11,6 +11,10 @@ import { setupProtocolHandler, handleProtocolUrl } from './protocol/handler';
 import { initAutoUpdater, checkForUpdates } from './auto-updater';
 import { detectJavaInstallations } from './services/java-detector';
 import { ENV_CONFIG } from './config/env-config';
+import { initializeLogger } from './utils/logger';
+
+// Initialize logger as early as possible to capture all logs
+initializeLogger();
 
 const isDevelopment = process.env.NODE_ENV === 'development' || !app.isPackaged;
 

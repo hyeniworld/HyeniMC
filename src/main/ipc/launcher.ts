@@ -2,8 +2,9 @@
  * IPC handlers for launcher updates
  */
 
-import { ipcMain } from 'electron';
+import { ipcMain, shell } from 'electron';
 import { checkForUpdates, downloadUpdate, quitAndInstall, getCurrentVersion } from '../auto-updater';
+import { getLogPath } from '../utils/logger';
 
 export function registerLauncherHandlers(): void {
   // Check for updates
@@ -45,6 +46,30 @@ export function registerLauncherHandlers(): void {
       return { success: true, version: getCurrentVersion() };
     } catch (error) {
       console.error('[IPC:Launcher] Get version failed:', error);
+      throw error;
+    }
+  });
+
+  // Get log file path
+  ipcMain.handle('launcher:get-log-path', () => {
+    try {
+      const logPath = getLogPath();
+      return { success: true, path: logPath };
+    } catch (error) {
+      console.error('[IPC:Launcher] Get log path failed:', error);
+      throw error;
+    }
+  });
+
+  // Open log file in explorer/finder
+  ipcMain.handle('launcher:open-log-folder', async () => {
+    try {
+      const logPath = getLogPath();
+      const logDir = require('path').dirname(logPath);
+      await shell.openPath(logDir);
+      return { success: true };
+    } catch (error) {
+      console.error('[IPC:Launcher] Open log folder failed:', error);
       throw error;
     }
   });

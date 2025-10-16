@@ -132,12 +132,12 @@ export class GameLauncher {
       console.log(`[Game Launcher] Play time tracker started for profile ${options.profileId}`);
     }
 
-    // Handle stdout
+    // Handle stdout (only send to UI, don't log to file)
     childProcess.stdout?.on('data', (data) => {
       const lines = data.toString().split('\n');
       lines.forEach((line: string) => {
         if (line.trim()) {
-          console.log(`[Game Output] ${line}`);
+          // Only send to UI callback, don't write to log file
           if (onLog) {
             onLog(line);
           }
@@ -145,12 +145,12 @@ export class GameLauncher {
       });
     });
 
-    // Handle stderr
+    // Handle stderr (only send to UI, don't log to file)
     childProcess.stderr?.on('data', (data) => {
       const lines = data.toString().split('\n');
       lines.forEach((line: string) => {
         if (line.trim()) {
-          console.error(`[Game Error] ${line}`);
+          // Only send to UI callback, don't write to log file
           if (onLog) {
             onLog(`[ERROR] ${line}`);
           }
