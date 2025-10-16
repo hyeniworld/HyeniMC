@@ -44,13 +44,13 @@ func (s *profileServiceServer) GetProfile(ctx context.Context, req *pb.GetProfil
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Get stats and update total play time
 	pbProfile := toPbProfile(p)
 	if stats, err := s.statsRepo.Get(p.ID); err == nil && stats != nil {
 		pbProfile.TotalPlayTime = stats.TotalPlayTime
 	}
-	
+
 	return pbProfile, nil
 }
 
@@ -62,12 +62,12 @@ func (s *profileServiceServer) ListProfiles(ctx context.Context, _ *pb.ListProfi
 	res := &pb.ListProfilesResponse{Profiles: make([]*pb.Profile, 0, len(list))}
 	for _, p := range list {
 		pbProfile := toPbProfile(p)
-		
+
 		// Get stats and update total play time
 		if stats, err := s.statsRepo.Get(p.ID); err == nil && stats != nil {
 			pbProfile.TotalPlayTime = stats.TotalPlayTime
 		}
-		
+
 		res.Profiles = append(res.Profiles, pbProfile)
 	}
 	return res, nil
@@ -97,14 +97,16 @@ func (s *profileServiceServer) UpdateProfile(ctx context.Context, req *pb.Update
 		if patch.GameDirectory != "" {
 			updates["gameDirectory"] = patch.GameDirectory
 		}
-		if len(patch.JvmArgs) > 0 {
+		// Always update jvmArgs if provided (including empty array to clear)
+		if patch.JvmArgs != nil {
 			arr := make([]interface{}, 0, len(patch.JvmArgs))
 			for _, v := range patch.JvmArgs {
 				arr = append(arr, v)
 			}
 			updates["jvmArgs"] = arr
 		}
-		if len(patch.GameArgs) > 0 {
+		// Always update gameArgs if provided (including empty array to clear)
+		if patch.GameArgs != nil {
 			arr := make([]interface{}, 0, len(patch.GameArgs))
 			for _, v := range patch.GameArgs {
 				arr = append(arr, v)
