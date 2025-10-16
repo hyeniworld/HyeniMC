@@ -301,6 +301,30 @@ var migrations = []Migration{
 			CREATE INDEX IF NOT EXISTS idx_profiles_server_address ON profiles(server_address);
 		`,
 	},
+	{
+		Version: 16,
+		Name:    "create_accounts",
+		SQL: `
+			CREATE TABLE IF NOT EXISTS accounts (
+				id TEXT PRIMARY KEY,
+				name TEXT NOT NULL,
+				uuid TEXT NOT NULL,
+				type TEXT NOT NULL CHECK(type IN ('microsoft', 'offline')),
+				encrypted_data TEXT,
+				iv TEXT,
+				auth_tag TEXT,
+				skin_url TEXT,
+				last_used INTEGER NOT NULL,
+				device_id TEXT NOT NULL,
+				created_at INTEGER NOT NULL,
+				updated_at INTEGER NOT NULL
+			);
+			
+			CREATE INDEX IF NOT EXISTS idx_accounts_last_used ON accounts(last_used DESC);
+			CREATE INDEX IF NOT EXISTS idx_accounts_type ON accounts(type);
+			CREATE INDEX IF NOT EXISTS idx_accounts_device_id ON accounts(device_id);
+		`,
+	},
 }
 
 func runMigrations(db *sql.DB) error {

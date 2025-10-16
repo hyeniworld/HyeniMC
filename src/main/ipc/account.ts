@@ -52,7 +52,7 @@ export function registerAccountHandlers() {
       }
       
       const accountId = await accountManager.addOfflineAccount(username.trim());
-      const account = accountManager.getAccount(accountId);
+      const account = await accountManager.getAccount(accountId);
       
       return {
         id: account!.id,
@@ -69,7 +69,7 @@ export function registerAccountHandlers() {
   // Get all accounts
   ipcMain.handle(IPC_CHANNELS.ACCOUNT_LIST, async () => {
     try {
-      const accounts = accountManager.getAllAccounts();
+      const accounts = await accountManager.getAllAccounts();
       return accounts;
     } catch (error: any) {
       console.error('[IPC Account] Failed to list accounts:', error);
@@ -92,7 +92,7 @@ export function registerAccountHandlers() {
   // Get account for game launch
   ipcMain.handle(IPC_CHANNELS.ACCOUNT_GET_FOR_LAUNCH, async (event, accountId: string) => {
     try {
-      const account = accountManager.getAccount(accountId);
+      const account = await accountManager.getAccount(accountId);
       if (!account) {
         throw new Error('Account not found');
       }

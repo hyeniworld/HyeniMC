@@ -1,0 +1,107 @@
+syntax = "proto3";
+
+package launcher;
+
+option go_package = "hyenimc/backend/proto/launcher";
+
+// AccountService handles Minecraft account management
+service AccountService {
+  // Save a Microsoft account
+  rpc SaveMicrosoftAccount(SaveMicrosoftAccountRequest) returns (SaveAccountResponse);
+  
+  // Add an offline account
+  rpc AddOfflineAccount(AddOfflineAccountRequest) returns (SaveAccountResponse);
+  
+  // Get an account by ID
+  rpc GetAccount(GetAccountRequest) returns (AccountResponse);
+  
+  // Get all accounts
+  rpc GetAllAccounts(GetAllAccountsRequest) returns (GetAllAccountsResponse);
+  
+  // Get decrypted tokens for a Microsoft account
+  rpc GetAccountTokens(GetAccountTokensRequest) returns (AccountTokensResponse);
+  
+  // Update account tokens
+  rpc UpdateAccountTokens(UpdateAccountTokensRequest) returns (UpdateAccountTokensResponse);
+  
+  // Update last used timestamp
+  rpc UpdateLastUsed(UpdateLastUsedRequest) returns (UpdateLastUsedResponse);
+  
+  // Remove an account
+  rpc RemoveAccount(RemoveAccountRequest) returns (RemoveAccountResponse);
+}
+
+message SaveMicrosoftAccountRequest {
+  string name = 1;
+  string uuid = 2;
+  string access_token = 3;
+  string refresh_token = 4;
+  int64 expires_at = 5;
+  string skin_url = 6;
+}
+
+message AddOfflineAccountRequest {
+  string username = 1;
+}
+
+message SaveAccountResponse {
+  string account_id = 1;
+}
+
+message GetAccountRequest {
+  string account_id = 1;
+}
+
+message AccountResponse {
+  string id = 1;
+  string name = 2;
+  string uuid = 3;
+  string type = 4;
+  string skin_url = 5;
+  int64 last_used = 6;
+  int64 created_at = 7;
+  int64 updated_at = 8;
+}
+
+message GetAllAccountsRequest {}
+
+message GetAllAccountsResponse {
+  repeated AccountResponse accounts = 1;
+}
+
+message GetAccountTokensRequest {
+  string account_id = 1;
+}
+
+message AccountTokensResponse {
+  string access_token = 1;
+  string refresh_token = 2;
+  int64 expires_at = 3;
+}
+
+message UpdateAccountTokensRequest {
+  string account_id = 1;
+  string access_token = 2;
+  string refresh_token = 3;
+  int64 expires_at = 4;
+}
+
+message UpdateAccountTokensResponse {
+  bool success = 1;
+}
+
+message UpdateLastUsedRequest {
+  string account_id = 1;
+}
+
+message UpdateLastUsedResponse {
+  bool success = 1;
+}
+
+message RemoveAccountRequest {
+  string account_id = 1;
+}
+
+message RemoveAccountResponse {
+  bool success = 1;
+}

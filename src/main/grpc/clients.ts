@@ -106,6 +106,24 @@ import {
   type ClearExpiredCacheRequest,
   type ClearExpiredCacheResponse,
 } from '../gen/launcher/cache';
+import {
+  AccountServiceClient,
+  type SaveMicrosoftAccountRequest,
+  type SaveAccountResponse,
+  type AddOfflineAccountRequest,
+  type GetAccountRequest,
+  type AccountResponse,
+  type GetAllAccountsRequest,
+  type GetAllAccountsResponse,
+  type GetAccountTokensRequest,
+  type AccountTokensResponse,
+  type UpdateAccountTokensRequest,
+  type UpdateAccountTokensResponse,
+  type UpdateLastUsedRequest,
+  type UpdateLastUsedResponse,
+  type RemoveAccountRequest,
+  type RemoveAccountResponse,
+} from '../gen/launcher/account';
 
 let profileClient: ProfileServiceClient | null = null;
 let downloadClient: DownloadServiceClient | null = null;
@@ -118,6 +136,7 @@ let assetClient: AssetServiceClient | null = null;
 let settingsClient: SettingsServiceClient | null = null;
 let modClient: ModServiceClient | null = null;
 let cacheClient: CacheServiceClient | null = null;
+let accountClient: AccountServiceClient | null = null;
 
 function ensureAddr(): string {
   const addr = getBackendAddress();
@@ -463,5 +482,49 @@ export const cacheRpc = {
   clearExpiredCache: (req: ClearExpiredCacheRequest) =>
     promisify<ClearExpiredCacheRequest, ClearExpiredCacheResponse>(
       ensureCacheClient().clearExpiredCache.bind(ensureCacheClient())
+    )(req),
+};
+
+function ensureAccountClient(): AccountServiceClient {
+  const addr = ensureAddr();
+  if (!accountClient || lastAddr !== addr) {
+    accountClient = new AccountServiceClient(addr, credentials.createInsecure());
+    lastAddr = addr;
+  }
+  return accountClient;
+}
+
+export const accountRpc = {
+  saveMicrosoftAccount: (req: SaveMicrosoftAccountRequest) =>
+    promisify<SaveMicrosoftAccountRequest, SaveAccountResponse>(
+      ensureAccountClient().saveMicrosoftAccount.bind(ensureAccountClient())
+    )(req),
+  addOfflineAccount: (req: AddOfflineAccountRequest) =>
+    promisify<AddOfflineAccountRequest, SaveAccountResponse>(
+      ensureAccountClient().addOfflineAccount.bind(ensureAccountClient())
+    )(req),
+  getAccount: (req: GetAccountRequest) =>
+    promisify<GetAccountRequest, AccountResponse>(
+      ensureAccountClient().getAccount.bind(ensureAccountClient())
+    )(req),
+  getAllAccounts: (req: GetAllAccountsRequest) =>
+    promisify<GetAllAccountsRequest, GetAllAccountsResponse>(
+      ensureAccountClient().getAllAccounts.bind(ensureAccountClient())
+    )(req),
+  getAccountTokens: (req: GetAccountTokensRequest) =>
+    promisify<GetAccountTokensRequest, AccountTokensResponse>(
+      ensureAccountClient().getAccountTokens.bind(ensureAccountClient())
+    )(req),
+  updateAccountTokens: (req: UpdateAccountTokensRequest) =>
+    promisify<UpdateAccountTokensRequest, UpdateAccountTokensResponse>(
+      ensureAccountClient().updateAccountTokens.bind(ensureAccountClient())
+    )(req),
+  updateLastUsed: (req: UpdateLastUsedRequest) =>
+    promisify<UpdateLastUsedRequest, UpdateLastUsedResponse>(
+      ensureAccountClient().updateLastUsed.bind(ensureAccountClient())
+    )(req),
+  removeAccount: (req: RemoveAccountRequest) =>
+    promisify<RemoveAccountRequest, RemoveAccountResponse>(
+      ensureAccountClient().removeAccount.bind(ensureAccountClient())
     )(req),
 };

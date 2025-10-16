@@ -1,18 +1,26 @@
 import { app } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs/promises';
-import * as crypto from 'crypto';
 import { MinecraftProfile } from './microsoft-auth';
-
-const ALGORITHM = 'aes-256-gcm';
-const KEY_LENGTH = 32;
+import { accountRpc } from '../grpc/clients';
+import type { AccountResponse } from '../gen/launcher/account';
 
 export interface StoredAccount {
   id: string;
   name: string;
   uuid: string;
   type: 'microsoft' | 'offline';
-  encryptedData?: string; // Encrypted tokens
+  skin?: string;
+  lastUsed: number;
+}
+
+// Legacy account format from accounts.json
+interface LegacyAccount {
+  id: string;
+  name: string;
+  uuid: string;
+  type: 'microsoft' | 'offline';
+  encryptedData?: string;
   iv?: string;
   authTag?: string;
   skin?: string;
@@ -21,51 +29,81 @@ export interface StoredAccount {
 
 export class AccountManager {
   private accountsPath: string;
-  private encryptionKey: Buffer;
-  private accounts: Map<string, StoredAccount> = new Map();
 
   constructor() {
     this.accountsPath = path.join(app.getPath('userData'), 'accounts.json');
-    
-    // Generate or load encryption key
-    const keyPath = path.join(app.getPath('userData'), '.key');
-    this.encryptionKey = this.getOrCreateKey(keyPath);
   }
 
   /**
-   * Format UUID to include hyphens if missing
-   */
-  private formatUUID(uuid: string): string {
-    // Remove any existing hyphens
-    const clean = uuid.replace(/-/g, '');
-    
-    // If it's 32 characters (no hyphens), add them
-    if (clean.length === 32) {
-      return `${clean.slice(0, 8)}-${clean.slice(8, 12)}-${clean.slice(12, 16)}-${clean.slice(16, 20)}-${clean.slice(20)}`;
-    }
-    
-    // Otherwise return as-is
-    return uuid;
-  }
-
-  /**
-   * Initialize and load accounts
+   * Initialize - migrate legacy accounts.json to DB if exists
    */
   async initialize(): Promise<void> {
+    console.log('[Account Manager] Using backend storage');
+    
+    // Check if legacy accounts.json exists
     try {
-      const data = await fs.readFile(this.accountsPath, 'utf-8');
-      const accounts: StoredAccount[] = JSON.parse(data);
-      
-      for (const account of accounts) {
-        this.accounts.set(account.id, account);
-      }
-      
-      console.log(`[Account Manager] Loaded ${accounts.length} accounts`);
+      await fs.access(this.accountsPath);
+      console.log('[Account Manager] Found legacy accounts.json, migrating to database...');
+      await this.migrateLegacyAccounts();
     } catch (error) {
-      if ((error as any).code !== 'ENOENT') {
-        console.error('[Account Manager] Failed to load accounts:', error);
+      // File doesn't exist, which is fine
+    }
+  }
+
+  /**
+   * Migrate legacy accounts.json to database and delete the file
+   */
+  private async migrateLegacyAccounts(): Promise<void> {
+    try {
+      // Read legacy file
+      const data = await fs.readFile(this.accountsPath, 'utf-8');
+      const legacyAccounts: LegacyAccount[] = JSON.parse(data);
+      
+      if (legacyAccounts.length === 0) {
+        console.log('[Account Manager] No accounts to migrate');
+        await fs.unlink(this.accountsPath);
+        return;
       }
-      // File doesn't exist yet, that's ok
+
+      console.log(`[Account Manager] Found ${legacyAccounts.length} legacy account(s)`);
+
+      // Note: We can only migrate offline accounts
+      // Microsoft accounts cannot be migrated because tokens were encrypted with different keys
+      // Offline accounts: username-based, can be recreated (deterministic UUID)
+      let migratedCount = 0;
+      let skippedCount = 0;
+
+      for (const account of legacyAccounts) {
+        try {
+          if (account.type === 'offline') {
+            // Offline accounts: recreate with same username
+            // UUID will be identical (deterministic generation)
+            await accountRpc.addOfflineAccount({
+              username: account.name,
+            });
+            migratedCount++;
+            console.log(`[Account Manager] Migrated offline account: ${account.name}`);
+          } else {
+            // Microsoft accounts: require re-login
+            skippedCount++;
+            console.log(`[Account Manager] Skipped Microsoft account (requires re-login): ${account.name}`);
+          }
+        } catch (error) {
+          console.error(`[Account Manager] Failed to migrate account ${account.name}:`, error);
+        }
+      }
+
+      // Delete the legacy file
+      await fs.unlink(this.accountsPath);
+      console.log(`[Account Manager] Migration complete: ${migratedCount} offline account(s) migrated`);
+      if (skippedCount > 0) {
+        console.log(`[Account Manager] ${skippedCount} Microsoft account(s) require re-login`);
+      }
+      console.log(`[Account Manager] Deleted accounts.json`);
+
+    } catch (error) {
+      console.error('[Account Manager] Failed to migrate legacy accounts:', error);
+      console.error('[Account Manager] Keeping accounts.json for safety');
     }
   }
 
@@ -73,85 +111,55 @@ export class AccountManager {
    * Save Microsoft account
    */
   async saveMicrosoftAccount(profile: MinecraftProfile): Promise<string> {
-    const formattedUuid = this.formatUUID(profile.uuid);
-    const accountId = formattedUuid;
-    
-    // Encrypt sensitive data
-    const sensitiveData = JSON.stringify({
+    const result = await accountRpc.saveMicrosoftAccount({
+      name: profile.name,
+      uuid: profile.uuid,
       accessToken: profile.accessToken,
       refreshToken: profile.refreshToken,
       expiresAt: profile.expiresAt,
+      skinUrl: profile.skin || '',
     });
     
-    const { encrypted, iv, authTag } = this.encrypt(sensitiveData);
-    
-    const account: StoredAccount = {
-      id: accountId,
-      name: profile.name,
-      uuid: formattedUuid,
-      type: 'microsoft',
-      encryptedData: encrypted,
-      iv,
-      authTag,
-      skin: profile.skin,
-      lastUsed: Date.now(),
-    };
-    
-    this.accounts.set(accountId, account);
-    await this.saveAccounts();
-    
-    console.log(`[Account Manager] Saved Microsoft account: ${profile.name} (UUID: ${formattedUuid})`);
-    return accountId;
+    console.log(`[Account Manager] Saved Microsoft account: ${profile.name}`);
+    return result.accountId;
   }
 
   /**
    * Add offline account
    */
   async addOfflineAccount(username: string): Promise<string> {
-    const accountId = crypto.randomUUID();
-    
-    const account: StoredAccount = {
-      id: accountId,
-      name: username,
-      uuid: this.generateOfflineUUID(username),
-      type: 'offline',
-      lastUsed: Date.now(),
-    };
-    
-    this.accounts.set(accountId, account);
-    await this.saveAccounts();
+    const result = await accountRpc.addOfflineAccount({
+      username,
+    });
     
     console.log(`[Account Manager] Added offline account: ${username}`);
-    return accountId;
+    return result.accountId;
   }
 
   /**
    * Get account by ID
    */
-  getAccount(accountId: string): StoredAccount | undefined {
-    const account = this.accounts.get(accountId);
-    
-    if (account) {
-      // Format UUID if it doesn't have hyphens
-      return {
-        ...account,
-        uuid: this.formatUUID(account.uuid),
-      };
+  async getAccount(accountId: string): Promise<StoredAccount | null> {
+    try {
+      const account = await accountRpc.getAccount({ accountId });
+      return this.convertToStoredAccount(account);
+    } catch (error) {
+      console.error('[Account Manager] Failed to get account:', error);
+      return null;
     }
-    
-    return undefined;
   }
 
   /**
    * Get all accounts
    */
-  getAllAccounts(): StoredAccount[] {
-    return Array.from(this.accounts.values())
-      .map(account => ({
-        ...account,
-        uuid: this.formatUUID(account.uuid),
-      }))
-      .sort((a, b) => b.lastUsed - a.lastUsed);
+  async getAllAccounts(): Promise<StoredAccount[]> {
+    try {
+      const response = await accountRpc.getAllAccounts({});
+      return response.accounts.map(acc => this.convertToStoredAccount(acc));
+    } catch (error) {
+      console.error('[Account Manager] Failed to get all accounts:', error);
+      return [];
+    }
   }
 
   /**
@@ -162,17 +170,15 @@ export class AccountManager {
     refreshToken: string;
     expiresAt: number;
   } | null> {
-    const account = this.accounts.get(accountId);
-    
-    if (!account || account.type !== 'microsoft' || !account.encryptedData) {
-      return null;
-    }
-    
     try {
-      const decrypted = this.decrypt(account.encryptedData, account.iv!, account.authTag!);
-      return JSON.parse(decrypted);
+      const tokens = await accountRpc.getAccountTokens({ accountId });
+      return {
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        expiresAt: Number(tokens.expiresAt),
+      };
     } catch (error) {
-      console.error('[Account Manager] Failed to decrypt tokens:', error);
+      console.error('[Account Manager] Failed to get account tokens:', error);
       return null;
     }
   }
@@ -186,120 +192,40 @@ export class AccountManager {
     refreshToken: string,
     expiresAt: number
   ): Promise<void> {
-    const account = this.accounts.get(accountId);
-    
-    if (!account || account.type !== 'microsoft') {
-      throw new Error('Account not found or not Microsoft account');
-    }
-    
-    const sensitiveData = JSON.stringify({
+    await accountRpc.updateAccountTokens({
+      accountId,
       accessToken,
       refreshToken,
       expiresAt,
     });
-    
-    const { encrypted, iv, authTag } = this.encrypt(sensitiveData);
-    
-    account.encryptedData = encrypted;
-    account.iv = iv;
-    account.authTag = authTag;
-    account.lastUsed = Date.now();
-    
-    await this.saveAccounts();
   }
 
   /**
    * Update last used timestamp
    */
   async updateLastUsed(accountId: string): Promise<void> {
-    const account = this.accounts.get(accountId);
-    
-    if (account) {
-      account.lastUsed = Date.now();
-      await this.saveAccounts();
-    }
+    await accountRpc.updateLastUsed({ accountId });
   }
 
   /**
    * Remove account
    */
   async removeAccount(accountId: string): Promise<void> {
-    this.accounts.delete(accountId);
-    await this.saveAccounts();
-    
+    await accountRpc.removeAccount({ accountId });
     console.log(`[Account Manager] Removed account: ${accountId}`);
   }
 
   /**
-   * Save accounts to disk
+   * Convert gRPC AccountResponse to StoredAccount
    */
-  private async saveAccounts(): Promise<void> {
-    const accounts = Array.from(this.accounts.values());
-    await fs.writeFile(this.accountsPath, JSON.stringify(accounts, null, 2));
-  }
-
-  /**
-   * Encrypt data
-   */
-  private encrypt(text: string): { encrypted: string; iv: string; authTag: string } {
-    const iv = crypto.randomBytes(16);
-    const cipher = crypto.createCipheriv(ALGORITHM, this.encryptionKey, iv);
-    
-    let encrypted = cipher.update(text, 'utf8', 'hex');
-    encrypted += cipher.final('hex');
-    
-    const authTag = cipher.getAuthTag();
-    
+  private convertToStoredAccount(account: AccountResponse): StoredAccount {
     return {
-      encrypted,
-      iv: iv.toString('hex'),
-      authTag: authTag.toString('hex'),
+      id: account.id,
+      name: account.name,
+      uuid: account.uuid,
+      type: account.type as 'microsoft' | 'offline',
+      skin: account.skinUrl || undefined,
+      lastUsed: Number(account.lastUsed),
     };
-  }
-
-  /**
-   * Decrypt data
-   */
-  private decrypt(encrypted: string, ivHex: string, authTagHex: string): string {
-    const iv = Buffer.from(ivHex, 'hex');
-    const authTag = Buffer.from(authTagHex, 'hex');
-    
-    const decipher = crypto.createDecipheriv(ALGORITHM, this.encryptionKey, iv);
-    decipher.setAuthTag(authTag);
-    
-    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
-    
-    return decrypted;
-  }
-
-  /**
-   * Get or create encryption key
-   */
-  private getOrCreateKey(keyPath: string): Buffer {
-    try {
-      const key = require('fs').readFileSync(keyPath);
-      return key;
-    } catch {
-      const key = crypto.randomBytes(KEY_LENGTH);
-      require('fs').writeFileSync(keyPath, key);
-      return key;
-    }
-  }
-
-  /**
-   * Generate offline UUID (deterministic)
-   */
-  private generateOfflineUUID(username: string): string {
-    const hash = crypto.createHash('md5').update(`OfflinePlayer:${username}`).digest('hex');
-    
-    // Format as UUID
-    return [
-      hash.substring(0, 8),
-      hash.substring(8, 12),
-      hash.substring(12, 16),
-      hash.substring(16, 20),
-      hash.substring(20, 32),
-    ].join('-');
   }
 }

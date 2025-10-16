@@ -378,7 +378,7 @@ export function registerProfileHandlers(): void {
         try {
           const { MicrosoftAuthService } = await import('../services/microsoft-auth');
           const accountManager = getAccountManager();
-          const account = accountManager.getAccount(accountIdToUse);
+          const account = await accountManager.getAccount(accountIdToUse);
           
           if (!account) {
             console.warn('[IPC Profile] Account not found, using default');

@@ -1,10 +1,15 @@
 package main
 
 import (
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
 
+	"hyenimc/backend/internal/account"
 	"hyenimc/backend/internal/db"
 	"hyenimc/backend/internal/grpc"
 	"hyenimc/backend/internal/profile"
@@ -48,9 +53,63 @@ func main() {
 	profileRepo := profile.NewRepository(db.Get())
 	profileService := services.NewProfileService(profileRepo, dataDir)
 
+	// Initialize account service
+	encryptionKey := getOrCreateEncryptionKey(dataDir)
+	deviceID := generateDeviceID(dataDir)
+	accountRepo := account.NewRepository(db.Get())
+	accountService := services.NewAccountService(accountRepo, encryptionKey, deviceID)
+
 	// Start gRPC server (prints chosen address to stdout internally)
 	addr := os.Getenv("HYENIMC_ADDR")
-	if err := grpc.StartGRPCServer(addr, db.Get(), dataDir, profileService, settingsService); err != nil {
+	if err := grpc.StartGRPCServer(addr, db.Get(), dataDir, profileService, settingsService, accountService); err != nil {
 		log.Fatalf("failed to start gRPC server: %v", err)
 	}
+}
+
+// getOrCreateEncryptionKey gets or creates the encryption key
+func getOrCreateEncryptionKey(dataDir string) []byte {
+	keyPath := filepath.Join(dataDir, ".key")
+	
+	// Try to read existing key
+	key, err := os.ReadFile(keyPath)
+	if err == nil && len(key) == 32 {
+		return key
+	}
+	
+	// Generate new key
+	key = make([]byte, 32)
+	if _, err := io.ReadFull(rand.Reader, key); err != nil {
+		log.Fatalf("failed to generate encryption key: %v", err)
+	}
+	
+	// Save with restrictive permissions
+	if err := os.WriteFile(keyPath, key, 0600); err != nil {
+		log.Fatalf("failed to save encryption key: %v", err)
+	}
+	
+	log.Println("[Main] Generated new encryption key")
+	return key
+}
+
+// generateDeviceID generates a unique device identifier
+func generateDeviceID(dataDir string) string {
+	deviceIDPath := filepath.Join(dataDir, ".device_id")
+	
+	// Try to read existing device ID
+	if data, err := os.ReadFile(deviceIDPath); err == nil {
+		return string(data)
+	}
+	
+	// Generate new device ID based on data directory path
+	// This ensures different device ID for different installations
+	hash := sha256.Sum256([]byte(dataDir))
+	deviceID := hex.EncodeToString(hash[:])
+	
+	// Save device ID
+	if err := os.WriteFile(deviceIDPath, []byte(deviceID), 0600); err != nil {
+		log.Printf("Warning: failed to save device ID: %v", err)
+	}
+	
+	log.Printf("[Main] Generated device ID: %s", deviceID[:16]+"...")
+	return deviceID
 }
