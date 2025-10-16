@@ -16,6 +16,27 @@ Microsoft 인증을 위한 Azure Client ID
 
 **예시**: `https://hyenimc-worker.YOUR_ACCOUNT.workers.dev`
 
+## 선택적 Secrets (macOS 자동 업데이트)
+
+macOS에서 자동 업데이트를 활성화하려면 다음 시크릿이 필요합니다:
+
+### 3. `APPLE_ID`
+Apple Developer 계정 이메일
+
+**예시**: `your-apple-id@example.com`
+
+### 4. `APPLE_APP_SPECIFIC_PASSWORD`
+Apple App-Specific Password (공증용)
+
+**설정 방법**: [MACOS_CODE_SIGNING.md](./MACOS_CODE_SIGNING.md) 참조
+
+### 5. `APPLE_TEAM_ID`
+Apple Developer Team ID
+
+**예시**: `ABC123XYZ4`
+
+**참고**: 이 시크릿들이 없으면 macOS 빌드는 성공하지만 자동 업데이트가 작동하지 않습니다.
+
 ## Secrets 설정 방법
 
 ### 1. GitHub Repository 설정 페이지 이동
@@ -43,9 +64,15 @@ Microsoft 인증을 위한 Azure Client ID
 
 다음 Secrets가 모두 등록되어 있는지 확인:
 
+**필수**:
 - ✅ `AZURE_CLIENT_ID`
 - ✅ `HYENIMC_WORKER_URL`
 - ✅ `GITHUB_TOKEN` (자동 생성됨)
+
+**선택적 (macOS 자동 업데이트)**:
+- ⚙️ `APPLE_ID`
+- ⚙️ `APPLE_APP_SPECIFIC_PASSWORD`
+- ⚙️ `APPLE_TEAM_ID`
 
 ## 빌드 워크플로우
 

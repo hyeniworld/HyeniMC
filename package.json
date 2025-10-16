@@ -160,6 +160,10 @@
       "artifactName": "${productName}-Setup-${version}-${arch}.${ext}",
       "category": "public.app-category.games",
       "icon": "build/icon.icns",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
       "x64ArchFiles": "*",
       "extraResources": [
         {
