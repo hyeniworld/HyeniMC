@@ -201,6 +201,12 @@ func (s *ProfileService) UpdateProfile(ctx context.Context, id string, updates m
 		}
 	}
 
+	// Validate memory settings: ensure min <= max (only if both are set)
+	if profile.Memory.Min > 0 && profile.Memory.Max > 0 && profile.Memory.Min > profile.Memory.Max {
+		// Auto-adjust: set max to min
+		profile.Memory.Max = profile.Memory.Min
+	}
+
 	profile.UpdatedAt = time.Now()
 
 	if err := s.repo.Update(profile); err != nil {

@@ -127,6 +127,38 @@ export const SettingsPage: React.FC = () => {
     });
   };
 
+  // Memory validation with debounce
+  useEffect(() => {
+    if (!settings.java) return;
+    
+    const memMin = Number(settings.java.memory_min ?? 1024);
+    const memMax = Number(settings.java.memory_max ?? 4096);
+    
+    if (memMin > memMax) {
+      const timer = setTimeout(() => {
+        setSettings(prev => {
+          const copy = JSON.parse(JSON.stringify(prev || {}));
+          if (!copy.java) copy.java = {};
+          copy.java.memory_max = memMin;
+          return copy;
+        });
+        toast.info('메모리 자동 조정', `최대 메모리가 ${memMin}MB로 자동 조정되었습니다.`);
+      }, 500);
+      return () => clearTimeout(timer);
+    } else if (memMax < memMin) {
+      const timer = setTimeout(() => {
+        setSettings(prev => {
+          const copy = JSON.parse(JSON.stringify(prev || {}));
+          if (!copy.java) copy.java = {};
+          copy.java.memory_min = memMax;
+          return copy;
+        });
+        toast.info('메모리 자동 조정', `최소 메모리가 ${memMax}MB로 자동 조정되었습니다.`);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [settings.java?.memory_min, settings.java?.memory_max, toast]);
+
   const isDirty = useMemo(() => JSON.stringify(settings ?? {}) !== JSON.stringify(original ?? {}), [settings, original]);
   const onCancel = () => navigate(-1);
   const onReset = () => setSettings(original);
@@ -303,7 +335,25 @@ export const SettingsPage: React.FC = () => {
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm text-gray-300">최소 메모리 (MB)</span>
-                  <input type="number" min="256" max={Math.floor(systemMemory * 0.9)} step="256" value={s.java?.memory_min ?? 1024} onChange={(e)=>update('java.memory_min', Number(e.target.value))} className="w-24 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-right" />
+                  <input 
+                    type="number" 
+                    min="256" 
+                    max={Math.floor(systemMemory * 0.9)} 
+                    step="256" 
+                    value={s.java?.memory_min ?? 1024} 
+                    onChange={(e)=> {
+                      const val = e.target.value;
+                      if (val === '' || isNaN(Number(val))) return;
+                      update('java.memory_min', Number(val));
+                    }}
+                    onBlur={(e) => {
+                      const val = Number(e.target.value);
+                      if (isNaN(val) || val < 256) {
+                        update('java.memory_min', 1024);
+                      }
+                    }}
+                    className="w-24 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-right" 
+                  />
                 </div>
                 <Slider min={256} max={Math.floor(systemMemory * 0.5)} step={256} value={Number(s.java?.memory_min || 1024)} onChange={(v)=>update('java.memory_min', v)} />
                 <div className="flex justify-between text-xs text-gray-500 mt-1">
@@ -314,7 +364,25 @@ export const SettingsPage: React.FC = () => {
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm text-gray-300">최대 메모리 (MB)</span>
-                  <input type="number" min="512" max={Math.floor(systemMemory * 0.9)} step="512" value={s.java?.memory_max ?? 4096} onChange={(e)=>update('java.memory_max', Number(e.target.value))} className="w-24 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-right" />
+                  <input 
+                    type="number" 
+                    min="512" 
+                    max={Math.floor(systemMemory * 0.9)} 
+                    step="512" 
+                    value={s.java?.memory_max ?? 4096} 
+                    onChange={(e)=> {
+                      const val = e.target.value;
+                      if (val === '' || isNaN(Number(val))) return;
+                      update('java.memory_max', Number(val));
+                    }}
+                    onBlur={(e) => {
+                      const val = Number(e.target.value);
+                      if (isNaN(val) || val < 512) {
+                        update('java.memory_max', 4096);
+                      }
+                    }}
+                    className="w-24 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-right" 
+                  />
                 </div>
                 <Slider min={512} max={Math.floor(systemMemory * 0.9)} step={512} value={Number(s.java?.memory_max || 4096)} onChange={(v)=>update('java.memory_max', v)} />
                 <div className="flex justify-between text-xs text-gray-500 mt-1">

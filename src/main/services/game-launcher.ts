@@ -244,9 +244,15 @@ export class GameLauncher {
       args.push('-XstartOnFirstThread');
     }
 
-    // Memory settings
-    const minMemory = options.minMemory || 512;
-    const maxMemory = options.maxMemory || 2048;
+    // Memory settings with validation
+    let minMemory = options.minMemory || 512;
+    let maxMemory = options.maxMemory || 2048;
+    
+    // Validate: ensure min <= max
+    if (minMemory > maxMemory) {
+      console.warn(`[Game Launcher] WARNING: minMemory (${minMemory}MB) > maxMemory (${maxMemory}MB). Auto-adjusting maxMemory to ${minMemory}MB.`);
+      maxMemory = minMemory;
+    }
     
     console.log(`[Game Launcher] Memory settings: -Xms${minMemory}M -Xmx${maxMemory}M`);
     

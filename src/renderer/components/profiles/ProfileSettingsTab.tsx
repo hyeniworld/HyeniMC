@@ -196,6 +196,25 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
     }
   };
 
+  // Memory validation with debounce
+  useEffect(() => {
+    if (useGlobalMemory) return;
+    
+    if (minMemory > maxMemory) {
+      const timer = setTimeout(() => {
+        setMaxMemory(minMemory);
+        toast.info('메모리 자동 조정', `최대 메모리가 ${minMemory}MB로 자동 조정되었습니다.`);
+      }, 500);
+      return () => clearTimeout(timer);
+    } else if (maxMemory < minMemory) {
+      const timer = setTimeout(() => {
+        setMinMemory(maxMemory);
+        toast.info('메모리 자동 조정', `최소 메모리가 ${maxMemory}MB로 자동 조정되었습니다.`);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [minMemory, maxMemory, useGlobalMemory, toast]);
+
   const handleUseGlobalJavaChange = (checked: boolean) => {
     setUseGlobalJava(checked);
     if (checked && globalSettings) {

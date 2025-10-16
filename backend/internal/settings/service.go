@@ -71,6 +71,12 @@ func (s *Service) Get() (*GlobalSettings, error) {
 
 // Update updates global settings
 func (s *Service) Update(settings *GlobalSettings) error {
+	// Validate memory settings: ensure min <= max
+	if settings.MemoryMin > settings.MemoryMax {
+		// Auto-adjust: set max to min
+		settings.MemoryMax = settings.MemoryMin
+	}
+	
 	values := map[string]string{
 		KeyJavaPath:    settings.JavaPath,
 		KeyMemoryMin:   fmt.Sprintf("%d", settings.MemoryMin),
