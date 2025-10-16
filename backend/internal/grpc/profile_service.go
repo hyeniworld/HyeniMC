@@ -76,6 +76,7 @@ func (s *profileServiceServer) ListProfiles(ctx context.Context, _ *pb.ListProfi
 func (s *profileServiceServer) UpdateProfile(ctx context.Context, req *pb.UpdateProfileRequest) (*pb.Profile, error) {
 	updates := map[string]interface{}{}
 	if patch := req.GetPatch(); patch != nil {
+		// Update name only if not empty (required field)
 		if patch.Name != "" {
 			updates["name"] = patch.Name
 		}
@@ -88,11 +89,15 @@ func (s *profileServiceServer) UpdateProfile(ctx context.Context, req *pb.Update
 		if patch.GameVersion != "" {
 			updates["gameVersion"] = patch.GameVersion
 		}
+		// Always update loaderType (required field, should never be empty from frontend)
 		if patch.LoaderType != "" {
 			updates["loaderType"] = patch.LoaderType
-		}
-		if patch.LoaderVersion != "" {
-			updates["loaderVersion"] = patch.LoaderVersion
+			// Update loaderVersion: empty only allowed for vanilla
+			if patch.LoaderType == "vanilla" {
+				updates["loaderVersion"] = "" // Clear version for vanilla
+			} else if patch.LoaderVersion != "" {
+				updates["loaderVersion"] = patch.LoaderVersion // Require version for other loaders
+			}
 		}
 		if patch.GameDirectory != "" {
 			updates["gameDirectory"] = patch.GameDirectory

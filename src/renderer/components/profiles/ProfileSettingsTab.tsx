@@ -20,6 +20,13 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
   // Global settings
   const [globalSettings, setGlobalSettings] = useState<any>(null);
   
+  // Profile basic info
+  const [profileName, setProfileName] = useState(profile?.name || '');
+  const [loaderType, setLoaderType] = useState<string>(profile?.loaderType || 'vanilla');
+  const [loaderVersion, setLoaderVersion] = useState(profile?.loaderVersion || '');
+  const [loaderVersions, setLoaderVersions] = useState<any[]>([]);
+  const [loadingLoaderVersions, setLoadingLoaderVersions] = useState(false);
+  
   // Memory settings
   const [useGlobalMemory, setUseGlobalMemory] = useState(!profile?.memory?.min && !profile?.memory?.max);
   const [minMemory, setMinMemory] = useState(profile?.memory?.min || 1024);
@@ -56,10 +63,24 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
     loadGlobalSettings();
     loadJavaInstallations();
   }, []);
+  
+  // Load loader versions when loader type changes
+  useEffect(() => {
+    if (loaderType && loaderType !== 'vanilla') {
+      loadLoaderVersions();
+    } else {
+      setLoaderVersions([]);
+      setLoaderVersion('');
+    }
+  }, [loaderType, profile?.gameVersion]);
 
   // Initialize from profile (only when profile ID changes)
   useEffect(() => {
     if (profile) {
+      setProfileName(profile.name || '');
+      setLoaderType(profile.loaderType || 'vanilla');
+      setLoaderVersion(profile.loaderVersion || '');
+      
       const hasCustomMemory = profile.memory?.min > 0 || profile.memory?.max > 0;
       setUseGlobalMemory(!hasCustomMemory);
       setMinMemory(profile.memory?.min || 1024);
@@ -130,6 +151,32 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
       setLoadingJava(false);
     }
   };
+  
+  const loadLoaderVersions = async () => {
+    if (!profile?.gameVersion) return;
+    
+    try {
+      setLoadingLoaderVersions(true);
+      const result = await window.electronAPI.loader.getVersions(
+        loaderType as any,
+        profile.gameVersion,
+        false // stable only
+      );
+      
+      if (result.success && result.versions) {
+        setLoaderVersions(result.versions);
+        // If current version is not in list, select first one
+        if (!loaderVersion || !result.versions.find((v: any) => v.version === loaderVersion)) {
+          setLoaderVersion(result.versions[0]?.version || '');
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load loader versions:', error);
+      setLoaderVersions([]);
+    } finally {
+      setLoadingLoaderVersions(false);
+    }
+  };
 
   const handleSelectDirectory = async () => {
     try {
@@ -168,7 +215,17 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
   const handleSave = async () => {
     setSaving(true);
     try {
+      // Validate profile name
+      if (!profileName.trim()) {
+        toast.error('입력 오류', '프로필 이름을 입력하세요');
+        setSaving(false);
+        return;
+      }
+      
       const updates: any = {
+        name: profileName.trim(),
+        loaderType: loaderType,
+        loaderVersion: loaderType !== 'vanilla' ? loaderVersion : '',
         memory: {
           min: useGlobalMemory ? 0 : minMemory,  // 0 = use global settings
           max: useGlobalMemory ? 0 : maxMemory,
@@ -214,8 +271,87 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
     { label: '3840 × 2160 (4K)', width: 3840, height: 2160 },
   ];
 
+  const loaderTypeOptions = [
+    { value: 'vanilla', label: 'Vanilla (바닐라)' },
+    { value: 'fabric', label: 'Fabric' },
+    { value: 'forge', label: 'Forge' },
+    { value: 'neoforge', label: 'NeoForge' },
+    { value: 'quilt', label: 'Quilt' },
+  ];
+
   return (
     <div className="p-6 space-y-6 max-w-4xl">
+      {/* Profile Name */}
+      <div className="card">
+        <h3 className="text-lg font-semibold text-gray-200 mb-4 flex items-center gap-2">
+          ✏️ 프로필 이름
+        </h3>
+        <input
+          type="text"
+          value={profileName}
+          onChange={(e) => setProfileName(e.target.value)}
+          placeholder="프로필 이름 입력"
+          className="input w-full"
+        />
+      </div>
+
+      {/* Loader Settings */}
+      <div className="card">
+        <h3 className="text-lg font-semibold text-gray-200 mb-4 flex items-center gap-2">
+          🔧 모드 로더 설정
+        </h3>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              로더 타입
+            </label>
+            <select
+              value={loaderType}
+              onChange={(e) => setLoaderType(e.target.value)}
+              className="input w-full"
+            >
+              {loaderTypeOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          
+          {loaderType !== 'vanilla' && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-gray-300">
+                  로더 버전
+                </label>
+                {loadingLoaderVersions && (
+                  <span className="text-xs text-gray-400">불러오는 중...</span>
+                )}
+              </div>
+              <select
+                value={loaderVersion}
+                onChange={(e) => setLoaderVersion(e.target.value)}
+                disabled={loadingLoaderVersions || loaderVersions.length === 0}
+                className="input w-full disabled:opacity-50"
+              >
+                {loaderVersions.length === 0 ? (
+                  <option value="">사용 가능한 버전이 없습니다</option>
+                ) : (
+                  loaderVersions.map((v: any) => (
+                    <option key={v.version} value={v.version}>
+                      {v.version} {v.stable ? '(안정)' : '(베타)'}
+                    </option>
+                  ))
+                )}
+              </select>
+              <p className="text-xs text-gray-400 mt-2">
+                💡 Minecraft {profile?.gameVersion}에 호환되는 {loaderType} 버전만 표시됩니다
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Profile Icon */}
       <div className="card">
         <h3 className="text-lg font-semibold text-gray-200 mb-4 flex items-center gap-2">
