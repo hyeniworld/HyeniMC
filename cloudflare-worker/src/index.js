@@ -31,7 +31,7 @@ export default {
       const path = url.pathname;
 
       // Route: Releases API
-      if (path.startsWith('/api/mods/') || path.startsWith('/download/mods/')) {
+      if (path.startsWith('/api/mods') || path.startsWith('/download/mods')) {
         return await handleReleasesAPI(request, env, corsHeaders);
       }
       
