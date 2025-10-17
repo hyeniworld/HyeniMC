@@ -1,0 +1,55 @@
+{
+  "modId": "hyenihelper",
+  "name": "HyeniHelper",
+  "version": "1.0.1",
+  "category": "required",
+  "changelog": "Bug fixes and performance improvements",
+  "releaseDate": "2025-10-17T08:00:00Z",
+  
+  "files": [
+    {
+      "loader": "neoforge",
+      "gameVersion": "1.21.1",
+      "file": "./build/hyenihelper-neoforge-1.21.1.jar",
+      "minLoaderVersion": "21.1.0",
+      "maxLoaderVersion": null,
+      "dependencies": {
+        "required": ["geckolib"],
+        "optional": ["jei"]
+      }
+    },
+    {
+      "loader": "neoforge",
+      "gameVersion": "1.21.4",
+      "file": "./build/hyenihelper-neoforge-1.21.4.jar",
+      "minLoaderVersion": "21.4.0",
+      "maxLoaderVersion": null,
+      "dependencies": {
+        "required": ["geckolib"],
+        "optional": ["jei"]
+      }
+    },
+    {
+      "loader": "fabric",
+      "gameVersion": "1.21.1",
+      "file": "./build/hyenihelper-fabric-1.21.1.jar",
+      "minLoaderVersion": "0.15.0",
+      "maxLoaderVersion": null,
+      "dependencies": {
+        "required": ["fabric-api"],
+        "optional": []
+      }
+    },
+    {
+      "loader": "fabric",
+      "gameVersion": "1.21.4",
+      "file": "./build/hyenihelper-fabric-1.21.4.jar",
+      "minLoaderVersion": "0.15.6",
+      "maxLoaderVersion": null,
+      "dependencies": {
+        "required": ["fabric-api"],
+        "optional": []
+      }
+    }
+  ]
+}

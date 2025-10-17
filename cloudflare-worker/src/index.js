@@ -30,9 +30,14 @@ export default {
       const url = new URL(request.url);
       const path = url.pathname;
 
-      // Route: Releases API
+      // Route: Releases API v2
+      if (path.startsWith('/api/v2/mods') || path.startsWith('/download/v2/mods')) {
+        return await handleReleasesAPI(request, env, corsHeaders, 'v2');
+      }
+      
+      // Route: Releases API v1 (legacy)
       if (path.startsWith('/api/mods') || path.startsWith('/download/mods')) {
-        return await handleReleasesAPI(request, env, corsHeaders);
+        return await handleReleasesAPI(request, env, corsHeaders, 'v1');
       }
       
       // Legacy support for hyenihelper
@@ -151,31 +156,40 @@ async function handleCurseForgeProxy(request, env, corsHeaders) {
 
 /**
  * Handle Releases API requests
+ * @param {Request} request
+ * @param {Env} env
+ * @param {Object} corsHeaders
+ * @param {string} version - API version ('v1' or 'v2')
  */
-async function handleReleasesAPI(request, env, corsHeaders) {
+async function handleReleasesAPI(request, env, corsHeaders, version = 'v1') {
   const url = new URL(request.url);
   const path = url.pathname;
+  
+  // Normalize path (remove version prefix for matching)
+  const normalizedPath = version === 'v2' 
+    ? path.replace('/api/v2/', '/api/').replace('/download/v2/', '/download/')
+    : path;
 
   // GET /api/mods (모드 목록)
-  if (path === '/api/mods' || path === '/api/mods/') {
-    return await getModsList(env, corsHeaders);
+  if (normalizedPath === '/api/mods' || normalizedPath === '/api/mods/') {
+    return await getModsList(env, corsHeaders, version);
   }
 
   // GET /api/mods/{modId}/latest
-  const latestMatch = path.match(/^\/api\/mods\/([^\/]+)\/latest$/);
+  const latestMatch = normalizedPath.match(/^\/api\/mods\/([^\/]+)\/latest$/);
   if (latestMatch) {
-    return await getLatestRelease(env, corsHeaders, latestMatch[1]);
+    return await getLatestRelease(env, corsHeaders, latestMatch[1], version);
   }
 
   // GET /api/mods/{modId}/versions
-  const versionsMatch = path.match(/^\/api\/mods\/([^\/]+)\/versions$/);
+  const versionsMatch = normalizedPath.match(/^\/api\/mods\/([^\/]+)\/versions$/);
   if (versionsMatch) {
-    return await getVersionsList(env, corsHeaders, versionsMatch[1]);
+    return await getVersionsList(env, corsHeaders, versionsMatch[1], version);
   }
 
-  // GET /download/mods/{modId}/{version}/{file}
-  if (path.startsWith('/download/mods/')) {
-    return await downloadFile(request, env, corsHeaders);
+  // GET /download/mods/...
+  if (normalizedPath.startsWith('/download/mods/')) {
+    return await downloadFile(request, env, corsHeaders, version);
   }
 
   // 404 Not Found
@@ -188,7 +202,7 @@ async function handleReleasesAPI(request, env, corsHeaders) {
 /**
  * Get all mods list
  */
-async function getModsList(env, corsHeaders) {
+async function getModsList(env, corsHeaders, version = 'v1') {
   if (!env.RELEASES) {
     return new Response(JSON.stringify({ 
       error: 'R2 bucket not configured' 
@@ -231,7 +245,7 @@ async function getModsList(env, corsHeaders) {
 /**
  * Get latest release for a specific mod
  */
-async function getLatestRelease(env, corsHeaders, modId) {
+async function getLatestRelease(env, corsHeaders, modId, version = 'v1') {
   if (!env.RELEASES) {
     return new Response(JSON.stringify({ 
       error: 'R2 bucket not configured' 
@@ -255,17 +269,30 @@ async function getLatestRelease(env, corsHeaders, modId) {
   
   const data = JSON.parse(await latest.text());
   
-  // Add relative download URLs (without /download prefix)
-  // Client will prepend the base URL
+  // Add download URLs based on API version
   if (data.loaders) {
-    for (const [loader, info] of Object.entries(data.loaders)) {
-      // downloadPath already contains: mods/hyenihelper/versions/1.0.1/file.jar
-      // Just use it as-is for the client to prepend /download/mods
-      info.downloadUrl = `/${info.downloadPath}`;
+    if (version === 'v2') {
+      // v2: Nested structure with game versions
+      for (const [loader, loaderData] of Object.entries(data.loaders)) {
+        if (loaderData.gameVersions) {
+          for (const [gameVer, fileInfo] of Object.entries(loaderData.gameVersions)) {
+            if (fileInfo.downloadPath) {
+              fileInfo.downloadUrl = `/${fileInfo.downloadPath}`;
+            }
+          }
+        }
+      }
+    } else {
+      // v1: Flat structure (legacy)
+      for (const [loader, info] of Object.entries(data.loaders)) {
+        if (info.downloadPath) {
+          info.downloadUrl = `/${info.downloadPath}`;
+        }
+      }
     }
   }
   
-  console.log(`[Releases API] ${modId} latest version: ${data.version}`);
+  console.log(`[Releases API ${version}] ${modId} latest version: ${data.version}`);
   
   return new Response(JSON.stringify(data), {
     headers: { 
@@ -279,7 +306,7 @@ async function getLatestRelease(env, corsHeaders, modId) {
 /**
  * Get all versions list for a specific mod
  */
-async function getVersionsList(env, corsHeaders, modId) {
+async function getVersionsList(env, corsHeaders, modId, version = 'v1') {
   if (!env.RELEASES) {
     return new Response(JSON.stringify({ 
       error: 'R2 bucket not configured' 
@@ -340,7 +367,7 @@ async function getVersionsList(env, corsHeaders, modId) {
 /**
  * Download file (authentication required)
  */
-async function downloadFile(request, env, corsHeaders) {
+async function downloadFile(request, env, corsHeaders, version = 'v1') {
   if (!env.RELEASES) {
     return new Response(JSON.stringify({ 
       error: 'R2 bucket not configured' 
@@ -351,7 +378,10 @@ async function downloadFile(request, env, corsHeaders) {
   }
 
   const url = new URL(request.url);
-  const path = url.pathname.replace('/download/', '');
+  // Remove /download/v2/ or /download/ prefix
+  const path = url.pathname
+    .replace('/download/v2/', '')
+    .replace('/download/', '');
   
   // Get token from query or header
   const token = url.searchParams.get('token') || 

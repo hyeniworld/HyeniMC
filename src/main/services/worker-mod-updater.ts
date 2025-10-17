@@ -30,25 +30,43 @@ export interface ModInfo {
   name: string;
   description: string;
   latestVersion: string;
+  category: 'required' | 'optional' | 'server-side';
   gameVersions: string[];
-  loaders: string[];
-  required?: boolean;
-  category: string;
+  loaders: LoaderCompatibility[];
+  dependencies?: {
+    required: string[];
+    optional: string[];
+  };
+}
+
+export interface LoaderCompatibility {
+  type: string;              // "neoforge" | "forge" | "fabric" | "quilt"
+  minVersion: string;        // Minimum loader version (e.g., "21.1.0")
+  maxVersion: string | null; // Maximum loader version (null = no limit)
+  recommended?: string;      // Recommended loader version
 }
 
 export interface ModDetailInfo {
+  modId: string;
+  name: string;
   version: string;
   gameVersions: string[];
-  loaders: Record<string, LoaderInfo>;
-  required?: boolean;
+  loaders: Record<string, LoaderFileInfo>;
   changelog: string;
   releaseDate: string;
+  dependencies?: {
+    required: string[];
+    optional: string[];
+  };
 }
 
-export interface LoaderInfo {
+export interface LoaderFileInfo {
   file: string;
   sha256: string;
   size: number;
+  minLoaderVersion: string;
+  maxLoaderVersion: string | null;
+  downloadUrl?: string;
 }
 
 export interface ModUpdateInfo {
@@ -80,15 +98,15 @@ function getWorkerUrl(): string {
 }
 
 function getModRegistryUrl(): string {
-  return `${getWorkerUrl()}/api/mods`;
+  return `${getWorkerUrl()}/api/v2/mods`;
 }
 
 function getModDetailUrl(modId: string): string {
-  return `${getWorkerUrl()}/api/mods/${modId}/latest`;
+  return `${getWorkerUrl()}/api/v2/mods/${modId}/latest`;
 }
 
-function getModDownloadUrl(modId: string, loader: string, version: string, file: string): string {
-  return `${getWorkerUrl()}/download/mods/${modId}/versions/${version}/${loader}/${file}`;
+function getModDownloadUrl(modId: string, loader: string, version: string, gameVersion: string, file: string): string {
+  return `${getWorkerUrl()}/download/v2/mods/${modId}/versions/${version}/${loader}/${gameVersion}/${file}`;
 }
 
 // ============================================================================
@@ -214,10 +232,14 @@ export class WorkerModUpdater {
   /**
    * Get applicable mods for current environment
    * Filters by game version and loader type
+   * @param gameVersion - Minecraft version (e.g., "1.21.1")
+   * @param loaderType - Loader type (e.g., "neoforge", "forge")
+   * @param loaderVersion - Optional: Loader version for compatibility check
    */
   async getApplicableMods(
     gameVersion: string,
-    loaderType: string
+    loaderType: string,
+    loaderVersion?: string
   ): Promise<ModInfo[]> {
     const registry = await this.fetchModRegistry();
     
@@ -227,27 +249,64 @@ export class WorkerModUpdater {
     }
     
     const applicable = registry.mods.filter(mod => {
-      // Safe checks for undefined/null arrays
+      // 1. Check game versions
       if (!mod.gameVersions || !Array.isArray(mod.gameVersions)) {
         console.warn(`[WorkerModUpdater] Mod ${mod.id} missing gameVersions`);
         return false;
       }
+      
+      if (!mod.gameVersions.includes(gameVersion)) {
+        return false;
+      }
+      
+      // 2. Check loader compatibility
       if (!mod.loaders || !Array.isArray(mod.loaders)) {
         console.warn(`[WorkerModUpdater] Mod ${mod.id} missing loaders`);
         return false;
       }
       
-      const gameVersionMatch = mod.gameVersions.includes(gameVersion);
-      const loaderMatch = mod.loaders.includes(loaderType);
-      return gameVersionMatch && loaderMatch;
+      const loaderCompat = mod.loaders.find(l => l.type === loaderType);
+      if (!loaderCompat) {
+        console.log(`[WorkerModUpdater] Mod ${mod.id} does not support loader: ${loaderType}`);
+        return false;
+      }
+      
+      // 3. Check loader version compatibility (if provided)
+      if (loaderVersion) {
+        const isVersionValid = this.checkLoaderVersionCompatibility(
+          loaderVersion,
+          loaderCompat.minVersion,
+          loaderCompat.maxVersion
+        );
+        
+        if (!isVersionValid) {
+          console.warn(
+            `[WorkerModUpdater] Mod ${mod.id} requires loader ${loaderType} ` +
+            `${loaderCompat.minVersion}${loaderCompat.maxVersion ? `-${loaderCompat.maxVersion}` : '+'}, ` +
+            `but ${loaderVersion} is installed`
+          );
+          return false;
+        }
+        
+        // Show recommendation warning
+        if (loaderCompat.recommended && loaderVersion !== loaderCompat.recommended) {
+          console.log(
+            `[WorkerModUpdater] ℹ️  Mod ${mod.id} recommends loader version ${loaderCompat.recommended}, ` +
+            `current: ${loaderVersion}`
+          );
+        }
+      }
+      
+      return true;
     });
     
-    console.log(`[WorkerModUpdater] Found ${applicable.length} applicable mods for ${gameVersion} + ${loaderType}`);
+    console.log(`[WorkerModUpdater] Found ${applicable.length} applicable mods for ${gameVersion} + ${loaderType}${loaderVersion ? ` ${loaderVersion}` : ''}`);
     return applicable;
   }
   
   /**
-   * Fetch detailed mod info from Worker API
+   * Fetch detailed mod info from Worker API (v2)
+   * Selects the appropriate file for the given game version and loader
    */
   async fetchModInfo(
     modId: string,
@@ -276,8 +335,38 @@ export class WorkerModUpdater {
           }
           
           try {
-            const data = JSON.parse(body) as ModDetailInfo;
-            resolve(data);
+            const rawData = JSON.parse(body);
+            
+            // v2 API: Extract game version specific file info
+            const loaderData = rawData.loaders?.[loaderType];
+            if (!loaderData) {
+              console.log(`[WorkerModUpdater] Loader ${loaderType} not found in response`);
+              resolve(null);
+              return;
+            }
+            
+            const gameVersionData = loaderData.gameVersions?.[gameVersion];
+            if (!gameVersionData) {
+              console.log(`[WorkerModUpdater] Game version ${gameVersion} not found for ${loaderType}`);
+              resolve(null);
+              return;
+            }
+            
+            // Transform to ModDetailInfo structure
+            const modDetail: ModDetailInfo = {
+              modId: rawData.modId,
+              name: rawData.name,
+              version: rawData.version,
+              gameVersions: rawData.gameVersions,
+              loaders: {
+                [loaderType]: gameVersionData  // Only the relevant game version's file
+              },
+              changelog: rawData.changelog,
+              releaseDate: rawData.releaseDate,
+              dependencies: gameVersionData.dependencies
+            };
+            
+            resolve(modDetail);
           } catch (error) {
             console.error('[WorkerModUpdater] Failed to parse mod info:', error);
             resolve(null);
@@ -315,16 +404,10 @@ export class WorkerModUpdater {
         return null;
       }
       
-      // Check if loader is supported
+      // fetchModInfo already filtered by loader and game version
       const loaderInfo = modInfo.loaders[loaderType];
       if (!loaderInfo) {
         console.log(`[WorkerModUpdater] Loader ${loaderType} not supported for: ${modId}`);
-        return null;
-      }
-      
-      // Check if game version is supported
-      if (!modInfo.gameVersions.includes(gameVersion)) {
-        console.log(`[WorkerModUpdater] Game version ${gameVersion} not supported for: ${modId}`);
         return null;
       }
       
@@ -334,7 +417,7 @@ export class WorkerModUpdater {
       if (needsUpdate) {
         console.log(`[WorkerModUpdater] Update available for ${modId}: ${localVersion || 'none'} -> ${modInfo.version}`);
         
-        const downloadUrl = getModDownloadUrl(modId, loaderType, modInfo.version, loaderInfo.file);
+        const downloadUrl = getModDownloadUrl(modId, loaderType, modInfo.version, gameVersion, loaderInfo.file);
         
         return {
           modId,
@@ -362,16 +445,22 @@ export class WorkerModUpdater {
   
   /**
    * Check all applicable mods for updates
+   * @param profilePath - Path to profile directory
+   * @param gameVersion - Minecraft version
+   * @param loaderType - Loader type (neoforge, forge, etc.)
+   * @param loaderVersion - Optional: Loader version for compatibility check
    */
   async checkAllMods(
     profilePath: string,
     gameVersion: string,
-    loaderType: string
+    loaderType: string,
+    loaderVersion?: string
   ): Promise<ModUpdateInfo[]> {
     try {
       console.log('[WorkerModUpdater] Checking all mods for updates...');
+      console.log(`[WorkerModUpdater] Environment: ${gameVersion} + ${loaderType}${loaderVersion ? ` ${loaderVersion}` : ''}`);
       
-      const applicableMods = await this.getApplicableMods(gameVersion, loaderType);
+      const applicableMods = await this.getApplicableMods(gameVersion, loaderType, loaderVersion);
       const updates: ModUpdateInfo[] = [];
       
       for (const mod of applicableMods) {
@@ -521,6 +610,47 @@ export class WorkerModUpdater {
       console.error(`[WorkerModUpdater] Failed to read mods directory: ${modsDir}`, error);
       return [];
     }
+  }
+  
+  /**
+   * Check if loader version is compatible with mod requirements
+   */
+  private checkLoaderVersionCompatibility(
+    currentVersion: string,
+    minVersion: string,
+    maxVersion: string | null
+  ): boolean {
+    // Compare with minimum version
+    const isAboveMin = this.compareVersions(currentVersion, minVersion) >= 0;
+    
+    // Compare with maximum version (if specified)
+    if (maxVersion) {
+      const isBelowMax = this.compareVersions(currentVersion, maxVersion) <= 0;
+      return isAboveMin && isBelowMax;
+    }
+    
+    return isAboveMin;
+  }
+  
+  /**
+   * Compare semantic versions
+   * @returns -1 if v1 < v2, 0 if equal, 1 if v1 > v2
+   */
+  private compareVersions(v1: string, v2: string): number {
+    const parts1 = v1.split('.').map(p => parseInt(p, 10) || 0);
+    const parts2 = v2.split('.').map(p => parseInt(p, 10) || 0);
+    
+    const maxLength = Math.max(parts1.length, parts2.length);
+    
+    for (let i = 0; i < maxLength; i++) {
+      const p1 = parts1[i] || 0;
+      const p2 = parts2[i] || 0;
+      
+      if (p1 < p2) return -1;
+      if (p1 > p2) return 1;
+    }
+    
+    return 0;
   }
   
   /**

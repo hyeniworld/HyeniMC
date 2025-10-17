@@ -306,6 +306,7 @@ export function registerProfileHandlers(): void {
 
       // Install loader if needed
       let actualVersionId = profile.gameVersion;
+      let installedLoaderVersion: string | undefined = undefined;
       
       if (profile.loaderType && profile.loaderType !== 'vanilla') {
         console.log(`[IPC Profile] Installing ${profile.loaderType} loader...`);
@@ -326,6 +327,9 @@ export function registerProfileHandlers(): void {
           
           console.log(`[IPC Profile] Using recommended version: ${loaderVersion}`);
         }
+        
+        // Save loader version for mod compatibility check
+        installedLoaderVersion = loaderVersion;
         
         // Check if already installed
         const isInstalled = await loaderManager.isLoaderInstalled(
@@ -381,7 +385,8 @@ export function registerProfileHandlers(): void {
           const updates = await workerModUpdater.checkAllMods(
             instanceDir,
             profile.gameVersion,
-            profile.loaderType || 'vanilla'
+            profile.loaderType || 'vanilla',
+            installedLoaderVersion  // Pass loader version for compatibility check
           );
           
           if (updates.length > 0) {
