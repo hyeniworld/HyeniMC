@@ -20,6 +20,7 @@ export function ProfileList() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const showDownload = useDownloadStore(s => s.show);
   const setDl = useDownloadStore(s => s.setProgress);
+  const resetDownload = useDownloadStore(s => s.reset);
 
   useEffect(() => {
     loadProfiles();
@@ -133,26 +134,41 @@ export function ProfileList() {
         
         // global modal will auto-hide on game:started via hook
       } catch (err) {
-        setDl({ error: err instanceof Error ? err.message : '알 수 없는 오류' });
+        const errorMsg = err instanceof Error ? err.message : '알 수 없는 오류';
+        setDl({ error: errorMsg });
         
         // Remove from launching on error
         setLaunchingProfiles(prev => {
           const ns = new Set(prev);
+          ns.delete(profileId);
           return ns;
         });
+        
+        // 3초 후 자동으로 모달 닫기
+        setTimeout(() => {
+          resetDownload();
+        }, 3000);
       } finally {
         // no local listeners to cleanup (global hook handles events)
       }
   } catch (err) {
       console.error('Failed to launch profile:', err);
+      const errorMsg = err instanceof Error ? err.message : '알 수 없는 오류';
+      
       // Remove from launching on error
       setLaunchingProfiles(prev => {
         const ns = new Set(prev);
         ns.delete(profileId);
         return ns;
       });
+      
       // Surface error
-      setDl({ error: err instanceof Error ? err.message : '알 수 없는 오류' });
+      setDl({ error: errorMsg });
+      
+      // 3초 후 자동으로 모달 닫기
+      setTimeout(() => {
+        resetDownload();
+      }, 3000);
     }
   };
 

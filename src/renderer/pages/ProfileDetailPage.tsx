@@ -24,19 +24,14 @@ export const ProfileDetailPage: React.FC = () => {
   const [isLaunching, setIsLaunching] = useState(false);
   const showDownload = useDownloadStore(s => s.show);
   const setDl = useDownloadStore(s => s.setProgress);
+  const resetDownload = useDownloadStore(s => s.reset);
 
   useEffect(() => {
-    if (profileId) {
-      loadProfile();
-      checkRunningStatus();
-      
-      // Poll for running status every 2 seconds
-      const interval = setInterval(() => {
-        checkRunningStatus();
-      }, 2000);
-      
-      return () => clearInterval(interval);
-    }
+    if (!profileId) return;
+    loadProfile();
+    checkRunningStatus();
+    const interval = setInterval(checkRunningStatus, 3000);
+    return () => clearInterval(interval);
   }, [profileId]);
 
   useEffect(() => {
@@ -84,10 +79,14 @@ export const ProfileDetailPage: React.FC = () => {
     const cleanupModError = window.electronAPI.on('mod:update-error', (data: any) => {
       console.error('[ProfileDetail] Mod update error:', data);
       setIsLaunching(false);
-      setDl({ 
-        error: data.message || '모드 업데이트에 실패했습니다.',
-      });
-      toast.error('모드 업데이트 실패', data.message || '모드 업데이트에 실패했습니다.');
+      const errorMsg = data.message || '모드 업데이트에 실패했습니다.';
+      setDl({ error: errorMsg });
+      toast.error('모드 업데이트 실패', errorMsg);
+      
+      // 3초 후 자동으로 모달 닫기
+      setTimeout(() => {
+        resetDownload();
+      }, 3000);
     });
 
     return () => {
@@ -121,7 +120,7 @@ export const ProfileDetailPage: React.FC = () => {
     }
   };
 
-  const handleLaunch = async () => {
+  const handleLaunch = React.useCallback(async () => {
     if (!profileId) return;
     
     if (isRunning) {
@@ -139,16 +138,56 @@ export const ProfileDetailPage: React.FC = () => {
     showDownload(profileId);
     setDl({ phase: 'precheck', percent: 0, message: '실행 준비 중...' });
 
+    // 타임아웃 설정 (60초)
+    const timeoutId = setTimeout(() => {
+      if (isLaunching) {
+        console.error('[ProfileDetail] Launch timeout');
+        setIsLaunching(false);
+        const errorMsg = '게임 실행 시간이 초과되었습니다. (60초)\n\n다시 시도해주세요.';
+        setDl({ error: errorMsg });
+        toast.error('실행 시간 초과', '60초 내에 응답이 없습니다.');
+        
+        // 3초 후 자동으로 모달 닫기
+        setTimeout(() => {
+          resetDownload();
+        }, 3000);
+      }
+    }, 60000);
+
     try {
       await window.electronAPI.profile.launch(profileId, selectedAccountId);
+      clearTimeout(timeoutId);
       // State will be updated by event listener
     } catch (error) {
+      clearTimeout(timeoutId);
       console.error('Failed to launch:', error);
       setIsRunning(false);
       setIsLaunching(false);
-      toast.error('실행 실패', error instanceof Error ? error.message : '게임 실행에 실패했습니다.');
+      
+      // 에러 상태 설정
+      const errorMsg = error instanceof Error ? error.message : '게임 실행에 실패했습니다.';
+      setDl({ error: errorMsg });
+      toast.error('실행 실패', errorMsg);
+      
+      // 3초 후 자동으로 모달 닫기
+      setTimeout(() => {
+        resetDownload();
+      }, 3000);
     }
-  };
+  }, [profileId, isRunning, isLaunching, selectedAccountId, showDownload, setDl, resetDownload]);
+
+  // 재시도 이벤트 리스너
+  useEffect(() => {
+    const handleRetry = () => {
+      console.log('[ProfileDetail] Retry requested');
+      handleLaunch();
+    };
+
+    window.addEventListener('retry-game-launch', handleRetry);
+    return () => {
+      window.removeEventListener('retry-game-launch', handleRetry);
+    };
+  }, [handleLaunch]);
 
   const handleStop = async () => {
     if (!profileId) return;

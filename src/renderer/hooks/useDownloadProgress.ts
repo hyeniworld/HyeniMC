@@ -60,7 +60,14 @@ export function useDownloadProgress() {
     const offGameDl = window.electronAPI.on(EVT_GAME_DOWNLOAD_PROGRESS, onAnyProgress);
 
     const offError = window.electronAPI.on(EVT_DL_ERROR, (err: any) => {
-      setProgress({ error: typeof err === 'string' ? err : err?.message || '다운로드 오류' });
+      const errorMessage = typeof err === 'string' ? err : err?.message || '다운로드 오류';
+      setProgress({ error: errorMessage });
+      
+      // 3초 후 자동으로 에러 상태 초기화 및 모달 닫기
+      setTimeout(() => {
+        setProgress({ error: undefined });
+        hide();
+      }, 3000);
     });
 
     const offComplete = window.electronAPI.on(EVT_DL_COMPLETE, (_: any) => {

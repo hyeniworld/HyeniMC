@@ -1,6 +1,7 @@
 import { BrowserWindow } from 'electron';
 import { IPC_EVENTS } from '../../shared/constants';
 import { streamDownloadProgress } from '../grpc/clients';
+import { timeoutManager, TimeoutType } from '../services/timeout-manager';
 
 let cancelStream: (() => void) | null = null;
 let started = false;
@@ -8,6 +9,7 @@ let backoffMs = 1000;
 const backoffMax = 30000;
 let pending: any | null = null;
 let throttleTimer: NodeJS.Timeout | null = null;
+const HEARTBEAT_KEY = 'grpc-download-stream-heartbeat';
 
 function broadcast(channel: string, payload: any) {
   const windows = BrowserWindow.getAllWindows();
@@ -26,9 +28,33 @@ export function initializeDownloadStreamBridge(profileId?: string) {
       const { healthRpc } = await import('../grpc/clients');
       await healthRpc.check();
 
+      // heartbeat 타임아웃 설정
+      timeoutManager.set(HEARTBEAT_KEY, TimeoutType.GRPC_STREAM_HEARTBEAT, () => {
+        console.error('[DownloadStream] Heartbeat timeout - stream may be dead');
+        broadcast(IPC_EVENTS.DOWNLOAD_ERROR, { 
+          error: '다운로드 스트림 연결이 끊어졌습니다. 재연결 중...' 
+        });
+        if (cancelStream) {
+          try { cancelStream(); } catch {}
+        }
+        scheduleReconnect();
+      });
+
       cancelStream = streamDownloadProgress(
         { profileId: profileId ?? '' },
         (ev) => {
+          // 데이터 수신 시 heartbeat 연장
+          timeoutManager.extend(HEARTBEAT_KEY, TimeoutType.GRPC_STREAM_HEARTBEAT, () => {
+            console.error('[DownloadStream] Heartbeat timeout during stream');
+            broadcast(IPC_EVENTS.DOWNLOAD_ERROR, { 
+              error: '다운로드 스트림 타임아웃' 
+            });
+            if (cancelStream) {
+              try { cancelStream(); } catch {}
+            }
+            scheduleReconnect();
+          });
+
           const base = {
             taskId: ev.taskId,
             type: ev.type,
@@ -59,17 +85,20 @@ export function initializeDownloadStreamBridge(profileId?: string) {
           }
         },
         (err) => {
+          timeoutManager.clear(HEARTBEAT_KEY);
           console.warn('[DownloadStream] stream error, will retry:', err?.message || err);
           scheduleReconnect();
         },
         () => {
+          timeoutManager.clear(HEARTBEAT_KEY);
           console.log('[DownloadStream] stream ended, will retry');
           scheduleReconnect();
         }
       );
-      console.log('[DownloadStream] subscribed');
+      console.log('[DownloadStream] subscribed with heartbeat monitoring');
       backoffMs = 1000; // reset on success
     } catch (e) {
+      timeoutManager.clear(HEARTBEAT_KEY);
       console.warn('[DownloadStream] failed to subscribe, will retry:', (e as Error).message);
       scheduleReconnect();
     }
@@ -95,6 +124,7 @@ export function initializeDownloadStreamBridge(profileId?: string) {
 
 export function shutdownDownloadStreamBridge() {
   started = false;
+  timeoutManager.clear(HEARTBEAT_KEY);
   if (cancelStream) {
     try { cancelStream(); } catch {}
     cancelStream = null;

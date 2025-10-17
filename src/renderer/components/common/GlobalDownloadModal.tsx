@@ -62,6 +62,14 @@ export const GlobalDownloadModal: React.FC = () => {
     reset();
   };
 
+  const handleRetry = () => {
+    reset();
+    // 프로필 페이지가 handleLaunch를 다시 호출하도록 이벤트 발생
+    window.dispatchEvent(new CustomEvent('retry-game-launch', { 
+      detail: { versionId } 
+    }));
+  };
+
   return (
     <RichDownloadModal
       isOpen={!!visible || !!error}
@@ -70,6 +78,7 @@ export const GlobalDownloadModal: React.FC = () => {
       status={error ? 'error' : 'downloading'}
       error={error}
       onClose={handleClose}
+      onRetry={handleRetry}
     />
   );
 };

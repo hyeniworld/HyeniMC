@@ -23,9 +23,10 @@ interface DownloadModalProps {
   status: 'downloading' | 'extracting' | 'error';
   error?: string;
   onClose?: () => void;
+  onRetry?: () => void;
 }
 
-export function DownloadModal({ isOpen, versionId, progress, status, error, onClose }: DownloadModalProps) {
+export function DownloadModal({ isOpen, versionId, progress, status, error, onClose, onRetry }: DownloadModalProps) {
   if (!isOpen) return null;
 
   const formatBytes = (bytes: number): string => {
@@ -69,13 +70,31 @@ export function DownloadModal({ isOpen, versionId, progress, status, error, onCl
             <p className="text-xs text-gray-500">
               네트워크 연결을 확인하고 다시 시도해주세요.
             </p>
+            <p className="text-xs text-gray-400 italic">
+              💡 팁: 3초 후 자동으로 닫힙니다
+            </p>
             {onClose && (
-              <button
-                onClick={onClose}
-                className="w-full py-2.5 px-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 rounded-lg font-medium transition-all duration-200 hover:scale-105"
-              >
-                확인
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={onClose}
+                  className="flex-1 py-2.5 px-4 bg-gray-700 hover:bg-gray-600 rounded-lg font-medium transition-all duration-200"
+                >
+                  닫기
+                </button>
+                <button
+                  onClick={() => {
+                    if (onRetry) {
+                      onRetry();
+                    } else if (onClose) {
+                      onClose();
+                    }
+                  }}
+                  className="flex-1 py-2.5 px-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 rounded-lg font-medium transition-all duration-200 hover:scale-105"
+                  disabled={!onRetry}
+                >
+                  다시 시도
+                </button>
+              </div>
             )}
           </div>
         ) : (
