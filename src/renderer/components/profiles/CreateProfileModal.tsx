@@ -80,6 +80,13 @@ export function CreateProfileModal({ isOpen, onClose, onSuccess, initialModpackI
       setError('프로필 이름을 입력해주세요.');
       return;
     }
+    
+    // Validate loader version (바닐라가 아닌 경우)
+    if (formData.loaderType !== 'vanilla' && !formData.loaderVersion) {
+      setError(`${formData.loaderType} 로더 버전을 선택해주세요.`);
+      return;
+    }
+    
     try {
       setLoading(true);
       setError(null);

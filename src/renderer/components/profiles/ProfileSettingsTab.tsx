@@ -22,10 +22,15 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
   
   // Profile basic info
   const [profileName, setProfileName] = useState(profile?.name || '');
+  const [gameVersion, setGameVersion] = useState(profile?.gameVersion || '');
+  const [versions, setVersions] = useState<string[]>([]);
+  const [loadingVersions, setLoadingVersions] = useState(false);
+  const [releaseOnly, setReleaseOnly] = useState(true);
   const [loaderType, setLoaderType] = useState<string>(profile?.loaderType || 'vanilla');
   const [loaderVersion, setLoaderVersion] = useState(profile?.loaderVersion || '');
   const [loaderVersions, setLoaderVersions] = useState<any[]>([]);
   const [loadingLoaderVersions, setLoadingLoaderVersions] = useState(false);
+  const [includeUnstableVersions, setIncludeUnstableVersions] = useState(false);
   
   // Memory settings
   const [useGlobalMemory, setUseGlobalMemory] = useState(!profile?.memory?.min && !profile?.memory?.max);
@@ -65,27 +70,34 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
     loadGlobalSettings();
     loadJavaInstallations();
     checkServerDetection();
+    loadMinecraftVersions();
   }, []);
+  
+  // Load Minecraft versions when releaseOnly changes
+  useEffect(() => {
+    loadMinecraftVersions();
+  }, [releaseOnly]);
   
   // Check server detection when serverAddress or gameDir changes
   useEffect(() => {
     checkServerDetection();
   }, [serverAddress, gameDir]);
   
-  // Load loader versions when loader type changes
+  // Load loader versions when loader type, game version, or includeUnstable changes
   useEffect(() => {
-    if (loaderType && loaderType !== 'vanilla') {
+    if (loaderType && loaderType !== 'vanilla' && gameVersion) {
       loadLoaderVersions();
     } else {
       setLoaderVersions([]);
       setLoaderVersion('');
     }
-  }, [loaderType, profile?.gameVersion]);
+  }, [loaderType, gameVersion, includeUnstableVersions]);
 
   // Initialize from profile (only when profile ID changes)
   useEffect(() => {
     if (profile) {
       setProfileName(profile.name || '');
+      setGameVersion(profile.gameVersion || '');
       setLoaderType(profile.loaderType || 'vanilla');
       setLoaderVersion(profile.loaderVersion || '');
       
@@ -160,6 +172,23 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
     }
   };
   
+  const loadMinecraftVersions = async () => {
+    try {
+      setLoadingVersions(true);
+      const versionList = await window.electronAPI.version.list(releaseOnly);
+      setVersions(versionList);
+      
+      // If current gameVersion is not in the list, select the first one
+      if (!versionList.includes(gameVersion) && versionList.length > 0) {
+        setGameVersion(versionList[0]);
+      }
+    } catch (error) {
+      console.error('Failed to load Minecraft versions:', error);
+    } finally {
+      setLoadingVersions(false);
+    }
+  };
+  
   const checkServerDetection = () => {
     // Check profile serverAddress first (manual override)
     if (serverAddress?.trim()) {
@@ -178,18 +207,31 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
   };
   
   const loadLoaderVersions = async () => {
-    if (!profile?.gameVersion) return;
+    if (!gameVersion) return;
     
     try {
       setLoadingLoaderVersions(true);
       const result = await window.electronAPI.loader.getVersions(
         loaderType as any,
-        profile.gameVersion,
-        false // stable only
+        gameVersion,
+        includeUnstableVersions
       );
       
       if (result.success && result.versions) {
         setLoaderVersions(result.versions);
+        
+        // Check if profile has a loader version that's not in the current list
+        const profileLoaderVersion = profile?.loaderVersion;
+        const versionExists = result.versions.find((v: any) => v.version === profileLoaderVersion);
+        
+        if (profileLoaderVersion && !versionExists && !includeUnstableVersions) {
+          // Profile has a version that's not in stable list
+          // Automatically enable unstable versions to find it
+          console.log(`[ProfileSettings] Loader version ${profileLoaderVersion} not found in stable list, enabling unstable versions`);
+          setIncludeUnstableVersions(true);
+          return; // useEffect will trigger reload with unstable versions
+        }
+        
         // If current version is not in list, select first one
         if (!loaderVersion || !result.versions.find((v: any) => v.version === loaderVersion)) {
           setLoaderVersion(result.versions[0]?.version || '');
@@ -198,6 +240,7 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
     } catch (error) {
       console.error('Failed to load loader versions:', error);
       setLoaderVersions([]);
+      setLoaderVersion('');
     } finally {
       setLoadingLoaderVersions(false);
     }
@@ -266,8 +309,16 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
         return;
       }
       
+      // Validate loader version (바닐라가 아닌 경우)
+      if (loaderType !== 'vanilla' && !loaderVersion) {
+        toast.error('입력 오류', `${loaderType} 로더 버전을 선택하세요`);
+        setSaving(false);
+        return;
+      }
+      
       const updates: any = {
         name: profileName.trim(),
+        gameVersion: gameVersion,
         loaderType: loaderType,
         loaderVersion: loaderType !== 'vanilla' ? loaderVersion : '',
         memory: {
@@ -339,6 +390,52 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
         />
       </div>
 
+      {/* Minecraft Version */}
+      <div className="card">
+        <h3 className="text-lg font-semibold text-gray-200 mb-4 flex items-center gap-2">
+          🎮 마인크래프트 버전
+        </h3>
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-2">
+            게임 버전
+          </label>
+          <select
+            value={gameVersion}
+            onChange={(e) => setGameVersion(e.target.value)}
+            className="input w-full"
+            disabled={loadingVersions}
+          >
+            {loadingVersions ? (
+              <option>버전 로딩 중...</option>
+            ) : (
+              versions.map((version) => (
+                <option key={version} value={version}>
+                  {version}
+                </option>
+              ))
+            )}
+          </select>
+          <div className="mt-2 flex items-center gap-2 text-xs text-gray-400">
+            <input
+              id="releaseOnlyProfile"
+              type="checkbox"
+              checked={releaseOnly}
+              onChange={(e) => {
+                setLoadingVersions(true);
+                setReleaseOnly(e.target.checked);
+              }}
+              className="w-4 h-4 rounded border-gray-600 bg-gray-800 text-purple-500 focus:ring-purple-500 focus:ring-offset-gray-900"
+            />
+            <label htmlFor="releaseOnlyProfile" className="cursor-pointer">
+              정식 버전만 보기
+            </label>
+          </div>
+          <p className="text-xs text-gray-400 mt-2">
+            💡 마인크래프트 버전을 변경하면 로더 버전이 자동으로 호환 버전으로 변경됩니다
+          </p>
+        </div>
+      </div>
+
       {/* Loader Settings */}
       <div className="card">
         <h3 className="text-lg font-semibold text-gray-200 mb-4 flex items-center gap-2">
@@ -368,28 +465,69 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
                 <label className="block text-sm font-medium text-gray-300">
                   로더 버전
                 </label>
-                {loadingLoaderVersions && (
-                  <span className="text-xs text-gray-400">불러오는 중...</span>
-                )}
+                <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer hover:text-gray-300 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={includeUnstableVersions}
+                    onChange={(e) => setIncludeUnstableVersions(e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-600 bg-gray-800 text-purple-500 focus:ring-purple-500 focus:ring-offset-gray-900"
+                  />
+                  <span>불안정 버전 포함</span>
+                </label>
               </div>
-              <select
-                value={loaderVersion}
-                onChange={(e) => setLoaderVersion(e.target.value)}
-                disabled={loadingLoaderVersions || loaderVersions.length === 0}
-                className="input w-full disabled:opacity-50"
-              >
-                {loaderVersions.length === 0 ? (
-                  <option value="">사용 가능한 버전이 없습니다</option>
-                ) : (
-                  loaderVersions.map((v: any) => (
-                    <option key={v.version} value={v.version}>
-                      {v.version} {v.stable ? '(안정)' : '(베타)'}
-                    </option>
-                  ))
-                )}
-              </select>
+              {loadingLoaderVersions ? (
+                <div className="input flex items-center gap-2 text-gray-400">
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  버전 로딩 중...
+                </div>
+              ) : loaderVersions.length === 0 ? (
+                <div className="bg-yellow-900/20 border border-yellow-800 rounded-lg p-3">
+                  <p className="text-sm text-yellow-300">
+                    ⚠ 사용 가능한 로더 버전이 없습니다.
+                  </p>
+                  <p className="text-xs text-yellow-400 mt-1">
+                    다른 Minecraft 버전을 선택하거나 바닐라를 사용하세요.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <select
+                    value={loaderVersion}
+                    onChange={(e) => setLoaderVersion(e.target.value)}
+                    className="input w-full"
+                    required
+                  >
+                    {loaderVersions.map((v: any, index: number) => {
+                      const displayText = `${v.version}${v.stable ? ' (안정)' : ' (불안정)'}`;
+                      return (
+                        <option 
+                          key={`${v.version}-${index}`} 
+                          value={v.version}
+                          className="bg-gray-800 text-white"
+                        >
+                          {displayText}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-gray-400">
+                      {loaderVersions.length}개의 버전 사용 가능
+                    </span>
+                    {loaderVersion && (
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${
+                        loaderVersions.find((v: any) => v.version === loaderVersion)?.stable
+                          ? 'bg-green-900/30 text-green-300 border border-green-800'
+                          : 'bg-yellow-900/30 text-yellow-300 border border-yellow-800'
+                      }`}>
+                        {loaderVersions.find((v: any) => v.version === loaderVersion)?.stable ? '안정' : '불안정'}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
               <p className="text-xs text-gray-400 mt-2">
-                💡 Minecraft {profile?.gameVersion}에 호환되는 {loaderType} 버전만 표시됩니다
+                💡 Minecraft {gameVersion}에 호환되는 {loaderType} 버전만 표시됩니다
               </p>
             </div>
           )}
