@@ -33,6 +33,8 @@ export const GlobalDownloadModal: React.FC = () => {
     currentFileDownloaded,
     currentFileTotal,
     error,
+    hide,
+    reset,
   } = useDownloadStore();
 
   if (!visible && !error) return null;
@@ -56,13 +58,18 @@ export const GlobalDownloadModal: React.FC = () => {
     phase: currentFile || undefined,
   };
 
+  const handleClose = () => {
+    reset();
+  };
+
   return (
     <RichDownloadModal
       isOpen={!!visible || !!error}
       versionId={versionId || ''}
       progress={progress as any}
-      status={'downloading'}
+      status={error ? 'error' : 'downloading'}
       error={error}
+      onClose={handleClose}
     />
   );
 };

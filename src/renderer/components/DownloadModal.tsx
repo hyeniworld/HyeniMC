@@ -22,9 +22,10 @@ interface DownloadModalProps {
   };
   status: 'downloading' | 'extracting' | 'error';
   error?: string;
+  onClose?: () => void;
 }
 
-export function DownloadModal({ isOpen, versionId, progress, status, error }: DownloadModalProps) {
+export function DownloadModal({ isOpen, versionId, progress, status, error, onClose }: DownloadModalProps) {
   if (!isOpen) return null;
 
   const formatBytes = (bytes: number): string => {
@@ -63,11 +64,19 @@ export function DownloadModal({ isOpen, versionId, progress, status, error }: Do
           /* Error State */
           <div className="space-y-4">
             <div className="bg-red-900/30 border border-red-800 rounded-lg p-4">
-              <p className="text-sm text-red-300">{error || '알 수 없는 오류가 발생했습니다'}</p>
+              <p className="text-sm text-red-300 whitespace-pre-line">{error || '알 수 없는 오류가 발생했습니다'}</p>
             </div>
             <p className="text-xs text-gray-500">
               네트워크 연결을 확인하고 다시 시도해주세요.
             </p>
+            {onClose && (
+              <button
+                onClick={onClose}
+                className="w-full py-2.5 px-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 rounded-lg font-medium transition-all duration-200 hover:scale-105"
+              >
+                확인
+              </button>
+            )}
           </div>
         ) : (
           /* Progress State */
