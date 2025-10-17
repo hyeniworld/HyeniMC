@@ -227,18 +227,18 @@ hyenimc-releases/
 
 #### 1. GET `/api/v2/mods` - 모드 목록
 ```bash
-curl https://hyenimc-worker.devbug.me/api/v2/mods | jq .
+curl https://HYENIMC_WORKER_URL/api/v2/mods | jq .
 ```
 
 #### 2. GET `/api/v2/mods/{modId}/latest` - 최신 버전
 ```bash
-curl https://hyenimc-worker.devbug.me/api/v2/mods/hyenihelper/latest | jq .
+curl https://HYENIMC_WORKER_URL/api/v2/mods/hyenihelper/latest | jq .
 ```
 
 #### 3. GET `/download/v2/mods/{modId}/versions/{version}/{loader}/{gameVersion}/{file}` - 다운로드
 ```bash
 curl -H "Authorization: Bearer YOUR_TOKEN" \
-  https://hyenimc-worker.devbug.me/download/v2/mods/hyenihelper/versions/1.0.1/neoforge/1.21.1/hyenihelper-1.0.1-neoforge-1.21.1.jar \
+  https://HYENIMC_WORKER_URL/download/v2/mods/hyenihelper/versions/1.0.1/neoforge/1.21.1/hyenihelper-1.0.1-neoforge-1.21.1.jar \
   -o hyenihelper.jar
 ```
 
@@ -246,8 +246,8 @@ curl -H "Authorization: Bearer YOUR_TOKEN" \
 
 기존 v1 API도 계속 작동합니다:
 ```bash
-curl https://hyenimc-worker.devbug.me/api/mods
-curl https://hyenimc-worker.devbug.me/api/mods/hyenihelper/latest
+curl https://HYENIMC_WORKER_URL/api/mods
+curl https://HYENIMC_WORKER_URL/api/mods/hyenihelper/latest
 ```
 
 ---
@@ -346,7 +346,7 @@ cd cloudflare-worker
    • 파일 수: 3
 
 🔗 API 엔드포인트 (v2):
-   https://hyenimc-worker.devbug.me/api/v2/mods/hyenihelper/latest
+   https://HYENIMC_WORKER_URL/api/v2/mods/hyenihelper/latest
 
 💡 다음 단계: registry 업데이트
    ./update-registry-v2.sh hyenihelper
@@ -379,7 +379,7 @@ cd cloudflare-worker
 📊 업데이트된 모드: 1 개
 
 🔗 확인 (v2):
-   https://hyenimc-worker.devbug.me/api/v2/mods
+   https://HYENIMC_WORKER_URL/api/v2/mods
 ```
 
 ---
@@ -502,16 +502,16 @@ const downloadUrl = getModDownloadUrl(
 
 ```bash
 # 레지스트리
-curl -s https://hyenimc-worker.devbug.me/api/v2/mods | jq '.mods[].id'
+curl -s https://HYENIMC_WORKER_URL/api/v2/mods | jq '.mods[].id'
 
 # 모드 상세 정보
-curl -s https://hyenimc-worker.devbug.me/api/v2/mods/hyenihelper/latest | jq .
+curl -s https://HYENIMC_WORKER_URL/api/v2/mods/hyenihelper/latest | jq .
 
 # 게임 버전 확인
-curl -s https://hyenimc-worker.devbug.me/api/v2/mods/hyenihelper/latest | jq '.gameVersions'
+curl -s https://HYENIMC_WORKER_URL/api/v2/mods/hyenihelper/latest | jq '.gameVersions'
 
 # 로더별 파일 확인
-curl -s https://hyenimc-worker.devbug.me/api/v2/mods/hyenihelper/latest | jq '.loaders.neoforge.gameVersions | keys'
+curl -s https://HYENIMC_WORKER_URL/api/v2/mods/hyenihelper/latest | jq '.loaders.neoforge.gameVersions | keys'
 ```
 
 ### 2. 런처 테스트
@@ -587,7 +587,7 @@ MOD_ID="$1"
 GAME_VERSION="$2"
 
 # v1 데이터 가져오기
-V1_DATA=$(curl -s https://hyenimc-worker.devbug.me/api/mods/$MOD_ID/latest)
+V1_DATA=$(curl -s https://HYENIMC_WORKER_URL/api/mods/$MOD_ID/latest)
 
 # v2 형식으로 변환
 # (실제로는 JAR 파일을 다시 배포하는게 더 안전)

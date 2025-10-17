@@ -111,7 +111,7 @@ npm version patch   # 또는 minor, major
 git push origin main --tags
 
 # 3. GitHub Actions 자동 실행 확인
-# https://github.com/devbug/HyeniMC/actions
+# https://github.com/hyeniworld/HyeniMC/actions
 ```
 
 ---
@@ -131,7 +131,7 @@ git push origin main --tags
                  ↓
 ┌─────────────────────────────────────────────────────────┐
 │              GitHub Releases API                         │
-│  https://api.github.com/repos/devbug/HyeniMC/releases   │
+│  https://api.github.com/repos/hyeniworld/HyeniMC/releases   │
 └────────────────┬────────────────────────────────────────┘
                  │
                  │ 2. latest.yml 다운로드
@@ -370,7 +370,7 @@ git tag -d v0.2.0
 git push origin :refs/tags/v0.2.0
 
 # 3. GitHub Release 삭제 (수동)
-# https://github.com/devbug/HyeniMC/releases
+# https://github.com/hyeniworld/HyeniMC/releases
 
 # 4. 이전 버전으로 복구
 git reset --hard v0.1.0
@@ -439,7 +439,7 @@ actions/upload-artifact: v3 is deprecated
 
 **로그 확인**:
 ```
-https://github.com/devbug/HyeniMC/actions
+https://github.com/hyeniworld/HyeniMC/actions
 ```
 
 ### 문제 3: 자동 업데이트가 작동하지 않음
@@ -454,7 +454,7 @@ https://github.com/devbug/HyeniMC/actions
 **수동 확인**:
 ```bash
 # latest.yml 다운로드 테스트
-curl -L https://github.com/devbug/HyeniMC/releases/latest/download/latest.yml
+curl -L https://github.com/hyeniworld/HyeniMC/releases/latest/download/latest.yml
 ```
 
 ### 문제 4: 버전이 업데이트되지 않음

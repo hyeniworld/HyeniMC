@@ -40,10 +40,10 @@ https://hyenimc-worker.YOUR_ACCOUNT.workers.dev/health
 
 ```bash
 # Before
-CURSEFORGE_PROXY_URL=https://hyenimc-curseforge-proxy.devbug.workers.dev
+CURSEFORGE_PROXY_URL=HYENIMC_CURSEFORGE_WORKER_URL
 
 # After
-CURSEFORGE_PROXY_URL=https://hyenimc-worker.devbug.workers.dev
+CURSEFORGE_PROXY_URL=HYENIMC_WORKER_URL
 ```
 
 ### 3. 런처 테스트
@@ -98,7 +98,7 @@ wrangler delete hyenimc-curseforge-proxy
 
 ```bash
 # .env 파일 수정
-CURSEFORGE_PROXY_URL=https://hyenimc-curseforge-proxy.devbug.workers.dev
+CURSEFORGE_PROXY_URL=HYENIMC_CURSEFORGE_WORKER_URL
 
 # 런처 재시작
 ```

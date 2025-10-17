@@ -2,9 +2,9 @@
 
 ## 🎯 목표
 
-**devbug 서버 전용 모드 자동 관리 시스템**
+**혜니월드 서버 전용 모드 자동 관리 시스템**
 
-- ✅ `*.devbug.ing`, `*.devbug.me` 서버 접속 시 모드 자동 체크 & 업데이트
+- ✅ `*.hyeniworld.com` 서버 접속 시 모드 자동 체크 & 업데이트
 - ✅ 일반 서버(`hypixel.net`, `localhost` 등)는 모드 체크 스킵
 - ✅ Worker 레지스트리 기반 모드 관리
 - ✅ 토큰 기반 인증
@@ -21,7 +21,7 @@
 1. Minecraft 다운로드
 2. 로더(Fabric/NeoForge) 설치
 3. 서버 주소 확인 ← NEW!
-   ├─ *.devbug.ing or *.devbug.me?
+   ├─ *.hyeniworld.com?
    │  ├─ YES: Worker API 호출
    │  │  ├─ 레지스트리에서 모드 목록 가져오기
    │  │  ├─ 로컬 모드 버전 체크
@@ -46,15 +46,14 @@ static isRequiredModServer(serverAddress: string): boolean {
   if (!serverAddress) return false;
   
   const normalized = serverAddress.toLowerCase().trim();
-  return normalized.endsWith('.devbug.ing') || 
-         normalized.endsWith('.devbug.me');
+  return normalized.endsWith('.hyeniworld.com');
 }
 ```
 
 **동작 예시:**
 ```
-play.devbug.ing      → ✅ 모드 체크
-test.devbug.me       → ✅ 모드 체크
+play.example.com      → ✅ 모드 체크
+test.hyeniworld.com   → ✅ 모드 체크
 mc.hypixel.net       → ❌ 스킵
 localhost:25565      → ❌ 스킵
 (빈 문자열/싱글)     → ❌ 스킵
@@ -169,8 +168,8 @@ if (ModUpdater.isRequiredModServer(profile.serverAddress || '')) {
 
 **테스트 시나리오:**
 
-1. **devbug 서버 프로필**
-   - 서버: `play.devbug.ing`
+1. **혜니월드 서버 프로필**
+   - 서버: `play.example.com`
    - 토큰 없음 → 에러
    - 토큰 있음 → 모드 자동 설치
 
@@ -226,10 +225,10 @@ interface ModUpdateInfo {
 
 ## 🎯 성공 기준
 
-- [ ] devbug 서버 프로필만 모드 체크
+- [ ] 혜니월드 서버 프로필만 모드 체크
 - [ ] Worker 레지스트리의 모든 모드 자동 감지
 - [ ] 게임 실행 전 자동 업데이트
-- [ ] 토큰 없으면 devbug 서버 실행 차단
+- [ ] 토큰 없으면 혜니월드 서버 실행 차단
 - [ ] 일반 서버는 모드 체크 스킵
 - [ ] UI에서 업데이트 진행률 표시
 - [ ] 프로필 상세 페이지에서 모드 상태 확인 가능
@@ -280,7 +279,7 @@ touch src/main/services/mod-updater.ts
 
 ## 💡 핵심 포인트
 
-1. **서버 필터링이 핵심**: `*.devbug.ing`, `*.devbug.me` 만 체크
+1. **서버 필터링이 핵심**: `*.hyeniworld.com` 만 체크
 2. **유연한 파일명**: `{modId}-*.jar` 패턴으로 모든 파일명 지원
 3. **토큰 공유**: `hyenihelper-config.json` 모든 모드 공유
 4. **단계적 구현**: Step 1 + Step 3만 완료해도 핵심 기능 동작

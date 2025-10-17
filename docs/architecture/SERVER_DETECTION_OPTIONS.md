@@ -2,7 +2,7 @@
 
 ## 📋 개요
 
-필수 모드 자동 업데이트 시스템에서 **"devbug 서버인지 판단하는 방법"**에 대한 3가지 옵션 비교 분석
+필수 모드 자동 업데이트 시스템에서 **"혜니월드 서버인지 판단하는 방법"**에 대한 3가지 옵션 비교 분석
 
 ---
 
@@ -57,25 +57,24 @@ async isRequiredModServer(
   // Step 1: Profile 설정 체크 (최우선)
   if (profileServerAddress?.trim()) {
     const normalized = profileServerAddress.toLowerCase().trim();
-    const isDevbug = normalized.endsWith('.devbug.ing') || 
-                     normalized.endsWith('.devbug.me');
+    const isHyeniWorld = normalized.endsWith('.hyeniworld.com');
     
-    if (isDevbug) {
-      console.log('✅ devbug server from profile');
+    if (isHyeniWorld) {
+      console.log('✅ HyeniWorld server from profile');
       return true;
     }
     
     // 명시적으로 다른 주소 설정 → servers.dat 체크 스킵
-    console.log('⏭️ Non-devbug server specified, skip servers.dat');
+    console.log('⏭️ Non-HyeniWorld server specified, skip servers.dat');
     return false;
   }
   
   // Step 2: servers.dat 자동 감지
   console.log('🔍 Checking servers.dat...');
-  return await checkServersDatForDevbug(gameDirectory);
+  return await checkServersDatForHyeniWorld(gameDirectory);
 }
 
-private async checkServersDatForDevbug(gameDirectory: string): Promise<boolean> {
+private async checkServersDatForHyeniWorld(gameDirectory: string): Promise<boolean> {
   const serversDatPath = path.join(gameDirectory, 'servers.dat');
   
   try {
@@ -85,7 +84,7 @@ private async checkServersDatForDevbug(gameDirectory: string): Promise<boolean> 
     
     return servers.some((server: any) => {
       const ip = (server?.ip?.value || '').toLowerCase();
-      return ip.endsWith('.devbug.ing') || ip.endsWith('.devbug.me');
+      return ip.endsWith('.hyeniworld.com');
     });
   } catch {
     return false;
@@ -97,21 +96,21 @@ private async checkServersDatForDevbug(gameDirectory: string): Promise<boolean> 
 
 #### 시나리오 1: 완전 자동 (가장 일반적)
 ```
-1. 사용자가 Minecraft 멀티플레이에서 play.devbug.ing 추가
+1. 사용자가 Minecraft 멀티플레이에서 play.example.com 추가
 2. 프로필 생성 (서버 주소 입력 안 함)
 3. 게임 실행 → servers.dat 자동 감지 → 모드 자동 체크 ✅
 ```
 
 #### 시나리오 2: 명시적 설정 (고급 사용자)
 ```
-1. 프로필 설정에서 "서버 주소: play.devbug.ing" 입력
+1. 프로필 설정에서 "서버 주소: play.example.com" 입력
 2. 게임 실행 → Profile 설정 우선 적용 → 모드 자동 체크 ✅
 3. servers.dat는 무시됨
 ```
 
 #### 시나리오 3: 오버라이드 (다른 서버로 변경)
 ```
-1. servers.dat에 play.devbug.ing 있음
+1. servers.dat에 play.example.com 있음
 2. 프로필 설정에서 "서버 주소: mc.hypixel.net" 입력
 3. 게임 실행 → Profile 설정 우선 → 모드 체크 스킵 ❌
 ```
@@ -120,7 +119,7 @@ private async checkServersDatForDevbug(gameDirectory: string): Promise<boolean> 
 ```
 1. servers.dat에 mc.hypixel.net만 있음
 2. 프로필 설정 비어있음
-3. 게임 실행 → servers.dat 체크 → devbug 서버 없음 → 스킵 ❌
+3. 게임 실행 → servers.dat 체크 → 혜니월드 서버 없음 → 스킵 ❌
 ```
 
 #### 시나리오 5: 싱글플레이
@@ -147,7 +146,7 @@ private async checkServersDatForDevbug(gameDirectory: string): Promise<boolean> 
    - UI 변경 최소화
 
 4. **유연성**
-   - devbug 서버 여러 개 → 자동 감지
+   - 혜니월드 서버 여러 개 → 자동 감지
    - 특정 서버 강제 지정 → Profile 설정
    - 일반 서버로 오버라이드 가능
 
@@ -176,7 +175,7 @@ private async checkServersDatForDevbug(gameDirectory: string): Promise<boolean> 
 ```
 src/main/services/mod-updater.ts
 ├─ isRequiredModServer(profileServerAddress, gameDirectory)
-└─ checkServersDatForDevbug(gameDirectory)
+└─ checkServersDatForHyeniWorld(gameDirectory)
 
 src/main/ipc/profile.ts (PROFILE_LAUNCH)
 └─ await ModUpdater.isRequiredModServer(profile.serverAddress, instanceDir)
@@ -202,8 +201,7 @@ static isRequiredModServer(serverAddress: string | undefined): boolean {
   if (!serverAddress?.trim()) return false;
   
   const normalized = serverAddress.toLowerCase().trim();
-  return normalized.endsWith('.devbug.ing') || 
-         normalized.endsWith('.devbug.me');
+  return normalized.endsWith('.hyeniworld.com');
 }
 ```
 
@@ -211,7 +209,7 @@ static isRequiredModServer(serverAddress: string | undefined): boolean {
 
 #### 시나리오 1: 설정 필수
 ```
-1. 프로필 설정에서 "서버 주소: play.devbug.ing" 입력 필수
+1. 프로필 설정에서 "서버 주소: play.example.com" 입력 필수
 2. 게임 실행 → 모드 자동 체크 ✅
 ```
 
@@ -219,7 +217,7 @@ static isRequiredModServer(serverAddress: string | undefined): boolean {
 ```
 1. 프로필 설정 비어있음
 2. 게임 실행 → 모드 체크 스킵 ❌
-3. servers.dat에 devbug 서버 있어도 무시됨
+3. servers.dat에 혜니월드 서버 있어도 무시됨
 ```
 
 ### 장점
@@ -283,8 +281,8 @@ src/main/ipc/profile.ts (PROFILE_LAUNCH)
 **servers.dat만 사용, Profile 설정 무시**
 
 ```
-servers.dat에 devbug 서버 있음 → 체크
-servers.dat에 devbug 서버 없음 → 스킵
+servers.dat에 혜니월드 서버 있음 → 체크
+servers.dat에 혜니월드 서버 없음 → 스킵
 ```
 
 ### 동작 흐름
@@ -300,7 +298,7 @@ static async isRequiredModServer(gameDirectory: string): Promise<boolean> {
     
     return servers.some((server: any) => {
       const ip = (server?.ip?.value || '').toLowerCase();
-      return ip.endsWith('.devbug.ing') || ip.endsWith('.devbug.me');
+      return ip.endsWith('.hyeniworld.com');
     });
   } catch {
     return false;
@@ -312,19 +310,19 @@ static async isRequiredModServer(gameDirectory: string): Promise<boolean> {
 
 #### 시나리오 1: 완전 자동
 ```
-1. 멀티플레이에서 play.devbug.ing 추가
+1. 멀티플레이에서 play.example.com 추가
 2. 게임 실행 → 자동 감지 → 모드 체크 ✅
 ```
 
 #### 시나리오 2: 일반 서버
 ```
 1. 멀티플레이에서 mc.hypixel.net만 추가
-2. 게임 실행 → devbug 서버 없음 → 스킵 ❌
+2. 게임 실행 → 혜니월드 서버 없음 → 스킵 ❌
 ```
 
 #### 시나리오 3: 오버라이드 불가
 ```
-1. servers.dat에 play.devbug.ing 있음
+1. servers.dat에 play.example.com 있음
 2. 프로필 설정에서 "mc.hypixel.net" 입력
 3. 게임 실행 → Profile 설정 무시 → 모드 강제 체크 ✅
 4. ⚠️ 사용자 의도와 다를 수 있음
@@ -358,7 +356,7 @@ static async isRequiredModServer(gameDirectory: string): Promise<boolean> {
    - UI에 설정 있는데 작동 안 함
 
 4. **엣지 케이스**
-   - servers.dat에 여러 서버 → devbug 하나라도 있으면 체크
+   - servers.dat에 여러 서버 → 혜니월드 하나라도 있으면 체크
    - 의도와 다를 수 있음
 
 ### 구현 복잡도
@@ -464,7 +462,7 @@ src/main/ipc/profile.ts (PROFILE_LAUNCH)
 ```typescript
 // servers.dat 파싱 실패 시
 try {
-  return await checkServersDatForDevbug(gameDirectory);
+  return await checkServersDatForHyeniWorld(gameDirectory);
 } catch (error) {
   console.error('[ModUpdater] servers.dat parse error:', error);
   return false; // fallback to false (safe)
@@ -496,7 +494,7 @@ import nbt from 'prismarine-nbt'; // 이미 사용 중
 
 // 개선안
 <p className="text-xs text-gray-400 mt-2">
-  💡 <strong>자동 감지:</strong> 멀티플레이 서버 목록에 devbug 서버가 있으면 자동으로 감지됩니다.<br/>
+  💡 <strong>자동 감지:</strong> 멀티플레이 서버 목록에 혜니월드 서버가 있으면 자동으로 감지됩니다.<br/>
   이 필드에 주소를 입력하면 자동 감지를 덮어씁니다 (예: 테스트 서버 강제 지정).
 </p>
 <p className="text-xs text-hyeni-pink-400 mt-1">
@@ -512,13 +510,13 @@ import nbt from 'prismarine-nbt'; // 이미 사용 중
   <h3>서버 감지 상태</h3>
   {detectedServer ? (
     <div className="text-green-400">
-      ✅ devbug 서버 감지됨: {detectedServer}
+      ✅ 혜니월드 서버 감지됨: {detectedServer}
       {source === 'profile' && ' (프로필 설정)'}
       {source === 'servers.dat' && ' (서버 목록)'}
     </div>
   ) : (
     <div className="text-gray-400">
-      ℹ️ devbug 서버 감지 안 됨 (모드 자동 업데이트 비활성)
+      ℹ️ 혜니월드 서버 감지 안 됨 (모드 자동 업데이트 비활성)
     </div>
   )}
 </div>
@@ -533,18 +531,18 @@ import nbt from 'prismarine-nbt'; // 이미 사용 중
 ```typescript
 describe('ModUpdater.isRequiredModServer (Hybrid)', () => {
   test('Scenario 1: 완전 자동 (servers.dat만)', async () => {
-    // servers.dat에 play.devbug.ing
+    // servers.dat에 play.example.com
     // Profile 설정 없음
     expect(await isRequiredModServer(undefined, gameDir)).toBe(true);
   });
   
   test('Scenario 2: 명시적 설정 (Profile)', async () => {
-    // Profile: play.devbug.ing
-    expect(await isRequiredModServer('play.devbug.ing', gameDir)).toBe(true);
+    // Profile: play.example.com
+    expect(await isRequiredModServer('play.example.com', gameDir)).toBe(true);
   });
   
   test('Scenario 3: 오버라이드 (Profile > servers.dat)', async () => {
-    // servers.dat: play.devbug.ing
+    // servers.dat: play.example.com
     // Profile: mc.hypixel.net
     expect(await isRequiredModServer('mc.hypixel.net', gameDir)).toBe(false);
   });
@@ -567,8 +565,8 @@ describe('ModUpdater.isRequiredModServer (Hybrid)', () => {
 
 ```typescript
 describe('ModUpdater.isRequiredModServer (Profile Only)', () => {
-  test('devbug server set', () => {
-    expect(isRequiredModServer('play.devbug.ing')).toBe(true);
+  test('HyeniWorld server set', () => {
+    expect(isRequiredModServer('play.example.com')).toBe(true);
   });
   
   test('no server or other server', () => {
@@ -582,12 +580,12 @@ describe('ModUpdater.isRequiredModServer (Profile Only)', () => {
 
 ```typescript
 describe('ModUpdater.isRequiredModServer (servers.dat Only)', () => {
-  test('devbug server in servers.dat', async () => {
-    expect(await isRequiredModServer(gameDirWithDevbug)).toBe(true);
+  test('HyeniWorld server in servers.dat', async () => {
+    expect(await isRequiredModServer(gameDirWithHyeniWorld)).toBe(true);
   });
   
-  test('no devbug server in servers.dat', async () => {
-    expect(await isRequiredModServer(gameDirWithoutDevbug)).toBe(false);
+  test('no HyeniWorld server in servers.dat', async () => {
+    expect(await isRequiredModServer(gameDirWithoutHyeniWorld)).toBe(false);
   });
   
   test('servers.dat not found', async () => {
@@ -605,7 +603,7 @@ describe('ModUpdater.isRequiredModServer (servers.dat Only)', () => {
 ```
 1. mod-updater.ts 작성
    - isRequiredModServer() 구현
-   - checkServersDatForDevbug() 구현
+   - checkServersDatForHyeniWorld() 구현
    
 2. profile.ts 통합
    - PROFILE_LAUNCH 핸들러 수정

@@ -313,8 +313,8 @@ npm run dist
 
 2. ✅ API 엔드포인트 테스트
    ```bash
-   curl https://hyenimc-worker.devbug.me/api/v2/mods
-   curl https://hyenimc-worker.devbug.me/api/mods  # v1 확인
+   curl https://HYENIMC_WORKER_URL/api/v2/mods
+   curl https://HYENIMC_WORKER_URL/api/mods  # v1 확인
    ```
 
 ### 단기 (1-2일)

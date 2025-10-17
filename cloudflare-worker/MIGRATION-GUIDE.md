@@ -62,7 +62,7 @@ wrangler deploy
 ✅ 출력 확인:
 ```
 Published hyenimc-worker (1.23s)
-  https://hyenimc-worker.devbug.workers.dev
+  HYENIMC_WORKER_URL
 ```
 
 ---
@@ -126,11 +126,11 @@ cd d:\git\HyeniMC\cloudflare-worker
 
 ```powershell
 # 새 API 엔드포인트 테스트
-curl https://hyenimc-worker.devbug.workers.dev/api/mods
-curl https://hyenimc-worker.devbug.workers.dev/api/mods/hyenihelper/latest
+curl HYENIMC_WORKER_URL/api/mods
+curl HYENIMC_WORKER_URL/api/mods/hyenihelper/latest
 
 # 기존 엔드포인트 (하위 호환성 확인)
-curl https://hyenimc-worker.devbug.workers.dev/api/hyenihelper/latest
+curl HYENIMC_WORKER_URL/api/hyenihelper/latest
 
 # 런처 테스트
 npm run dev

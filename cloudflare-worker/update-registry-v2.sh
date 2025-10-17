@@ -44,7 +44,7 @@ fi
 
 # Get Worker URL
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-WORKER_URL=$("$SCRIPT_DIR/scripts/get-worker-url.sh" 2>/dev/null || echo "https://hyenimc-worker.devbug.me")
+WORKER_URL=$("$SCRIPT_DIR/scripts/get-worker-url.sh" 2>/dev/null)
 
 echo -e "${CYAN}📝 모드 레지스트리 업데이트 v2.0${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"

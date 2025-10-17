@@ -92,7 +92,7 @@ wrangler dev
 **나쁜 예:**
 ```typescript
 // ❌ 하드코딩 (GitHub에 노출됨)
-const PROXY_URL = 'https://hyenimc-worker.devbug.workers.dev';
+const PROXY_URL = 'HYENIMC_WORKER_URL';
 ```
 
 **좋은 예:**
@@ -121,7 +121,7 @@ wrangler secret put CURSEFORGE_API_KEY
 **나쁜 예:**
 ```javascript
 // ❌ 코드에 하드코딩
-const TOKEN_API = 'https://api.devbug.ing/check';
+const TOKEN_API = 'https://api.example.com/check';
 ```
 
 **좋은 예:**

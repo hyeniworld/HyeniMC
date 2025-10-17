@@ -8,7 +8,7 @@ Cloudflare Worker에서 민감한 정보(API URL, API Key 등)를 안전하게 �
 CurseForge API 인증 키
 
 ### 2. `TOKEN_CHECK_API_URL`
-토큰 검증 API 서버 주소 (예: `https://api.devbug.ing/api/v1/hyeniworld/whitelist/check`)
+토큰 검증 API 서버 주소
 
 ## 설정 방법
 
@@ -60,7 +60,7 @@ wrangler secret list
 # .dev.vars 파일 생성
 cat > .dev.vars << EOF
 CURSEFORGE_API_KEY=your_curseforge_api_key_here
-TOKEN_CHECK_API_URL=https://api.devbug.ing/api/v1/hyeniworld/whitelist/check
+TOKEN_CHECK_API_URL=your_token_check_api_url_here
 EOF
 ```
 

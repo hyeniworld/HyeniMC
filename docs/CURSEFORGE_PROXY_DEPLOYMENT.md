@@ -205,7 +205,7 @@ https://hyenimc-worker.YOUR_USERNAME.workers.dev
 
 **예시 (실제 배포):**
 ```
-https://hyenimc-worker.devbug.workers.dev
+HYENIMC_WORKER_URL
 ```
 
 ---
@@ -310,7 +310,7 @@ npm run dev
 
 **예상 콘솔 출력:**
 ```
-[CurseForge] Using proxy server: https://hyenimc-worker.devbug.workers.dev
+[CurseForge] Using proxy server: HYENIMC_WORKER_URL
 [CurseForge] Searching mods: "sodium"
 [CurseForge] Found 15 mods
 ```

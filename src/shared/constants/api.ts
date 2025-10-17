@@ -34,7 +34,7 @@ export const API_ENDPOINTS = {
 
 export const API_HEADERS = {
   MODRINTH: {
-    'User-Agent': 'HyeniMC/1.0.0 (hyenimc@devbug.me)',
+    'User-Agent': 'HyeniMC/1.0.0 (hyeniworld@devbug.me)',
   },
   CURSEFORGE: {
     'Accept': 'application/json',

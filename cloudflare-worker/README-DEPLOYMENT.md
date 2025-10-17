@@ -144,10 +144,10 @@ dir C:\hyenihelper\build
 #    • 파일 수: 3 (JAR + manifest)
 # 
 # 🔗 API 엔드포인트:
-#    https://hyenimc-worker.devbug.workers.dev/api/mods/hyenihelper/latest
+#    HYENIMC_WORKER_URL/api/mods/hyenihelper/latest
 
 # 3. 테스트
-curl https://hyenimc-worker.devbug.workers.dev/api/mods/hyenihelper/latest
+curl HYENIMC_WORKER_URL/api/mods/hyenihelper/latest
 ```
 
 ### 예시 2: 여러 모드 순차 배포
@@ -306,16 +306,16 @@ hyenimc-releases/
 
 ```powershell
 # 모드 목록
-curl https://hyenimc-worker.devbug.workers.dev/api/mods
+curl HYENIMC_WORKER_URL/api/mods
 
 # 특정 모드 최신 버전
-curl https://hyenimc-worker.devbug.workers.dev/api/mods/hyenihelper/latest
+curl HYENIMC_WORKER_URL/api/mods/hyenihelper/latest
 
 # 특정 모드 전체 버전 목록
-curl https://hyenimc-worker.devbug.workers.dev/api/mods/hyenihelper/versions
+curl HYENIMC_WORKER_URL/api/mods/hyenihelper/versions
 
 # Health check
-curl https://hyenimc-worker.devbug.workers.dev/health
+curl HYENIMC_WORKER_URL/health
 ```
 
 ### 런처 테스트
@@ -387,7 +387,7 @@ wrangler --version
 .\rollback-mod.ps1 -ModId hyenihelper -Version 1.0.1
 
 # 4. 확인
-curl https://hyenimc-worker.devbug.workers.dev/api/mods/hyenihelper/latest
+curl HYENIMC_WORKER_URL/api/mods/hyenihelper/latest
 # { "version": "1.0.1" } ← 안전한 버전으로 복구됨
 ```
 
@@ -402,7 +402,7 @@ curl https://hyenimc-worker.devbug.workers.dev/api/mods/hyenihelper/latest
 # ✅ R2에서 파일 덮어쓰기됨
 
 # 3. 확인
-curl https://hyenimc-worker.devbug.workers.dev/api/mods/hyenihelper/latest
+curl HYENIMC_WORKER_URL/api/mods/hyenihelper/latest
 ```
 
 ### 시나리오 3: 최신 버전 확인

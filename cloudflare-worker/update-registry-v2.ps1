@@ -57,8 +57,6 @@ $SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
 $workerUrlScript = Join-Path $SCRIPT_DIR "scripts\Get-WorkerUrl.ps1"
 if (Test-Path $workerUrlScript) {
     $WORKER_URL = & $workerUrlScript
-} else {
-    $WORKER_URL = "https://hyenimc-worker.devbug.me"
 }
 
 Write-ColorOutput "📝 모드 레지스트리 업데이트 v2.0" "Cyan"

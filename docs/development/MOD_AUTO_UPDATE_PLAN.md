@@ -2,7 +2,7 @@
 
 ## 📋 목표
 
-**특정 서버 (*.devbug.ing, *.devbug.me) 프로필**의 게임 실행 전, Cloudflare Worker에서 배포하는 **모든 모드**를 자동으로 체크하고 업데이트하는 시스템 구축
+**특정 서버 프로필**의 게임 실행 전, Cloudflare Worker에서 배포하는 **모든 모드**를 자동으로 체크하고 업데이트하는 시스템 구축
 
 > ⚠️ **핵심 컨셉**: Worker에서 배포하는 모드 = 필수 모드 (별도 플래그 불필요)
 > 
@@ -31,7 +31,7 @@
 1. Minecraft 다운로드
 2. 로더 설치
 3. 서버 주소 확인 ✅ (NEW!)
-   ├─ *.devbug.ing 또는 *.devbug.me → 필수 모드 체크 & 업데이트
+   ├─ *.hyeniworld.com → 필수 모드 체크 & 업데이트
    └─ 기타 서버 → 스킵
 4. 게임 실행
 ```
@@ -140,7 +140,7 @@ console.log('[IPC Profile] Download verification completed');
 // 🆕 NEW: 서버 주소 확인 후 모드 체크
 const { ModUpdater } = await import('../services/mod-updater');
 
-// 서버 주소가 *.devbug.ing 또는 *.devbug.me인 경우만 모드 체크
+// 서버 주소가 *.hyeniworld.com인 경우만 모드 체크
 if (ModUpdater.isRequiredModServer(profile.serverAddress || '')) {
   console.log(`[IPC Profile] Server ${profile.serverAddress} requires mod validation`);
   console.log('[IPC Profile] Checking worker-deployed mods...');
@@ -411,9 +411,9 @@ Discord에서 /auth 명령어를 사용하여 인증하세요.
 5. 게임 실행 성공
 ```
 
-**시나리오 3: 토큰 없음 (devbug 서버)**
+**시나리오 3: 토큰 없음 (혜니월드 서버)**
 ```
-1. 프로필 생성 (serverAddress: play.devbug.ing, 토큰 없음)
+1. 프로필 생성 (serverAddress: play.example.com, 토큰 없음)
 2. 게임 실행
 3. 인증 요구 메시지 확인
 4. 실행 차단 확인
@@ -474,14 +474,13 @@ static isRequiredModServer(serverAddress: string): boolean {
   if (!serverAddress) return false;
   
   const normalized = serverAddress.toLowerCase().trim();
-  return normalized.endsWith('.devbug.ing') || 
-         normalized.endsWith('.devbug.me');
+  return normalized.endsWith('.hyeniworld.com');
 }
 ```
 
 **적용:**
-- ✅ `play.devbug.ing` → 필수 모드 체크
-- ✅ `test.devbug.me` → 필수 모드 체크
+- ✅ `play.example.com` → 필수 모드 체크
+- ✅ `test.hyeniworld.com` → 필수 모드 체크
 - ❌ `mc.hypixel.net` → 스킵
 - ❌ `localhost` → 스킵
 - ❌ (빈 문자열) → 스킵
@@ -542,8 +541,8 @@ hyenicore-neoforge-2.0.1.jar         ✅
 ## 🎯 성공 기준
 
 - [ ] Worker 레지스트리의 모든 모드 자동 감지
-- [ ] devbug 서버 프로필만 게임 실행 전 자동 업데이트
-- [ ] 토큰 없으면 devbug 서버 게임 실행 차단
+- [ ] 혜니월드 서버 프로필만 게임 실행 전 자동 업데이트
+- [ ] 토큰 없으면 혜니월드 서버 게임 실행 차단
 - [ ] UI에서 업데이트 진행률 표시
 - [ ] 프로필 상세 페이지에서 모든 모드 상태 확인 가능
 

@@ -456,18 +456,18 @@ wrangler r2 object put MOD_FILES/mods/hyenihelper/versions/1.0.1/neoforge/hyenih
 
 ### 1. 레지스트리 조회
 ```bash
-curl https://hyenimc-worker.devbug.me/api/mods | jq .
+curl https://HYENIMC_WORKER_URL/api/mods | jq .
 ```
 
 ### 2. 모드 상세 정보
 ```bash
-curl https://hyenimc-worker.devbug.me/api/mods/hyenihelper/latest | jq .
+curl https://HYENIMC_WORKER_URL/api/mods/hyenihelper/latest | jq .
 ```
 
 ### 3. 파일 다운로드
 ```bash
 curl -H "Authorization: Bearer YOUR_TOKEN" \
-  https://hyenimc-worker.devbug.me/download/mods/hyenihelper/versions/1.0.1/neoforge/hyenihelper-1.0.1-neoforge.jar \
+  https://HYENIMC_WORKER_URL/download/mods/hyenihelper/versions/1.0.1/neoforge/hyenihelper-1.0.1-neoforge.jar \
   -o hyenihelper.jar
 ```
 
@@ -496,7 +496,7 @@ curl -H "Authorization: Bearer YOUR_TOKEN" \
 wrangler deploy
 
 # 배포 확인
-curl https://hyenimc-worker.devbug.me/api/mods
+curl https://HYENIMC_WORKER_URL/api/mods
 ```
 
 ---
