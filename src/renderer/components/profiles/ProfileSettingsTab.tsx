@@ -61,7 +61,7 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
   
   // Server address (for HyeniHelper auth)
   const [serverAddress, setServerAddress] = useState(profile?.serverAddress || '');
-  const [isDevbugServer, setIsDevbugServer] = useState(false);
+  const [isHyeniWorldServer, setIsHyeniWorldServer] = useState(false);
   const [detectionSource, setDetectionSource] = useState<'profile' | 'servers.dat' | null>(null);
   
   const [saving, setSaving] = useState(false);
@@ -193,16 +193,16 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
     // Check profile serverAddress first (manual override)
     if (serverAddress?.trim()) {
       const normalized = serverAddress.toLowerCase().trim();
-      const isDevbug = normalized.endsWith('.devbug.ing') || normalized.endsWith('.devbug.me');
-      setIsDevbugServer(isDevbug);
-      setDetectionSource(isDevbug ? 'profile' : null);
+      const isHyeniWorld = normalized.endsWith('.devbug.ing') || normalized.endsWith('.devbug.me');
+      setIsHyeniWorldServer(isHyeniWorld);
+      setDetectionSource(isHyeniWorld ? 'profile' : null);
       return;
     }
     
     // Note: servers.dat auto-detection happens at game launch time
     // We can't read it here without adding an IPC handler
     // For now, just show that auto-detection will happen
-    setIsDevbugServer(false);
+    setIsHyeniWorldServer(false);
     setDetectionSource(null);
   };
   
@@ -906,14 +906,14 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
           />
           <div className="mt-3 space-y-3">
             {/* Server detection status */}
-            <div className={`p-3 rounded-lg ${isDevbugServer ? 'bg-green-900/20 border border-green-700/30' : 'bg-gray-800/50 border border-gray-700/30'}`}>
+            <div className={`p-3 rounded-lg ${isHyeniWorldServer ? 'bg-green-900/20 border border-green-700/30' : 'bg-gray-800/50 border border-gray-700/30'}`}>
               <div className="flex items-center gap-2">
-                {isDevbugServer ? (
+                {isHyeniWorldServer ? (
                   <>
                     <span className="text-green-400 text-lg">✅</span>
                     <div className="flex-1">
                       <p className="text-sm font-medium text-green-400">
-                        devbug 서버 감지됨 - 필수 모드 자동 업데이트 활성화
+                        혜니월드 서버 감지됨 - 필수 모드 자동 업데이트 활성화
                       </p>
                       {detectionSource && (
                         <p className="text-xs text-gray-400 mt-1">
@@ -940,8 +940,7 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
             {/* Help text */}
             <div className="space-y-2">
               <p className="text-xs text-gray-400">
-                💡 <strong>자동 감지:</strong> 멀티플레이 서버 목록에 devbug 서버<br/>
-                (<code className="px-1 py-0.5 bg-gray-800 rounded text-hyeni-pink-400">*.devbug.ing</code>, <code className="px-1 py-0.5 bg-gray-800 rounded text-hyeni-pink-400">*.devbug.me</code>)가 
+                💡 <strong>자동 감지:</strong> 멀티플레이 서버 목록에 혜니월드 서버가 
                 있으면 자동으로 필수 모드를 업데이트합니다.
               </p>
               <p className="text-xs text-gray-400">

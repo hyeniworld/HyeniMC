@@ -286,7 +286,7 @@ export function ProfileList() {
                 </div>
               )}
               
-              {/* devbug Server Badge */}
+              {/* HyeniWorld Server Badge */}
               {profile.serverAddress && (
                 profile.serverAddress.toLowerCase().endsWith('.devbug.ing') || 
                 profile.serverAddress.toLowerCase().endsWith('.devbug.me')

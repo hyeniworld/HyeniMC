@@ -378,7 +378,7 @@ export function registerProfileHandlers(): void {
       );
       
       if (requiresMods) {
-        console.log('[IPC Profile] 🎯 devbug server detected - checking mods...');
+        console.log('[IPC Profile] 🎯 HyeniWorld server detected - checking mods...');
         
         try {
           const workerModUpdater = new WorkerModUpdater();
@@ -444,7 +444,7 @@ export function registerProfileHandlers(): void {
           throw modError;
         }
       } else {
-        console.log('[IPC Profile] ⏭️  Non-devbug server - skipping mod check');
+        console.log('[IPC Profile] ⏭️  Non-HyeniWorld server - skipping mod check');
       }
 
       // Get account info from global state (passed as parameter)

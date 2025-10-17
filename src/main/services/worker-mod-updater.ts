@@ -5,7 +5,7 @@
  * Implements Option A (Hybrid) server detection:
  * 1. Priority: UI Profile.serverAddress (explicit control)
  * 2. Fallback: servers.dat auto-detection
- * 3. Skip: if neither devbug server found
+ * 3. Skip: if neither HyeniWorld server found
  */
 
 import * as path from 'path';
@@ -124,7 +124,7 @@ export class WorkerModUpdater {
    * 
    * @param profileServerAddress - Server address from profile settings (UI)
    * @param gameDirectory - Game directory to check servers.dat
-   * @returns true if devbug server detected
+   * @returns true if HyeniWorld server detected
    */
   static async isRequiredModServer(
     profileServerAddress: string | undefined,
@@ -133,29 +133,29 @@ export class WorkerModUpdater {
     // Step 1: Check Profile.serverAddress (highest priority)
     if (profileServerAddress?.trim()) {
       const normalized = profileServerAddress.toLowerCase().trim();
-      const isDevbug = normalized.endsWith('.devbug.ing') || 
+      const isHyeniWorld = normalized.endsWith('.devbug.ing') || 
                        normalized.endsWith('.devbug.me');
       
-      if (isDevbug) {
-        console.log(`[WorkerModUpdater] ✅ devbug server from profile: ${profileServerAddress}`);
+      if (isHyeniWorld) {
+        console.log(`[WorkerModUpdater] ✅ HyeniWorld server from profile: ${profileServerAddress}`);
         return true;
       }
       
-      // Explicitly set to non-devbug server - skip servers.dat check
-      console.log(`[WorkerModUpdater] ⏭️  Non-devbug server specified: ${profileServerAddress}`);
+      // Explicitly set to non-HyeniWorld server - skip servers.dat check
+      console.log(`[WorkerModUpdater] ⏭️  Non-HyeniWorld server specified: ${profileServerAddress}`);
       return false;
     }
     
     // Step 2: servers.dat auto-detection (fallback)
-    console.log('[WorkerModUpdater] 🔍 Checking servers.dat for devbug servers...');
-    return await this.checkServersDatForDevbug(gameDirectory);
+    console.log('[WorkerModUpdater] 🔍 Checking servers.dat for HyeniWorld servers...');
+    return await this.checkServersDatForHyeniWorld(gameDirectory);
   }
   
   /**
-   * Parse servers.dat and check for devbug servers
+   * Parse servers.dat and check for HyeniWorld servers
    * Reuses logic from protocol/handler.ts
    */
-  private static async checkServersDatForDevbug(gameDirectory: string): Promise<boolean> {
+  private static async checkServersDatForHyeniWorld(gameDirectory: string): Promise<boolean> {
     const serversDatPath = path.join(gameDirectory, 'servers.dat');
     
     try {
@@ -165,18 +165,18 @@ export class WorkerModUpdater {
       
       const servers = parsed?.parsed?.value?.servers?.value?.value || [];
       
-      const devbugServers = servers.filter((server: any) => {
+      const hyeniWorldServers = servers.filter((server: any) => {
         const ip = (server?.ip?.value || '').toLowerCase();
         return ip.endsWith('.devbug.ing') || ip.endsWith('.devbug.me');
       });
       
-      if (devbugServers.length > 0) {
-        const serverList = devbugServers.map((s: any) => s.ip?.value).join(', ');
-        console.log(`[WorkerModUpdater] ✅ devbug servers from servers.dat: ${serverList}`);
+      if (hyeniWorldServers.length > 0) {
+        const serverList = hyeniWorldServers.map((s: any) => s.ip?.value).join(', ');
+        console.log(`[WorkerModUpdater] ✅ HyeniWorld servers from servers.dat: ${serverList}`);
         return true;
       }
       
-      console.log('[WorkerModUpdater] ❌ No devbug servers in servers.dat');
+      console.log('[WorkerModUpdater] ❌ No HyeniWorld servers in servers.dat');
       return false;
     } catch (error) {
       console.log('[WorkerModUpdater] ℹ️  servers.dat not found or unreadable');
