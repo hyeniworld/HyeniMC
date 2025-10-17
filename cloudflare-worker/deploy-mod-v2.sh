@@ -271,7 +271,7 @@ echo -e "${GREEN}   ✅ 업데이트 완료${NC}"
 
 # Get Worker URL
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-WORKER_URL=$("$SCRIPT_DIR/scripts/get-worker-url.sh" 2>/dev/null || echo "https://hyenimc-worker.devbug.me")
+WORKER_URL=$("$SCRIPT_DIR/scripts/get-worker-url.sh" 2>/dev/null)
 
 echo ""
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"

@@ -28,7 +28,7 @@ if (-not (Test-Path $wranglerTomlPath)) {
 $content = Get-Content -Path $wranglerTomlPath -Raw
 
 # [vars] 섹션에서 WORKER_URL 찾기
-if ($content -match '(?ms)\[vars\].*?WORKER_URL\s*=\s*"([^"]+)"') {
+if ($content -match '(?ms).*?WORKER_URL\s*=\s*"([^"]+)"') {
     $workerUrl = $matches[1]
     Write-Output $workerUrl
     exit 0
