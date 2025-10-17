@@ -30,6 +30,11 @@ interface DownloadState {
   // Overall task counters (e.g., files/assets)
   totalTasks?: number;
   completedTasks?: number;
+  // Mod update fields
+  modName?: string;
+  modProgress?: number;
+  totalMods?: number;
+  completedMods?: number;
   show: (versionId?: string) => void;
   hide: () => void;
   setProgress: (partial: Partial<DownloadState>) => void;

@@ -15,6 +15,10 @@ interface DownloadModalProps {
     completedTasks?: number;
     totalTasks?: number;
     overallProgress?: number;
+    modName?: string;
+    modProgress?: number;
+    totalMods?: number;
+    completedMods?: number;
   };
   status: 'downloading' | 'extracting' | 'error';
   error?: string;
@@ -68,8 +72,32 @@ export function DownloadModal({ isOpen, versionId, progress, status, error }: Do
         ) : (
           /* Progress State */
           <div className="space-y-4">
+            {/* Mod Update Progress */}
+            {progress?.modName && (
+              <div className="bg-hyeni-pink-900/20 border-2 border-hyeni-pink-500/30 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-lg">✨</span>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-hyeni-pink-300">필수 모드 업데이트 중</p>
+                    <p className="text-xs text-gray-400">{progress.modName}</p>
+                  </div>
+                </div>
+                <div className="w-full bg-gray-700 rounded-full h-2.5">
+                  <div
+                    className="bg-gradient-to-r from-hyeni-pink-500 to-purple-500 h-2.5 rounded-full transition-all duration-300"
+                    style={{ width: `${progress.modProgress || 0}%` }}
+                  />
+                </div>
+                <div className="text-right mt-1">
+                  <span className="text-xs text-hyeni-pink-400 font-medium">
+                    {progress.modProgress?.toFixed(0) || 0}%
+                  </span>
+                </div>
+              </div>
+            )}
+
             {/* Overall Progress */}
-            {progress?.totalTasks && progress.totalTasks > 0 && (
+            {progress?.totalTasks && progress.totalTasks > 0 && !progress.modName && (
               <div>
                 <div className="flex justify-between text-sm mb-2">
                   <span className="text-gray-400 font-medium">전체 진행률</span>

@@ -56,13 +56,21 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
   
   // Server address (for HyeniHelper auth)
   const [serverAddress, setServerAddress] = useState(profile?.serverAddress || '');
+  const [isDevbugServer, setIsDevbugServer] = useState(false);
+  const [detectionSource, setDetectionSource] = useState<'profile' | 'servers.dat' | null>(null);
   
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     loadGlobalSettings();
     loadJavaInstallations();
+    checkServerDetection();
   }, []);
+  
+  // Check server detection when serverAddress or gameDir changes
+  useEffect(() => {
+    checkServerDetection();
+  }, [serverAddress, gameDir]);
   
   // Load loader versions when loader type changes
   useEffect(() => {
@@ -150,6 +158,23 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
     } finally {
       setLoadingJava(false);
     }
+  };
+  
+  const checkServerDetection = () => {
+    // Check profile serverAddress first (manual override)
+    if (serverAddress?.trim()) {
+      const normalized = serverAddress.toLowerCase().trim();
+      const isDevbug = normalized.endsWith('.devbug.ing') || normalized.endsWith('.devbug.me');
+      setIsDevbugServer(isDevbug);
+      setDetectionSource(isDevbug ? 'profile' : null);
+      return;
+    }
+    
+    // Note: servers.dat auto-detection happens at game launch time
+    // We can't read it here without adding an IPC handler
+    // For now, just show that auto-detection will happen
+    setIsDevbugServer(false);
+    setDetectionSource(null);
   };
   
   const loadLoaderVersions = async () => {
@@ -741,13 +766,55 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
             placeholder="예: play.hyeniworld.com"
             className="input w-full"
           />
-          <p className="text-xs text-gray-400 mt-2">
-            💡 <strong>디스코드 인증 연동:</strong> 이 주소를 설정하면 디스코드에서 인증 링크를 클릭할 때<br/>
-            HyeniHelper 모드 설정이 자동으로 업데이트됩니다.
-          </p>
-          <p className="text-xs text-hyeni-pink-400 mt-1">
-            ✨ 혜니월드 서버에 접속하려면 먼저 <strong>HyeniHelper 모드</strong>를 설치하세요!
-          </p>
+          <div className="mt-3 space-y-3">
+            {/* Server detection status */}
+            <div className={`p-3 rounded-lg ${isDevbugServer ? 'bg-green-900/20 border border-green-700/30' : 'bg-gray-800/50 border border-gray-700/30'}`}>
+              <div className="flex items-center gap-2">
+                {isDevbugServer ? (
+                  <>
+                    <span className="text-green-400 text-lg">✅</span>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-green-400">
+                        devbug 서버 감지됨 - 필수 모드 자동 업데이트 활성화
+                      </p>
+                      {detectionSource && (
+                        <p className="text-xs text-gray-400 mt-1">
+                          감지 방법: {detectionSource === 'profile' ? '프로필 설정 (수동 지정)' : 'servers.dat 자동 감지'}
+                        </p>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <Info className="w-4 h-4 text-gray-400" />
+                    <div className="flex-1">
+                      <p className="text-sm text-gray-400">
+                        {serverAddress?.trim() 
+                          ? '일반 서버 - 모드 자동 업데이트 비활성화'
+                          : '자동 감지 대기 중 - 게임 실행 시 servers.dat에서 확인'}
+                      </p>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+            
+            {/* Help text */}
+            <div className="space-y-2">
+              <p className="text-xs text-gray-400">
+                💡 <strong>자동 감지:</strong> 멀티플레이 서버 목록에 devbug 서버<br/>
+                (<code className="px-1 py-0.5 bg-gray-800 rounded text-hyeni-pink-400">*.devbug.ing</code>, <code className="px-1 py-0.5 bg-gray-800 rounded text-hyeni-pink-400">*.devbug.me</code>)가 
+                있으면 자동으로 필수 모드를 업데이트합니다.
+              </p>
+              <p className="text-xs text-gray-400">
+                🎯 <strong>수동 지정:</strong> 이 필드를 입력하면 자동 감지를 덮어씁니다.<br/>
+                (예: 테스트 서버 강제 지정 시 사용)
+              </p>
+              <p className="text-xs text-green-400 font-medium">
+                ✨ <strong>일반 사용자는 비워두셔도 됩니다!</strong> 자동으로 감지됩니다.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 

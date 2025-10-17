@@ -363,6 +363,85 @@ export function registerProfileHandlers(): void {
         }
       }
 
+      // ========================================================================
+      // Check and update Worker mods (Option A: Hybrid detection)
+      // ========================================================================
+      const { WorkerModUpdater } = await import('../services/worker-mod-updater');
+      
+      const requiresMods = await WorkerModUpdater.isRequiredModServer(
+        profile.serverAddress,
+        instanceDir
+      );
+      
+      if (requiresMods) {
+        console.log('[IPC Profile] 🎯 devbug server detected - checking mods...');
+        
+        try {
+          const workerModUpdater = new WorkerModUpdater();
+          const updates = await workerModUpdater.checkAllMods(
+            instanceDir,
+            profile.gameVersion,
+            profile.loaderType || 'vanilla'
+          );
+          
+          if (updates.length > 0) {
+            console.log(`[IPC Profile] Found ${updates.length} mod updates`);
+            
+            // Get user token from config
+            const token = await workerModUpdater.getUserToken(instanceDir);
+            
+            if (!token) {
+              throw new Error(
+                '모드 업데이트를 위한 인증이 필요합니다.\n\n' +
+                'Discord에서 /auth 명령어로 인증하세요.'
+              );
+            }
+            
+            // Install/update each mod
+            for (const update of updates) {
+              console.log(`[IPC Profile] Updating ${update.modName}...`);
+              
+              await workerModUpdater.installMod(
+                instanceDir,
+                update,
+                token,
+                (progress) => {
+                  if (window) {
+                    window.webContents.send('mod:update-progress', {
+                      modId: update.modId,
+                      modName: update.modName,
+                      progress,
+                      current: progress,
+                      total: 100,
+                    });
+                  }
+                }
+              );
+              
+              console.log(`[IPC Profile] ✅ ${update.modName} updated to ${update.latestVersion}`);
+            }
+            
+            console.log('[IPC Profile] All mods updated successfully');
+          } else {
+            console.log('[IPC Profile] ✅ All mods are up to date');
+          }
+        } catch (modError) {
+          console.error('[IPC Profile] Mod update failed:', modError);
+          
+          // Send error to UI
+          if (window) {
+            window.webContents.send('mod:update-error', {
+              message: modError instanceof Error ? modError.message : 'Unknown error',
+            });
+          }
+          
+          // Throw to stop game launch
+          throw modError;
+        }
+      } else {
+        console.log('[IPC Profile] ⏭️  Non-devbug server - skipping mod check');
+      }
+
       // Get account info from global state (passed as parameter)
       let username = 'Player';
       let uuid = '00000000-0000-0000-0000-000000000000';

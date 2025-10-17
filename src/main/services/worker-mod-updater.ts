@@ -1,0 +1,642 @@
+/**
+ * Worker Mod Auto-Update Service
+ * 
+ * Manages automatic updates for mods deployed via Cloudflare Worker.
+ * Implements Option A (Hybrid) server detection:
+ * 1. Priority: UI Profile.serverAddress (explicit control)
+ * 2. Fallback: servers.dat auto-detection
+ * 3. Skip: if neither devbug server found
+ */
+
+import * as path from 'path';
+import * as fs from 'fs-extra';
+import { app, net } from 'electron';
+import * as crypto from 'crypto';
+import * as nbt from 'prismarine-nbt';
+import { ENV_CONFIG } from '../config/env-config';
+
+// ============================================================================
+// Types
+// ============================================================================
+
+export interface ModRegistry {
+  version: string;
+  lastUpdated: string;
+  mods: ModInfo[];
+}
+
+export interface ModInfo {
+  id: string;
+  name: string;
+  description: string;
+  latestVersion: string;
+  gameVersions: string[];
+  loaders: string[];
+  required?: boolean;
+  category: string;
+}
+
+export interface ModDetailInfo {
+  version: string;
+  gameVersions: string[];
+  loaders: Record<string, LoaderInfo>;
+  required?: boolean;
+  changelog: string;
+  releaseDate: string;
+}
+
+export interface LoaderInfo {
+  file: string;
+  sha256: string;
+  size: number;
+}
+
+export interface ModUpdateInfo {
+  modId: string;
+  modName: string;
+  available: boolean;
+  currentVersion: string | null;
+  latestVersion: string;
+  downloadUrl: string;
+  sha256: string;
+  size: number;
+  changelog: string;
+  gameVersion: string;
+  loader: string;
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+function getWorkerUrl(): string {
+  const url = ENV_CONFIG.HYENIMC_WORKER_URL;
+  
+  if (!url) {
+    throw new Error('HYENIMC_WORKER_URL is not configured. Please check your .env file.');
+  }
+  
+  return url;
+}
+
+function getModRegistryUrl(): string {
+  return `${getWorkerUrl()}/api/mods`;
+}
+
+function getModDetailUrl(modId: string): string {
+  return `${getWorkerUrl()}/api/mods/${modId}/latest`;
+}
+
+function getModDownloadUrl(modId: string, loader: string, version: string, file: string): string {
+  return `${getWorkerUrl()}/download/mods/${modId}/versions/${version}/${loader}/${file}`;
+}
+
+// ============================================================================
+// WorkerModUpdater Class
+// ============================================================================
+
+export class WorkerModUpdater {
+  /**
+   * Option A (Hybrid): Check if server requires mod updates
+   * 
+   * Priority:
+   * 1. Profile.serverAddress (UI input) - highest priority
+   * 2. servers.dat auto-detection - fallback
+   * 3. None - skip
+   * 
+   * @param profileServerAddress - Server address from profile settings (UI)
+   * @param gameDirectory - Game directory to check servers.dat
+   * @returns true if devbug server detected
+   */
+  static async isRequiredModServer(
+    profileServerAddress: string | undefined,
+    gameDirectory: string
+  ): Promise<boolean> {
+    // Step 1: Check Profile.serverAddress (highest priority)
+    if (profileServerAddress?.trim()) {
+      const normalized = profileServerAddress.toLowerCase().trim();
+      const isDevbug = normalized.endsWith('.devbug.ing') || 
+                       normalized.endsWith('.devbug.me');
+      
+      if (isDevbug) {
+        console.log(`[WorkerModUpdater] ✅ devbug server from profile: ${profileServerAddress}`);
+        return true;
+      }
+      
+      // Explicitly set to non-devbug server - skip servers.dat check
+      console.log(`[WorkerModUpdater] ⏭️  Non-devbug server specified: ${profileServerAddress}`);
+      return false;
+    }
+    
+    // Step 2: servers.dat auto-detection (fallback)
+    console.log('[WorkerModUpdater] 🔍 Checking servers.dat for devbug servers...');
+    return await this.checkServersDatForDevbug(gameDirectory);
+  }
+  
+  /**
+   * Parse servers.dat and check for devbug servers
+   * Reuses logic from protocol/handler.ts
+   */
+  private static async checkServersDatForDevbug(gameDirectory: string): Promise<boolean> {
+    const serversDatPath = path.join(gameDirectory, 'servers.dat');
+    
+    try {
+      await fs.access(serversDatPath);
+      const data = await fs.readFile(serversDatPath);
+      const parsed: any = await nbt.parse(data);
+      
+      const servers = parsed?.parsed?.value?.servers?.value?.value || [];
+      
+      const devbugServers = servers.filter((server: any) => {
+        const ip = (server?.ip?.value || '').toLowerCase();
+        return ip.endsWith('.devbug.ing') || ip.endsWith('.devbug.me');
+      });
+      
+      if (devbugServers.length > 0) {
+        const serverList = devbugServers.map((s: any) => s.ip?.value).join(', ');
+        console.log(`[WorkerModUpdater] ✅ devbug servers from servers.dat: ${serverList}`);
+        return true;
+      }
+      
+      console.log('[WorkerModUpdater] ❌ No devbug servers in servers.dat');
+      return false;
+    } catch (error) {
+      console.log('[WorkerModUpdater] ℹ️  servers.dat not found or unreadable');
+      return false;
+    }
+  }
+  
+  /**
+   * Fetch mod registry from Worker API
+   */
+  async fetchModRegistry(): Promise<ModRegistry | null> {
+    const url = getModRegistryUrl();
+    
+    console.log(`[WorkerModUpdater] Fetching mod registry: ${url}`);
+    
+    return new Promise((resolve) => {
+      const request = net.request(url);
+      
+      request.on('response', (response) => {
+        let body = '';
+        
+        response.on('data', (chunk) => {
+          body += chunk.toString();
+        });
+        
+        response.on('end', () => {
+          if (response.statusCode !== 200) {
+            console.error(`[WorkerModUpdater] API error: ${response.statusCode}`);
+            resolve(null);
+            return;
+          }
+          
+          try {
+            const data = JSON.parse(body) as ModRegistry;
+            console.log(`[WorkerModUpdater] Registry loaded: ${data.mods?.length || 0} mods`);
+            resolve(data);
+          } catch (error) {
+            console.error('[WorkerModUpdater] Failed to parse registry:', error);
+            resolve(null);
+          }
+        });
+      });
+      
+      request.on('error', (error) => {
+        console.error('[WorkerModUpdater] Registry request error:', error);
+        resolve(null);
+      });
+      
+      request.end();
+    });
+  }
+  
+  /**
+   * Get applicable mods for current environment
+   * Filters by game version and loader type
+   */
+  async getApplicableMods(
+    gameVersion: string,
+    loaderType: string
+  ): Promise<ModInfo[]> {
+    const registry = await this.fetchModRegistry();
+    
+    if (!registry) {
+      console.warn('[WorkerModUpdater] No registry available');
+      return [];
+    }
+    
+    const applicable = registry.mods.filter(mod => {
+      // Safe checks for undefined/null arrays
+      if (!mod.gameVersions || !Array.isArray(mod.gameVersions)) {
+        console.warn(`[WorkerModUpdater] Mod ${mod.id} missing gameVersions`);
+        return false;
+      }
+      if (!mod.loaders || !Array.isArray(mod.loaders)) {
+        console.warn(`[WorkerModUpdater] Mod ${mod.id} missing loaders`);
+        return false;
+      }
+      
+      const gameVersionMatch = mod.gameVersions.includes(gameVersion);
+      const loaderMatch = mod.loaders.includes(loaderType);
+      return gameVersionMatch && loaderMatch;
+    });
+    
+    console.log(`[WorkerModUpdater] Found ${applicable.length} applicable mods for ${gameVersion} + ${loaderType}`);
+    return applicable;
+  }
+  
+  /**
+   * Fetch detailed mod info from Worker API
+   */
+  async fetchModInfo(
+    modId: string,
+    gameVersion: string,
+    loaderType: string
+  ): Promise<ModDetailInfo | null> {
+    const url = getModDetailUrl(modId);
+    
+    console.log(`[WorkerModUpdater] Fetching mod info: ${url}`);
+    
+    return new Promise((resolve) => {
+      const request = net.request(url);
+      
+      request.on('response', (response) => {
+        let body = '';
+        
+        response.on('data', (chunk) => {
+          body += chunk.toString();
+        });
+        
+        response.on('end', () => {
+          if (response.statusCode !== 200) {
+            console.error(`[WorkerModUpdater] API error: ${response.statusCode}`);
+            resolve(null);
+            return;
+          }
+          
+          try {
+            const data = JSON.parse(body) as ModDetailInfo;
+            resolve(data);
+          } catch (error) {
+            console.error('[WorkerModUpdater] Failed to parse mod info:', error);
+            resolve(null);
+          }
+        });
+      });
+      
+      request.on('error', (error) => {
+        console.error('[WorkerModUpdater] Mod info request error:', error);
+        resolve(null);
+      });
+      
+      request.end();
+    });
+  }
+  
+  /**
+   * Check if mod update is available
+   */
+  async checkModUpdate(
+    modId: string,
+    profilePath: string,
+    gameVersion: string,
+    loaderType: string
+  ): Promise<ModUpdateInfo | null> {
+    try {
+      // Get local version
+      const localVersion = await this.getLocalModVersion(profilePath, modId);
+      
+      // Fetch latest version
+      const modInfo = await this.fetchModInfo(modId, gameVersion, loaderType);
+      
+      if (!modInfo) {
+        console.log(`[WorkerModUpdater] No mod info available for: ${modId}`);
+        return null;
+      }
+      
+      // Check if loader is supported
+      const loaderInfo = modInfo.loaders[loaderType];
+      if (!loaderInfo) {
+        console.log(`[WorkerModUpdater] Loader ${loaderType} not supported for: ${modId}`);
+        return null;
+      }
+      
+      // Check if game version is supported
+      if (!modInfo.gameVersions.includes(gameVersion)) {
+        console.log(`[WorkerModUpdater] Game version ${gameVersion} not supported for: ${modId}`);
+        return null;
+      }
+      
+      // Compare versions
+      const needsUpdate = !localVersion || this.isNewerVersion(modInfo.version, localVersion);
+      
+      if (needsUpdate) {
+        console.log(`[WorkerModUpdater] Update available for ${modId}: ${localVersion || 'none'} -> ${modInfo.version}`);
+        
+        const downloadUrl = getModDownloadUrl(modId, loaderType, modInfo.version, loaderInfo.file);
+        
+        return {
+          modId,
+          modName: modId.charAt(0).toUpperCase() + modId.slice(1), // Capitalize first letter
+          available: true,
+          currentVersion: localVersion,
+          latestVersion: modInfo.version,
+          downloadUrl,
+          sha256: loaderInfo.sha256,
+          size: loaderInfo.size,
+          changelog: modInfo.changelog || '',
+          gameVersion,
+          loader: loaderType
+        };
+      }
+      
+      console.log(`[WorkerModUpdater] Already up to date: ${modId} ${localVersion}`);
+      return null;
+      
+    } catch (error) {
+      console.error(`[WorkerModUpdater] Failed to check update for ${modId}:`, error);
+      return null;
+    }
+  }
+  
+  /**
+   * Check all applicable mods for updates
+   */
+  async checkAllMods(
+    profilePath: string,
+    gameVersion: string,
+    loaderType: string
+  ): Promise<ModUpdateInfo[]> {
+    try {
+      console.log('[WorkerModUpdater] Checking all mods for updates...');
+      
+      const applicableMods = await this.getApplicableMods(gameVersion, loaderType);
+      const updates: ModUpdateInfo[] = [];
+      
+      for (const mod of applicableMods) {
+        const update = await this.checkModUpdate(mod.id, profilePath, gameVersion, loaderType);
+        if (update && update.available) {
+          updates.push(update);
+        }
+      }
+      
+      console.log(`[WorkerModUpdater] Found ${updates.length} updates`);
+      return updates;
+      
+    } catch (error) {
+      console.error('[WorkerModUpdater] Failed to check all mods:', error);
+      return [];
+    }
+  }
+  
+  /**
+   * Install/Update a mod
+   */
+  async installMod(
+    profilePath: string,
+    updateInfo: ModUpdateInfo,
+    token: string,
+    onProgress?: (progress: number) => void
+  ): Promise<void> {
+    try {
+      console.log(`[WorkerModUpdater] Installing ${updateInfo.modName} ${updateInfo.latestVersion}...`);
+      
+      // Download with token
+      const downloadUrlWithToken = `${updateInfo.downloadUrl}?token=${token}`;
+      const tempPath = await this.downloadFile(
+        downloadUrlWithToken,
+        updateInfo.sha256,
+        onProgress
+      );
+      
+      // Backup old files
+      const modsDir = path.join(profilePath, 'mods');
+      await fs.ensureDir(modsDir);
+      
+      const oldFiles = await this.findModFiles(modsDir, updateInfo.modId);
+      console.log(`[WorkerModUpdater] Found ${oldFiles.length} old files to backup`);
+      
+      for (const file of oldFiles) {
+        const backupPath = `${file}.backup`;
+        await fs.rename(file, backupPath);
+        console.log(`[WorkerModUpdater] Backed up: ${path.basename(file)}`);
+      }
+      
+      // Install new file
+      const fileName = updateInfo.downloadUrl.split('/').pop()!;
+      const targetPath = path.join(modsDir, fileName);
+      await fs.copyFile(tempPath, targetPath);
+      console.log(`[WorkerModUpdater] Installed: ${fileName}`);
+      
+      // Delete backups
+      for (const file of oldFiles) {
+        const backupPath = `${file}.backup`;
+        await fs.remove(backupPath);
+      }
+      
+      // Cleanup temp file
+      await fs.remove(tempPath);
+      
+      console.log(`[WorkerModUpdater] Update complete: ${updateInfo.modName} ${updateInfo.latestVersion}`);
+      
+    } catch (error) {
+      console.error(`[WorkerModUpdater] Failed to install ${updateInfo.modName}:`, error);
+      
+      // Restore backups on error
+      const modsDir = path.join(profilePath, 'mods');
+      try {
+        const backups = await fs.readdir(modsDir);
+        for (const file of backups) {
+          if (file.endsWith('.backup')) {
+            const originalPath = path.join(modsDir, file.replace('.backup', ''));
+            const backupPath = path.join(modsDir, file);
+            await fs.rename(backupPath, originalPath);
+          }
+        }
+      } catch (restoreError) {
+        console.error('[WorkerModUpdater] Failed to restore backups:', restoreError);
+      }
+      
+      throw error;
+    }
+  }
+  
+  /**
+   * Get local mod version from mods directory
+   * Supports flexible filename patterns: {modId}-*.jar
+   */
+  private async getLocalModVersion(
+    profilePath: string,
+    modId: string
+  ): Promise<string | null> {
+    const modsDir = path.join(profilePath, 'mods');
+    
+    if (!await fs.pathExists(modsDir)) {
+      return null;
+    }
+    
+    const files = await this.findModFiles(modsDir, modId);
+    
+    if (files.length === 0) {
+      return null;
+    }
+    
+    // Extract version from filename
+    // Patterns:
+    // - hyenihelper-fabric-1.21.1-1.0.0.jar -> 1.0.0
+    // - hyenihelper-1.0.0.jar -> 1.0.0
+    // - hyenicore-neoforge-2.0.1.jar -> 2.0.1
+    const fileName = path.basename(files[0]);
+    
+    // Try to extract version: {modId}-{version}.jar or {modId}-{loader}-{gameVersion}-{version}.jar
+    const versionMatch = fileName.match(new RegExp(`${modId}-(\\d+\\.\\d+\\.\\d+)`, 'i'));
+    
+    if (versionMatch) {
+      return versionMatch[1];
+    }
+    
+    return null;
+  }
+  
+  /**
+   * Find mod files in mods directory
+   * Pattern: {modId}-*.jar
+   */
+  private async findModFiles(modsDir: string, modId: string): Promise<string[]> {
+    try {
+      const files = await fs.readdir(modsDir);
+      const modFiles: string[] = [];
+      
+      const pattern = new RegExp(`^${modId}-.*\\.jar$`, 'i');
+      
+      for (const file of files) {
+        if (pattern.test(file)) {
+          modFiles.push(path.join(modsDir, file));
+        }
+      }
+      
+      return modFiles;
+    } catch (error) {
+      console.error(`[WorkerModUpdater] Failed to read mods directory: ${modsDir}`, error);
+      return [];
+    }
+  }
+  
+  /**
+   * Get user auth token from config
+   */
+  async getUserToken(profilePath: string): Promise<string | null> {
+    const configPath = path.join(profilePath, 'config', 'hyenihelper-config.json');
+    
+    if (!await fs.pathExists(configPath)) {
+      return null;
+    }
+    
+    try {
+      const config = await fs.readJSON(configPath);
+      return config.token || null;
+    } catch (error) {
+      console.error('[WorkerModUpdater] Failed to read config:', error);
+      return null;
+    }
+  }
+  
+  /**
+   * Download file with progress tracking and SHA256 verification
+   */
+  private async downloadFile(
+    url: string,
+    expectedSha256: string,
+    onProgress?: (progress: number) => void
+  ): Promise<string> {
+    const tempDir = path.join(app.getPath('temp'), 'hyenimc-downloads');
+    await fs.ensureDir(tempDir);
+    
+    const fileName = `mod-${Date.now()}.jar`;
+    const tempPath = path.join(tempDir, fileName);
+    
+    console.log(`[WorkerModUpdater] Downloading: ${url.split('?')[0]}`); // Don't log token
+    
+    return new Promise((resolve, reject) => {
+      const request = net.request(url);
+      
+      request.on('response', (response) => {
+        if (response.statusCode !== 200) {
+          reject(new Error(`Download failed: ${response.statusCode}`));
+          return;
+        }
+        
+        const totalSize = parseInt(response.headers['content-length'] as string || '0');
+        let downloadedSize = 0;
+        
+        const writer = fs.createWriteStream(tempPath);
+        const hash = crypto.createHash('sha256');
+        
+        response.on('data', (chunk: Buffer) => {
+          writer.write(chunk);
+          hash.update(chunk);
+          downloadedSize += chunk.length;
+          
+          if (onProgress && totalSize > 0) {
+            const progress = Math.round((downloadedSize / totalSize) * 100);
+            onProgress(progress);
+          }
+        });
+        
+        response.on('end', () => {
+          writer.end();
+          
+          const actualSha256 = hash.digest('hex');
+          
+          if (actualSha256 !== expectedSha256) {
+            fs.remove(tempPath);
+            reject(new Error(`SHA256 mismatch: expected ${expectedSha256}, got ${actualSha256}`));
+            return;
+          }
+          
+          console.log(`[WorkerModUpdater] Download complete: ${tempPath}`);
+          resolve(tempPath);
+        });
+        
+        response.on('error', (error: Error) => {
+          writer.end();
+          fs.remove(tempPath);
+          reject(error);
+        });
+        
+        writer.on('error', (error: Error) => {
+          fs.remove(tempPath);
+          reject(error);
+        });
+      });
+      
+      request.on('error', (error) => {
+        reject(error);
+      });
+      
+      request.end();
+    });
+  }
+  
+  /**
+   * Compare semantic versions
+   */
+  private isNewerVersion(latest: string, current: string): boolean {
+    const latestParts = latest.split('.').map(Number);
+    const currentParts = current.split('.').map(Number);
+    
+    for (let i = 0; i < Math.max(latestParts.length, currentParts.length); i++) {
+      const latestPart = latestParts[i] || 0;
+      const currentPart = currentParts[i] || 0;
+      
+      if (latestPart > currentPart) return true;
+      if (latestPart < currentPart) return false;
+    }
+    
+    return false;
+  }
+}
+
+// Export singleton instance
+export const workerModUpdater = new WorkerModUpdater();

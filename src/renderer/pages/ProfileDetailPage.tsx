@@ -69,9 +69,32 @@ export const ProfileDetailPage: React.FC = () => {
       }
     });
 
+    // Listen for mod update progress
+    const cleanupModProgress = window.electronAPI.on('mod:update-progress', (data: any) => {
+      console.log('[ProfileDetail] Mod update progress:', data);
+      setDl({
+        phase: 'mods',
+        modName: data.modName,
+        modProgress: data.progress,
+        message: `${data.modName} 업데이트 중...`,
+      });
+    });
+
+    // Listen for mod update error
+    const cleanupModError = window.electronAPI.on('mod:update-error', (data: any) => {
+      console.error('[ProfileDetail] Mod update error:', data);
+      setIsLaunching(false);
+      setDl({ 
+        error: data.message || '모드 업데이트에 실패했습니다.',
+      });
+      toast.error('모드 업데이트 실패', data.message || '모드 업데이트에 실패했습니다.');
+    });
+
     return () => {
       cleanupStarted();
       cleanupStopped();
+      cleanupModProgress();
+      cleanupModError();
     };
   }, [profileId]);
 

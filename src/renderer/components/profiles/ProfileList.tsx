@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Play, Settings, Trash2, Plus, FolderOpen, Clock, Loader2, Star } from 'lucide-react';
+import { Play, Settings, Trash2, Plus, FolderOpen, Clock, Loader2, Star, Sparkles } from 'lucide-react';
 import { CreateProfileModal } from './CreateProfileModal';
 import { useDownloadStore } from '../../store/downloadStore';
 import { useAccount } from '../../App';
@@ -283,6 +283,17 @@ export function ProfileList() {
               {profile.favorite && (
                 <div className="absolute top-0 left-0 px-2 py-0.5 bg-yellow-400 text-black text-xs font-semibold rounded-br">
                   즐겨찾기
+                </div>
+              )}
+              
+              {/* devbug Server Badge */}
+              {profile.serverAddress && (
+                profile.serverAddress.toLowerCase().endsWith('.devbug.ing') || 
+                profile.serverAddress.toLowerCase().endsWith('.devbug.me')
+              ) && (
+                <div className="absolute top-2 left-2 px-2 py-1 bg-gradient-to-r from-hyeni-pink-500/90 to-purple-500/90 backdrop-blur-sm text-white text-xs font-semibold rounded-full flex items-center gap-1 shadow-lg">
+                  <Sparkles className="w-3 h-3" />
+                  <span>필수 모드 자동 관리</span>
                 </div>
               )}
               
