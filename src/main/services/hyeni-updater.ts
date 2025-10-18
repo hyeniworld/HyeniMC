@@ -135,7 +135,7 @@ export class HyeniUpdater {
       // 1. Get auth token
       const token = await this.getUserToken(profilePath);
       if (!token) {
-        throw new Error('인증 토큰이 없습니다. Discord에서 /auth 명령어로 인증하세요.');
+        throw new Error('인증 토큰이 없습니다. Discord에서 /인증 명령어로 인증하세요.');
       }
       
       // 2. Download new file

@@ -148,7 +148,7 @@ R2 Bucket: hyenimc-releases
 
 ### 1. 사용자 인증
 ```
-Discord Bot → /auth 명령어 → 버튼 클릭
+Discord Bot → /인증 명령어 → 버튼 클릭
   ↓
 hyenimc://auth?token={USER_TOKEN}&server=play.hyeniworld.com
   ↓
@@ -313,7 +313,7 @@ export class HyeniUpdater {
     // 1. 토큰 읽기
     const token = await this.getUserToken(profileId);
     if (!token) {
-      throw new Error('인증 토큰이 없습니다. /auth 명령어로 인증하세요.');
+      throw new Error('인증 토큰이 없습니다. /인증 명령어로 인증하세요.');
     }
     
     // 2. 다운로드

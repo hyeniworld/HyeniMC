@@ -147,7 +147,7 @@ GET /download/mods/hyenihelper/versions/1.0.1/neoforge/hyenihelper-1.0.1-neoforg
 
 **인증**: 
 - Header: `Authorization: Bearer {token}`
-- 토큰은 Discord `/auth` 명령어로 발급
+- 토큰은 Discord `/인증` 명령어로 발급
 
 ---
 

@@ -162,7 +162,7 @@ async function handleDownload(request, env, corsHeaders) {
   if (!token) {
     return new Response(JSON.stringify({ 
       error: 'Unauthorized',
-      message: '토큰이 필요합니다. /auth 명령어로 인증하세요.' 
+      message: '토큰이 필요합니다. /인증 명령어로 인증하세요.' 
     }), {
       status: 401,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }

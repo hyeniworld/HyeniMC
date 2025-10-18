@@ -158,7 +158,7 @@ if (ModUpdater.isRequiredModServer(profile.serverAddress || '')) {
     // 토큰 가져오기
     const token = await modUpdater['getUserToken'](instanceDir);
     if (!token) {
-      throw new Error('모드 업데이트를 위한 인증이 필요합니다.\nDiscord에서 /auth 명령어로 인증하세요.');
+      throw new Error('모드 업데이트를 위한 인증이 필요합니다.\nDiscord에서 /인증 명령어로 인증하세요.');
     }
     
     // 각 모드 업데이트
@@ -358,7 +358,7 @@ mods: {
 ```
 필수 모드 업데이트를 위해 인증이 필요합니다.
 
-Discord에서 /auth 명령어를 사용하여 인증하세요.
+Discord에서 /인증 명령어를 사용하여 인증하세요.
 ```
 
 ### 5-2. 모드 다운로드 실패 시

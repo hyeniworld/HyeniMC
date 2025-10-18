@@ -398,7 +398,7 @@ export function registerProfileHandlers(): void {
             if (!token) {
               throw new Error(
                 '모드 업데이트를 위한 인증이 필요합니다.\n\n' +
-                'Discord에서 /auth 명령어로 인증하세요.'
+                'Discord에서 /인증 명령어로 인증하세요.'
               );
             }
             
