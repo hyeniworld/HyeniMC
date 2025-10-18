@@ -1,6 +1,7 @@
 node_modules/
 .wrangler/
 dist/
+releases/
 
 # Local configuration (contains account-specific settings)
 wrangler.toml
