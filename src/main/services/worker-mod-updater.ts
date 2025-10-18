@@ -14,7 +14,7 @@ import { app, net } from 'electron';
 import * as crypto from 'crypto';
 import * as nbt from 'prismarine-nbt';
 import { ENV_CONFIG } from '../config/env-config';
-import { isAuthorizedServer } from '@shared/config/server-config';
+import { isAuthorizedServer } from '../../shared/config/server-config';
 
 // ============================================================================
 // Types
