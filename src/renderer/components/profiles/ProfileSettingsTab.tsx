@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Cpu, HardDrive, FolderOpen, Save, RefreshCw, Info } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
+import { isAuthorizedServer } from '@shared/config/server-config';
 
 interface ProfileSettingsTabProps {
   profile: any;
@@ -192,10 +193,9 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
   const checkServerDetection = () => {
     // Check profile serverAddress first (manual override)
     if (serverAddress?.trim()) {
-      const normalized = serverAddress.toLowerCase().trim();
-      const isHyeniWorld = normalized.endsWith('.devbug.ing') || normalized.endsWith('.devbug.me');
-      setIsHyeniWorldServer(isHyeniWorld);
-      setDetectionSource(isHyeniWorld ? 'profile' : null);
+      const isAuthorized = isAuthorizedServer(serverAddress);
+      setIsHyeniWorldServer(isAuthorized);
+      setDetectionSource(isAuthorized ? 'profile' : null);
       return;
     }
     

@@ -14,6 +14,7 @@ import { app, net } from 'electron';
 import * as crypto from 'crypto';
 import * as nbt from 'prismarine-nbt';
 import { ENV_CONFIG } from '../config/env-config';
+import { isAuthorizedServer } from '@shared/config/server-config';
 
 // ============================================================================
 // Types
@@ -132,30 +133,28 @@ export class WorkerModUpdater {
   ): Promise<boolean> {
     // Step 1: Check Profile.serverAddress (highest priority)
     if (profileServerAddress?.trim()) {
-      const normalized = profileServerAddress.toLowerCase().trim();
-      const isHyeniWorld = normalized.endsWith('.devbug.ing') || 
-                       normalized.endsWith('.devbug.me');
+      const isAuthorized = isAuthorizedServer(profileServerAddress);
       
-      if (isHyeniWorld) {
-        console.log(`[WorkerModUpdater] ✅ HyeniWorld server from profile: ${profileServerAddress}`);
+      if (isAuthorized) {
+        console.log(`[WorkerModUpdater] ✅ Authorized server from profile: ${profileServerAddress}`);
         return true;
       }
       
-      // Explicitly set to non-HyeniWorld server - skip servers.dat check
-      console.log(`[WorkerModUpdater] ⏭️  Non-HyeniWorld server specified: ${profileServerAddress}`);
+      // Explicitly set to non-authorized server - skip servers.dat check
+      console.log(`[WorkerModUpdater] ⏭️  Non-authorized server specified: ${profileServerAddress}`);
       return false;
     }
     
     // Step 2: servers.dat auto-detection (fallback)
-    console.log('[WorkerModUpdater] 🔍 Checking servers.dat for HyeniWorld servers...');
-    return await this.checkServersDatForHyeniWorld(gameDirectory);
+    console.log('[WorkerModUpdater] 🔍 Checking servers.dat for authorized servers...');
+    return await this.checkServersDatForAuthorizedServers(gameDirectory);
   }
   
   /**
-   * Parse servers.dat and check for HyeniWorld servers
+   * Parse servers.dat and check for authorized servers
    * Reuses logic from protocol/handler.ts
    */
-  private static async checkServersDatForHyeniWorld(gameDirectory: string): Promise<boolean> {
+  private static async checkServersDatForAuthorizedServers(gameDirectory: string): Promise<boolean> {
     const serversDatPath = path.join(gameDirectory, 'servers.dat');
     
     try {
@@ -165,18 +164,18 @@ export class WorkerModUpdater {
       
       const servers = parsed?.parsed?.value?.servers?.value?.value || [];
       
-      const hyeniWorldServers = servers.filter((server: any) => {
-        const ip = (server?.ip?.value || '').toLowerCase();
-        return ip.endsWith('.devbug.ing') || ip.endsWith('.devbug.me');
+      const authorizedServers = servers.filter((server: any) => {
+        const ip = server?.ip?.value || '';
+        return isAuthorizedServer(ip);
       });
       
-      if (hyeniWorldServers.length > 0) {
-        const serverList = hyeniWorldServers.map((s: any) => s.ip?.value).join(', ');
-        console.log(`[WorkerModUpdater] ✅ HyeniWorld servers from servers.dat: ${serverList}`);
+      if (authorizedServers.length > 0) {
+        const serverList = authorizedServers.map((s: any) => s.ip?.value).join(', ');
+        console.log(`[WorkerModUpdater] ✅ Authorized servers from servers.dat: ${serverList}`);
         return true;
       }
       
-      console.log('[WorkerModUpdater] ❌ No HyeniWorld servers in servers.dat');
+      console.log('[WorkerModUpdater] ❌ No authorized servers in servers.dat');
       return false;
     } catch (error) {
       console.log('[WorkerModUpdater] ℹ️  servers.dat not found or unreadable');

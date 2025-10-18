@@ -44,6 +44,7 @@ dev-app-update.yml
 # Local configuration (auto-generated from .env, contains sensitive data)
 src/main/services/auth-config.ts
 src/main/config/env-config.ts
+src/shared/config/server-config.ts
 
 # macOS
 .DS_Store

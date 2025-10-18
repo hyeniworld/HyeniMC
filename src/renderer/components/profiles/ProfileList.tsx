@@ -7,6 +7,7 @@ import { useAccount } from '../../App';
 import { useToast } from '../../contexts/ToastContext';
 import { sortProfiles } from '../../utils/profileSorter';
 import { DecorationCharacter } from '../common/HyeniDecorations';
+import { isAuthorizedServer } from '@shared/config/server-config';
 
 export function ProfileList() {
   const navigate = useNavigate();
@@ -302,11 +303,8 @@ export function ProfileList() {
                 </div>
               )}
               
-              {/* HyeniWorld Server Badge */}
-              {profile.serverAddress && (
-                profile.serverAddress.toLowerCase().endsWith('.devbug.ing') || 
-                profile.serverAddress.toLowerCase().endsWith('.devbug.me')
-              ) && (
+              {/* Authorized Server Badge */}
+              {profile.serverAddress && isAuthorizedServer(profile.serverAddress) && (
                 <div className="absolute top-2 left-2 px-2 py-1 bg-gradient-to-r from-hyeni-pink-500/90 to-purple-500/90 backdrop-blur-sm text-white text-xs font-semibold rounded-full flex items-center gap-1 shadow-lg">
                   <Sparkles className="w-3 h-3" />
                   <span>필수 모드 자동 관리</span>

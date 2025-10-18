@@ -15,7 +15,11 @@
     "noEmit": false,
     "sourceMap": false,
     "declaration": false,
-    "removeComments": true
+    "removeComments": true,
+    "baseUrl": "./src",
+    "paths": {
+      "@shared/*": ["shared/*"]
+    }
   },
   "include": ["src/main/**/*", "src/shared/**/*", "src/preload/**/*"],
   "exclude": ["node_modules", "dist", "src/renderer"]
