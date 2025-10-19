@@ -51,11 +51,28 @@ interface LatestReleaseResponse {
   changelog: string;
   loaders: {
     [key: string]: {
-      fileName: string;
-      sha256: string;
-      size: number;
-      downloadPath: string;
-      downloadUrl: string;
+      // v1 format (legacy)
+      fileName?: string;
+      sha256?: string;
+      size?: number;
+      downloadPath?: string;
+      downloadUrl?: string;
+      // v2 format (new)
+      gameVersions?: {
+        [gameVersion: string]: {
+          file: string;
+          sha256: string;
+          size: number;
+          downloadPath: string;
+          downloadUrl?: string;
+          minLoaderVersion: string;
+          maxLoaderVersion?: string | null;
+          dependencies?: {
+            required?: string[];
+            optional?: string[];
+          };
+        };
+      };
     };
   };
 }
@@ -88,10 +105,56 @@ export class HyeniUpdater {
         return null;
       }
       
-      // 4. Check if game version is supported
-      if (!latest.gameVersions.includes(gameVersion)) {
-        console.log(`[HyeniUpdater] Game version ${gameVersion} not supported in latest release`);
-        return null;
+      // 4. Extract file info based on API version (v1 or v2)
+      let fileInfo: {
+        downloadUrl: string;
+        sha256: string;
+        size: number;
+        fileName: string;
+      };
+      
+      if (loaderInfo.gameVersions) {
+        // v2 format: nested by game version
+        const gameVersionInfo = loaderInfo.gameVersions[gameVersion];
+        
+        if (!gameVersionInfo) {
+          console.log(`[HyeniUpdater] Game version ${gameVersion} not supported in latest release`);
+          return null;
+        }
+        
+        if (!gameVersionInfo.downloadPath || !gameVersionInfo.sha256) {
+          console.error('[HyeniUpdater] Invalid loader info: missing downloadPath or sha256');
+          return null;
+        }
+        
+        // Generate downloadUrl from downloadPath if not present
+        const downloadUrl = gameVersionInfo.downloadUrl || `/${gameVersionInfo.downloadPath}`;
+        
+        fileInfo = {
+          downloadUrl,
+          sha256: gameVersionInfo.sha256,
+          size: gameVersionInfo.size,
+          fileName: gameVersionInfo.file
+        };
+      } else {
+        // v1 format: flat structure (legacy)
+        if (!loaderInfo.downloadUrl || !loaderInfo.sha256) {
+          console.error('[HyeniUpdater] Invalid loader info: missing downloadUrl or sha256');
+          return null;
+        }
+        
+        // Check if game version is supported
+        if (!latest.gameVersions.includes(gameVersion)) {
+          console.log(`[HyeniUpdater] Game version ${gameVersion} not supported in latest release`);
+          return null;
+        }
+        
+        fileInfo = {
+          downloadUrl: loaderInfo.downloadUrl,
+          sha256: loaderInfo.sha256,
+          size: loaderInfo.size!,
+          fileName: loaderInfo.fileName!
+        };
       }
       
       // 5. Compare versions
@@ -102,9 +165,9 @@ export class HyeniUpdater {
           available: true,
           currentVersion: localVersion,
           latestVersion: latest.version,
-          downloadUrl: loaderInfo.downloadUrl,
-          sha256: loaderInfo.sha256,
-          size: loaderInfo.size,
+          downloadUrl: fileInfo.downloadUrl,
+          sha256: fileInfo.sha256,
+          size: fileInfo.size,
           changelog: latest.changelog,
           required: false, // TODO: Implement required flag logic
           gameVersion,
@@ -131,6 +194,7 @@ export class HyeniUpdater {
   ): Promise<void> {
     try {
       console.log(`[HyeniUpdater] Installing update: ${updateInfo.latestVersion}`);
+      console.log(`[HyeniUpdater] Update info:`, JSON.stringify(updateInfo, null, 2));
       
       // 1. Get auth token
       const token = await this.getUserToken(profilePath);
@@ -138,15 +202,37 @@ export class HyeniUpdater {
         throw new Error('인증 토큰이 없습니다. Discord에서 /인증 명령어로 인증하세요.');
       }
       
-      // 2. Download new file
-      // downloadUrl format: /mods/hyenihelper/versions/1.0.1/file.jar
+      // 2. Validate updateInfo
+      if (!updateInfo.downloadUrl) {
+        throw new Error('다운로드 URL이 없습니다. API 응답을 확인해주세요.');
+      }
+      if (!updateInfo.sha256) {
+        throw new Error('SHA256 해시가 없습니다. API 응답을 확인해주세요.');
+      }
+      
+      // 3. Download new file
+      // v1: downloadUrl format: /hyenihelper/versions/1.0.1/file.jar
+      // v2: downloadUrl format: /mods/hyenihelper/versions/1.0.2/neoforge/1.21.1/file.jar
       // Base URL: https://worker.dev/download/mods
-      // Remove leading /mods/ from downloadUrl since base already has /mods
-      const relativePath = updateInfo.downloadUrl.replace(/^\/mods\//, '/');
-      const downloadUrl = `${getDownloadBaseUrl()}${relativePath}?token=${token}`;
+      // For v1, downloadUrl already excludes /mods/, so we add it
+      // For v2, downloadUrl includes /mods/, so we need to adjust
+      let downloadPath = updateInfo.downloadUrl;
+      
+      // If downloadUrl starts with /mods/, remove it since base URL already includes /mods
+      if (downloadPath.startsWith('/mods/')) {
+        downloadPath = downloadPath.substring(6); // Remove '/mods/' (6 chars)
+      }
+      
+      // Ensure path starts with /
+      if (!downloadPath.startsWith('/')) {
+        downloadPath = '/' + downloadPath;
+      }
+      
+      const downloadUrl = `${getDownloadBaseUrl()}${downloadPath}?token=${token}`;
+      console.log(`[HyeniUpdater] Download URL: ${downloadUrl}`);
       const tempPath = await this.downloadFile(downloadUrl, updateInfo.sha256, onProgress);
       
-      // 3. Backup old files
+      // 4. Backup old files
       const modsDir = path.join(profilePath, 'mods');
       await fs.ensureDir(modsDir);
       
@@ -159,19 +245,19 @@ export class HyeniUpdater {
         console.log(`[HyeniUpdater] Backed up: ${path.basename(file)}`);
       }
       
-      // 4. Install new file
+      // 5. Install new file
       const fileName = updateInfo.downloadUrl.split('/').pop()!;
       const targetPath = path.join(modsDir, fileName);
       await fs.copyFile(tempPath, targetPath);
       console.log(`[HyeniUpdater] Installed: ${fileName}`);
       
-      // 5. Delete backups
+      // 6. Delete backups
       for (const file of oldFiles) {
         const backupPath = `${file}.backup`;
         await fs.remove(backupPath);
       }
       
-      // 6. Cleanup temp file
+      // 7. Cleanup temp file
       await fs.remove(tempPath);
       
       console.log(`[HyeniUpdater] Update complete: ${updateInfo.latestVersion}`);
@@ -261,6 +347,7 @@ export class HyeniUpdater {
    */
   private async fetchLatestRelease(): Promise<LatestReleaseResponse | null> {
     const url = `${getReleasesApiUrl()}/hyenihelper/latest`;
+    console.log(`[HyeniUpdater] Fetching latest release from: ${url}`);
     
     return new Promise((resolve) => {
       const request = net.request(url);
@@ -275,15 +362,18 @@ export class HyeniUpdater {
         response.on('end', () => {
           if (response.statusCode !== 200) {
             console.error(`[HyeniUpdater] API error: ${response.statusCode}`);
+            console.error(`[HyeniUpdater] Response body: ${body}`);
             resolve(null);
             return;
           }
           
           try {
             const data = JSON.parse(body) as LatestReleaseResponse;
+            console.log('[HyeniUpdater] API response:', JSON.stringify(data, null, 2));
             resolve(data);
           } catch (error) {
             console.error('[HyeniUpdater] Failed to parse response:', error);
+            console.error('[HyeniUpdater] Response body:', body);
             resolve(null);
           }
         });
