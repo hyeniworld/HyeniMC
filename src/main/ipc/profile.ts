@@ -427,6 +427,14 @@ export function registerProfileHandlers(): void {
             }
             
             console.log('[IPC Profile] All mods updated successfully');
+            
+            // Notify renderer that mods were updated
+            if (window) {
+              window.webContents.send('mod:update-complete', {
+                profileId: profile.id,
+                updatedMods: updates.map(u => ({ modId: u.modId, modName: u.modName, version: u.latestVersion }))
+              });
+            }
           } else {
             console.log('[IPC Profile] ✅ All mods are up to date');
           }

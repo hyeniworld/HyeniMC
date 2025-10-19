@@ -142,7 +142,7 @@ export const IPC_EVENTS = {
   GAME_DOWNLOAD_PROGRESS: 'game:download-progress',
   
   // Mod Events
-  MOD_UPDATES_AVAILABLE: 'mod:updates-available',
+  MOD_UPDATE_COMPLETE: 'mod:update-complete',
   
   // Modpack Events
   MODPACK_INSTALL_PROGRESS: 'modpack:install-progress',

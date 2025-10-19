@@ -85,6 +85,21 @@ export function useHyeniUpdate({
     }
   }, [profilePath, gameVersion, loaderType, autoCheck, checkInterval]);
 
+  // Listen for mod updates from game launch
+  useEffect(() => {
+    const handleModUpdateComplete = (_event: any, data: { profileId: string; updatedMods: any[] }) => {
+      console.log('[useHyeniUpdate] Mod update completed during game launch, refreshing...', data);
+      // Re-check for updates to refresh UI
+      checkForUpdate();
+    };
+
+    window.electronAPI.on('mod:update-complete', handleModUpdateComplete);
+
+    return () => {
+      window.electronAPI.off('mod:update-complete', handleModUpdateComplete);
+    };
+  }, [checkForUpdate]);
+
   return {
     updateInfo,
     isChecking,
