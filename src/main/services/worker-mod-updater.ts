@@ -490,8 +490,9 @@ export class WorkerModUpdater {
     try {
       console.log(`[WorkerModUpdater] Installing ${updateInfo.modName} ${updateInfo.latestVersion}...`);
       
-      // Download with token
-      const downloadUrlWithToken = `${updateInfo.downloadUrl}?token=${token}`;
+      // Download with token (URL encode to handle special characters like +, /, =)
+      const encodedToken = encodeURIComponent(token);
+      const downloadUrlWithToken = `${updateInfo.downloadUrl}?token=${encodedToken}`;
       const tempPath = await this.downloadFile(
         downloadUrlWithToken,
         updateInfo.sha256,

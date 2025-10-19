@@ -228,7 +228,9 @@ export class HyeniUpdater {
         downloadPath = '/' + downloadPath;
       }
       
-      const downloadUrl = `${getDownloadBaseUrl()}${downloadPath}?token=${token}`;
+      // URL encode the token to handle special characters like +, /, =
+      const encodedToken = encodeURIComponent(token);
+      const downloadUrl = `${getDownloadBaseUrl()}${downloadPath}?token=${encodedToken}`;
       console.log(`[HyeniUpdater] Download URL: ${downloadUrl}`);
       const tempPath = await this.downloadFile(downloadUrl, updateInfo.sha256, onProgress);
       
