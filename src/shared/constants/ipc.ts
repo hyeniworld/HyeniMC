@@ -142,7 +142,13 @@ export const IPC_EVENTS = {
   GAME_DOWNLOAD_PROGRESS: 'game:download-progress',
   
   // Mod Events
+  MOD_UPDATES_AVAILABLE: 'mod:updates-available',
+  MOD_UPDATE_PROGRESS: 'mod:update-progress',
   MOD_UPDATE_COMPLETE: 'mod:update-complete',
+  MOD_UPDATE_ERROR: 'mod:update-error',
+  
+  // HyeniHelper Events
+  HYENI_UPDATE_PROGRESS: 'hyeni:update-progress',
   
   // Modpack Events
   MODPACK_INSTALL_PROGRESS: 'modpack:install-progress',
