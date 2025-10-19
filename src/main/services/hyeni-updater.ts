@@ -231,7 +231,7 @@ export class HyeniUpdater {
       // URL encode the token to handle special characters like +, /, =
       const encodedToken = encodeURIComponent(token);
       const downloadUrl = `${getDownloadBaseUrl()}${downloadPath}?token=${encodedToken}`;
-      console.log(`[HyeniUpdater] Download URL: ${downloadUrl}`);
+      console.log(`[HyeniUpdater] Downloading: ${getDownloadBaseUrl()}${downloadPath} (token: ${token.substring(0, 8)}...)`);
       const tempPath = await this.downloadFile(downloadUrl, updateInfo.sha256, onProgress);
       
       // 4. Backup old files
@@ -404,7 +404,9 @@ export class HyeniUpdater {
     const fileName = `hyenihelper-${Date.now()}.jar`;
     const tempPath = path.join(tempDir, fileName);
     
-    console.log(`[HyeniUpdater] Downloading: ${url}`);
+    // Don't log full URL with token
+    const urlWithoutToken = url.split('?')[0];
+    console.log(`[HyeniUpdater] Downloading file: ${urlWithoutToken}`);
     
     return new Promise((resolve, reject) => {
       const request = net.request(url);

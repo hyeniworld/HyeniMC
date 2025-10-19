@@ -488,7 +488,7 @@ export class WorkerModUpdater {
     onProgress?: (progress: number) => void
   ): Promise<void> {
     try {
-      console.log(`[WorkerModUpdater] Installing ${updateInfo.modName} ${updateInfo.latestVersion}...`);
+      console.log(`[WorkerModUpdater] Installing ${updateInfo.modName} ${updateInfo.latestVersion}... (token: ${token.substring(0, 8)}...)`);
       
       // Download with token (URL encode to handle special characters like +, /, =)
       const encodedToken = encodeURIComponent(token);
