@@ -89,17 +89,20 @@ export class CrashAnalyzer {
   }
   
   private isModConflict(log: string): boolean {
+    // 더 정확한 모드 충돌 패턴 (파일 누락과 구분)
     return log.includes('ModLoadingException') ||
-           log.includes('NoClassDefFoundError') ||
-           log.includes('ClassNotFoundException') ||
-           log.includes('Duplicate');
+           log.includes('Duplicate mod') ||
+           log.includes('mod conflict') ||
+           (log.includes('NoClassDefFoundError') && log.toLowerCase().includes('mod')) ||
+           (log.includes('ClassNotFoundException') && log.toLowerCase().includes('mod'));
   }
   
   private isGraphicsError(log: string): boolean {
+    // 더 구체적인 패턴 사용 (위양성 방지)
     return log.includes('GLException') ||
-           log.includes('OpenGL') ||
-           log.includes('GPU') ||
-           log.includes('graphics');
+           log.includes('OpenGL error') ||
+           log.includes('GPU error') ||
+           log.includes('graphics driver');
   }
   
   private isFileCorruption(log: string): boolean {
