@@ -272,7 +272,7 @@ export function registerModHandlers(): void {
       if (source === 'curseforge') {
         // For CurseForge, get the version directly and extract dependencies
         console.log(`[IPC Mod] Fetching CurseForge versions for modId: ${modId}, versionId: ${versionId}`);
-        const versions = await curseforgeAPI.getModVersions(modId, gameVersion, loaderType as any);
+        const versions = await getCurseForgeAPI().getModVersions(modId, gameVersion, loaderType as any);
         const version = versions.find(v => v.id === versionId);
         
         console.log(`[IPC Mod] Found version:`, version ? 'YES' : 'NO');
@@ -304,8 +304,8 @@ export function registerModHandlers(): void {
             
             try {
               // Get dependency details from CurseForge
-              const depDetails = await curseforgeAPI.getModDetails(dep.modId);
-              const depVersions = await curseforgeAPI.getModVersions(
+              const depDetails = await getCurseForgeAPI().getModDetails(dep.modId);
+              const depVersions = await getCurseForgeAPI().getModVersions(
                 dep.modId,
                 gameVersion,
                 loaderType as any
@@ -348,7 +348,7 @@ export function registerModHandlers(): void {
         return { dependencies, issues };
       } else {
         // For Modrinth, use DependencyResolver
-        const result = await dependencyResolver.resolveDependencies(
+        const result = await getDependencyResolver().resolveDependencies(
           versionId,
           gameVersion,
           loaderType,
@@ -381,9 +381,9 @@ export function registerModHandlers(): void {
           // Get version details
           let versions;
           if (dep.source === 'curseforge') {
-            versions = await curseforgeAPI.getModVersions(dep.modId);
+            versions = await getCurseForgeAPI().getModVersions(dep.modId);
           } else {
-            versions = await modrinthAPI.getModVersions(dep.modId);
+            versions = await getModrinthAPI().getModVersions(dep.modId);
           }
           
           const version = versions.find(v => v.id === dep.versionId);
@@ -473,7 +473,7 @@ export function registerModHandlers(): void {
       
       // Note: Update checking currently only works for Modrinth mods
       // CurseForge update checking requires source metadata to be stored
-      const updates = await modUpdater.checkUpdates(gameDir, gameVersion, loaderType);
+      const updates = await getModUpdater().checkUpdates(gameDir, gameVersion, loaderType);
       
       console.log(`[IPC Mod] Found ${updates.length} updates`);
       return updates;
@@ -492,13 +492,13 @@ export function registerModHandlers(): void {
       // Get version info
       let version: any;
       if (source === 'curseforge') {
-        const versions = await curseforgeAPI.getModVersions(modId, undefined, undefined);
+        const versions = await getCurseForgeAPI().getModVersions(modId, undefined, undefined);
         version = versions.find(v => v.id === versionId) || versions[0];
         if (!version) {
           throw new Error('Version not found');
         }
       } else {
-        version = await modrinthAPI.getVersion(versionId);
+        version = await getModrinthAPI().getVersion(versionId);
       }
       
       if (!version) {
@@ -570,7 +570,7 @@ export function registerModHandlers(): void {
       console.log(`[IPC Mod] Updating mod: ${update.modName}`);
       const gameDir = getProfileInstanceDir(profileId);
       
-      await modUpdater.updateMod(gameDir, update);
+      await getModUpdater().updateMod(gameDir, update);
       
       console.log(`[IPC Mod] Successfully updated ${update.modName}`);
       return { success: true };
@@ -586,7 +586,7 @@ export function registerModHandlers(): void {
       console.log(`[IPC Mod] Updating ${updates.length} mods`);
       const gameDir = getProfileInstanceDir(profileId);
       
-      const result = await modUpdater.updateMods(
+      const result = await getModUpdater().updateMods(
         gameDir,
         updates,
         (current, total, modName) => {
