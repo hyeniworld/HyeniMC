@@ -2,6 +2,7 @@ import { spawn, ChildProcess } from 'child_process';
 import path from 'path';
 import { app } from 'electron';
 import fs from 'fs/promises';
+import fsSync from 'fs';
 
 let backendProcess: ChildProcess | null = null;
 let backendAddress: string | null = null;
@@ -68,6 +69,15 @@ export async function startBackend(): Promise<string> {
     // Set data directory
     const dataDir = path.join(app.getPath('userData'), 'data');
     
+    // Clean up any stale port file from previous runs
+    const portFile = path.join(dataDir, '.grpc-port');
+    try {
+      fsSync.unlinkSync(portFile);
+      console.log('[Backend] Cleaned up stale port file');
+    } catch {
+      // File doesn't exist, which is fine
+    }
+    
     // Spawn backend process
     backendProcess = spawn(binaryPath, [], {
       env: {
@@ -103,7 +113,7 @@ export async function startBackend(): Promise<string> {
     });
 
     // Poll for the port file (more reliable than stdout parsing)
-    const portFile = path.join(dataDir, '.grpc-port');
+    // (portFile already defined above)
     const maxAttempts = 50; // 5 seconds total (50 * 100ms)
     let attempts = 0;
 
@@ -117,10 +127,18 @@ export async function startBackend(): Promise<string> {
         
         // Validate address format (security: prevent injection)
         if (address && /^127\.0\.0\.1:\d+$/.test(address) && !resolved) {
-          // Optional: Validate PID matches our spawned process
+          // CRITICAL: Validate PID matches our spawned process
           const pid = parseInt(pidStr, 10);
           if (backendProcess && backendProcess.pid !== pid) {
-            console.warn(`[Backend] PID mismatch: expected ${backendProcess.pid}, got ${pid}`);
+            // This is a stale port file from a previous run - ignore and keep polling
+            console.warn(`[Backend] Ignoring stale port file (expected PID ${backendProcess.pid}, got ${pid}). Continuing to poll...`);
+            attempts++;
+            if (attempts >= maxAttempts) {
+              reject(new Error('Backend server failed to start within timeout (stale port file)'));
+            } else {
+              setTimeout(pollPortFile, 100);
+            }
+            return;
           }
           
           backendAddress = address;
