@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useToast } from '../../contexts/ToastContext';
-import { X, Search, Download, Loader2, ExternalLink, ChevronDown, AlertCircle, CheckCircle } from 'lucide-react';
-import type { ModSearchResult, ModVersion } from '../../../shared/types/profile';
+import { X, Search, Download, Loader2, ExternalLink, ChevronDown, AlertCircle, CheckCircle, Check } from 'lucide-react';
+import type { ModSearchResult, ModVersion, Mod } from '../../../shared/types/profile';
 
 interface ModSearchModalProps {
   isOpen: boolean;
@@ -29,6 +29,15 @@ export function ModSearchModal({ isOpen, onClose, profileId, profile, gameVersio
   const [isCheckingDependencies, setIsCheckingDependencies] = useState(false);
   const [showDependencies, setShowDependencies] = useState(false);
   const [searchSource, setSearchSource] = useState<'modrinth' | 'curseforge'>('modrinth');
+  const [installedMods, setInstalledMods] = useState<Mod[]>([]);
+  const [installedModMap, setInstalledModMap] = useState<Map<string, Mod>>(new Map());
+
+  // Load installed mods when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      loadInstalledMods();
+    }
+  }, [isOpen, profileId]);
 
   useEffect(() => {
     if (searchQuery.length > 2) {
@@ -38,6 +47,58 @@ export function ModSearchModal({ isOpen, onClose, profileId, profile, gameVersio
       return () => clearTimeout(debounce);
     }
   }, [searchQuery, searchSource]);
+
+  const loadInstalledMods = async () => {
+    try {
+      const mods = await window.electronAPI.mod.list(profileId);
+      setInstalledMods(mods);
+      console.log('[ModSearchModal] Loaded installed mods:', mods);
+    } catch (error) {
+      console.error('[ModSearchModal] Failed to load installed mods:', error);
+    }
+  };
+
+  const checkInstalledMods = (searchResults: ModSearchResult[]) => {
+    const map = new Map<string, Mod>();
+
+    for (const result of searchResults) {
+      // 1) sourceModId로 직접 매칭 (런처에서 설치한 모드)
+      const directMatch = installedMods.find(mod => {
+        if (mod.modId === result.id) {
+          return mod.source === result.source || mod.source === 'local' || !mod.source;
+        }
+        return false;
+      });
+      
+      if (directMatch) {
+        map.set(result.id, directMatch);
+        continue;
+      }
+
+      // 2) 파일명 기반 휴리스틱 매칭 (수동 설치한 모드, API 호출 없음)
+      // 예: "iris-neoforge-1.8.12.jar" → slug "iris"와 매칭
+      const slug = result.slug?.toLowerCase();
+      if (slug) {
+        const filenameMatch = installedMods.find(mod => {
+          const fileName = mod.fileName.toLowerCase();
+          // 파일명이 slug로 시작하는지 확인 (정확도 높음)
+          return fileName.startsWith(slug + '-') || 
+                 fileName.startsWith(slug + '_') ||
+                 fileName === slug + '.jar';
+        });
+        
+        if (filenameMatch) {
+          map.set(result.id, filenameMatch);
+        }
+      }
+    }
+
+    setInstalledModMap(map);
+  };
+
+  const isVersionInstalled = (fileName: string): boolean => {
+    return installedMods.some(mod => mod.fileName === fileName);
+  };
 
   const handleSearch = async () => {
     if (searchQuery.length < 2) return;
@@ -52,6 +113,9 @@ export function ModSearchModal({ isOpen, onClose, profileId, profile, gameVersio
         source: searchSource,
       });
       setSearchResults(result.hits);
+      
+      // Check which mods are already installed
+      checkInstalledMods(result.hits);
     } catch (error) {
       console.error('Failed to search mods:', error);
       if (error instanceof Error && error.message.includes('CurseForge API key')) {
@@ -71,11 +135,12 @@ export function ModSearchModal({ isOpen, onClose, profileId, profile, gameVersio
     setDependencyIssues([]);
     
     try {
+      const source = mod.source === 'modrinth' || mod.source === 'curseforge' ? mod.source : 'modrinth';
       const versions = await window.electronAPI.mod.getVersions(
         mod.id,
         gameVersion,
         loaderType === 'vanilla' ? undefined : loaderType,
-        mod.source  // Pass source (modrinth | curseforge)
+        source  // Pass source (modrinth | curseforge)
       );
       setModVersions(versions);
       if (versions.length > 0) {
@@ -108,13 +173,14 @@ export function ModSearchModal({ isOpen, onClose, profileId, profile, gameVersio
       });
       setIsCheckingDependencies(true);
       try {
+        const source = currentMod.source === 'modrinth' || currentMod.source === 'curseforge' ? currentMod.source : 'modrinth';
         const result = await window.electronAPI.mod.checkDependencies(
           profileId,
           currentMod.id,      // Pass modId
           version.id,
           gameVersion,
           loaderType,
-          currentMod.source  // Pass source
+          source  // Pass source
         );
         console.log('[ModSearchModal] Dependency check result:', result);
         setDependencies(result.dependencies || []);
@@ -151,13 +217,18 @@ export function ModSearchModal({ isOpen, onClose, profileId, profile, gameVersio
       }
 
       // Install the main mod
-      await window.electronAPI.mod.install(profileId, selectedMod.id, selectedVersion.id, selectedMod.source);
+      const source = selectedMod.source === 'modrinth' || selectedMod.source === 'curseforge' ? selectedMod.source : 'modrinth';
+      await window.electronAPI.mod.install(profileId, selectedMod.id, selectedVersion.id, source);
       
       const message = requiredDeps.length > 0
         ? `${selectedMod.name} 및 ${requiredDeps.length}개 의존성 설치 완료!`
         : `${selectedMod.name} 설치 완료!`;
       
       toast.success('설치 성공', message);
+      
+      // Reload installed mods to update UI
+      await loadInstalledMods();
+      
       onInstallSuccess?.();
       onClose();
     } catch (error) {
@@ -242,29 +313,31 @@ export function ModSearchModal({ isOpen, onClose, profileId, profile, gameVersio
                     : '검색 결과가 없습니다'}
                 </div>
               ) : (
-                searchResults.map((mod) => (
-                  <div
-                    key={mod.id}
-                    onClick={() => handleSelectMod(mod)}
-                    className={`p-4 rounded-lg border cursor-pointer transition-all ${
-                      selectedMod?.id === mod.id
-                        ? 'bg-purple-500/20 border-purple-500'
-                        : 'bg-gray-800 border-gray-700 hover:border-purple-500/50'
-                    }`}
-                  >
-                    <div className="flex gap-3">
-                      {mod.iconUrl && (
-                        <img
-                          src={mod.iconUrl}
-                          alt={mod.name}
-                          className="w-12 h-12 rounded-lg object-cover"
-                        />
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-semibold truncate">{mod.name}</h3>
-                          <span
-                            className={`px-2 py-0.5 text-xs font-medium rounded ${
+                searchResults.map((mod) => {
+                  const installedMod = installedModMap.get(mod.id);
+                  return (
+                    <div
+                      key={mod.id}
+                      onClick={() => handleSelectMod(mod)}
+                      className={`p-4 rounded-lg border cursor-pointer transition-all ${
+                        selectedMod?.id === mod.id
+                          ? 'bg-purple-500/20 border-purple-500'
+                          : 'bg-gray-800 border-gray-700 hover:border-purple-500/50'
+                      }`}
+                    >
+                      <div className="flex gap-3">
+                        {mod.iconUrl && (
+                          <img
+                            src={mod.iconUrl}
+                            alt={mod.name}
+                            className="w-12 h-12 rounded-lg object-cover"
+                          />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="font-semibold truncate">{mod.name}</h3>
+                            <span
+                              className={`px-2 py-0.5 text-xs font-medium rounded ${
                               mod.source === 'curseforge'
                                 ? 'bg-orange-500/20 text-orange-300 border border-orange-500/50'
                                 : 'bg-green-500/20 text-green-300 border border-green-500/50'
@@ -272,17 +345,27 @@ export function ModSearchModal({ isOpen, onClose, profileId, profile, gameVersio
                           >
                             {mod.source === 'curseforge' ? '🟠 CF' : '🟢 MR'}
                           </span>
+                          {installedMod && (
+                            <span className="px-2 py-0.5 text-xs font-medium rounded bg-blue-500/20 text-blue-300 border border-blue-500/50 flex items-center gap-1">
+                              <Check className="w-3 h-3" />
+                              설치됨
+                            </span>
+                          )}
                         </div>
                         <p className="text-sm text-gray-400 truncate">
                           by {mod.author}
                         </p>
                         <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
                           <span>⬇ {mod.downloads.toLocaleString()}</span>
+                          {installedMod && (
+                            <span className="text-blue-400">• v{installedMod.version}</span>
+                          )}
                         </div>
                       </div>
                     </div>
                   </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>

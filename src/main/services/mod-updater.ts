@@ -1,6 +1,7 @@
 import { ModrinthAPI } from './modrinth-api';
 import { CurseForgeAPI } from './curseforge-api';
 import { ModManager } from './mod-manager';
+import { ModResolver } from './mod-resolver';
 import type { ModVersion } from '../../shared/types/profile';
 
 export interface ModUpdateInfo {
@@ -26,77 +27,12 @@ export interface UpdateResult {
 export class ModUpdater {
   private modrinthAPI: ModrinthAPI;
   private curseforgeAPI: CurseForgeAPI;
+  private modResolver: ModResolver;
 
   constructor() {
     this.modrinthAPI = new ModrinthAPI();
     this.curseforgeAPI = new CurseForgeAPI();
-  }
-
-  /**
-   * 파일명에서 추출한 슬러그 정규화 (로더 접미 제거 등)
-   */
-  private normalizeSlug(slug: string): string {
-    return slug
-      .replace(/[-_](fabric|forge|neoforge)$/i, '')
-      .replace(/[-_](fabric|forge|neoforge)[-_.].*$/i, '')
-      .toLowerCase();
-  }
-
-  /**
-   * 프로젝트 ID/슬러그 해석
-   * 1) 파일명 기반 슬러그 정규화 후 getModDetails 시도
-   * 2) 알려진 매핑 테이블 적용 (네오포지 대표 케이스)
-   * 3) 이름 기반 검색 폴백(로더/게임버전 필터)
-   */
-  private async resolveProjectId(
-    displayName: string,
-    fileName: string,
-    gameVersion: string,
-    loaderType: string
-  ): Promise<string | null> {
-    // 1) 파일명에서 슬러그 추출/정규화
-    const rawSlug = this.extractModSlug(fileName);
-    const slug = this.normalizeSlug(rawSlug);
-
-    // 2) 네오포지 등 흔한 매핑 우선 적용
-    const knownMap: Record<string, string> = {
-      // Iris
-      iris: 'YL57xq9U',
-      // Sodium
-      sodium: 'AANobbMI',
-      // 필요 시 추가 매핑
-    };
-
-    // 2-1) 매핑 ID가 있으면 바로 사용 가능
-    if (knownMap[slug]) {
-      return knownMap[slug];
-    }
-
-    // 3) 슬러그로 직접 조회 시도 (성공 시 정식 ID 획득)
-    try {
-      const details = await this.modrinthAPI.getModDetails(slug);
-      if (details?.id) return details.id;
-    } catch (_) {
-      // ignore and fallback to search
-    }
-
-    // 4) 이름 기반 검색 폴백 (로더/버전 필터)
-    // 파일명에서 로더 토큰 제거 후 검색어 보정
-    const searchQuery = displayName || slug;
-    const result = await this.modrinthAPI.searchMods(searchQuery, {
-      gameVersion,
-      loaderType: loaderType !== 'vanilla' ? (loaderType as any) : undefined,
-      limit: 5,
-    } as any);
-
-    if (!result.hits || result.hits.length === 0) return null;
-
-    // 후보 중 slug 포함/로더 호환 우선 선택
-    const preferred = result.hits.find(h =>
-      h.slug?.toLowerCase().includes(slug) || h.name?.toLowerCase().includes(slug)
-    ) || result.hits[0];
-
-    return preferred.id || null;
+    this.modResolver = new ModResolver();
   }
 
   /**
@@ -163,7 +99,7 @@ export class ModUpdater {
           // Legacy: Try to resolve mod via filename/name search (Modrinth only)
           if (source === 'local' || source === 'modrinth') {
             console.log(`[ModUpdater] No metadata for ${mod.name}, trying legacy resolution`);
-            const projectIdOrSlug = await this.resolveProjectId(
+            const projectIdOrSlug = await this.modResolver.resolveModrinthProjectId(
               mod.name,
               mod.fileName,
               gameVersion,
@@ -228,7 +164,7 @@ export class ModUpdater {
       }
 
       // Otherwise compare versions
-      const slugForVersion = this.normalizeSlug(this.extractModSlug(mod.fileName));
+      const slugForVersion = this.modResolver.normalizeSlug(this.modResolver.extractModSlug(mod.fileName));
       const currentVersion = mod.version || this.extractVersionFromFileName(mod.fileName, slugForVersion);
       const isSameFileName = !!latestVersion.fileName && mod.fileName === latestVersion.fileName;
       const needsUpdate = !isSameFileName && this.isNewerVersion(latestVersion.versionNumber, currentVersion);
@@ -440,25 +376,6 @@ export class ModUpdater {
     return this.updateMods(gameDir, requiredUpdates, onProgress);
   }
 
-  /**
-   * 파일 이름에서 모드 슬러그 추출
-   */
-  private extractModSlug(fileName: string): string {
-    // fabric-api-0.92.0+1.20.1.jar -> fabric-api
-    const baseName = fileName.replace(/\.jar(\.disabled)?$/, '');
-    const parts = baseName.split('-');
-    
-    // 버전 번호로 보이는 부분 제거
-    const nameparts: string[] = [];
-    for (const part of parts) {
-      if (/^\d/.test(part)) {
-        break;
-      }
-      nameparts.push(part);
-    }
-    
-    return nameparts.join('-') || baseName;
-  }
 
   /**
    * 파일명에서 버전 문자열을 단순 추출 (베스트 에포트)

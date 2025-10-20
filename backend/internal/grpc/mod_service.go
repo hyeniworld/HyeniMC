@@ -158,6 +158,8 @@ func domainModToPb(mod *domain.Mod) *pb.Mod {
 		Authors:      mod.Authors,
 		Enabled:      mod.Enabled,
 		Source:       mod.Source,
+		SourceModId:  mod.SourceModID,
+		SourceFileId: mod.SourceFileID,
 		LastModified: mod.LastModified.Unix(),
 		CreatedAt:    mod.CreatedAt.Unix(),
 		UpdatedAt:    mod.UpdatedAt.Unix(),

@@ -27,7 +27,7 @@ message Mod {
   string file_path = 6;
   string file_hash = 7;
   int64 file_size = 8;
-  string mod_id = 9; // modrinth/curseforge ID
+  string mod_id = 9; // Internal mod ID from mod.json
   string description = 10;
   repeated string authors = 11;
   bool enabled = 12;
@@ -35,6 +35,8 @@ message Mod {
   int64 last_modified = 14;
   int64 created_at = 15;
   int64 updated_at = 16;
+  string source_mod_id = 17; // Modrinth project ID or CurseForge mod ID
+  string source_file_id = 18; // Modrinth version ID or CurseForge file ID
 }
 
 // Cache operations

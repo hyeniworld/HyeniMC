@@ -74,7 +74,7 @@ export interface ValidationResult {
 }
 
 // Mod 관련 타입
-export type ModSource = 'modrinth' | 'curseforge' | 'custom' | 'url';
+export type ModSource = 'modrinth' | 'curseforge' | 'local' | 'custom' | 'url';
 
 export interface Mod {
   id: string;
@@ -84,6 +84,7 @@ export interface Mod {
   
   // 소스 정보
   source: ModSource;
+  modId?: string;  // Source mod ID (Modrinth project ID or CurseForge mod ID)
   sourceId?: string;
   projectSlug?: string;
   fileId?: string;

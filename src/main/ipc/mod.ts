@@ -61,7 +61,7 @@ export function registerModHandlers(): void {
         description: mod.description || '',
         authors: mod.authors || [],
         enabled: mod.enabled,
-        modId: mod.modId,
+        modId: mod.sourceModId || mod.modId, // Use sourceModId (Modrinth/CurseForge ID) if available
         source: mod.source,
         fileSize: mod.fileSize,
       }));
@@ -601,6 +601,29 @@ export function registerModHandlers(): void {
       throw error;
     }
   });
+
+  // Resolve project ID (for manually installed mods)
+  ipcMain.handle(
+    IPC_CHANNELS.MOD_RESOLVE_PROJECT,
+    async (_event, displayName: string, fileName: string, gameVersion: string, loaderType: string) => {
+      try {
+        console.log(`[IPC Mod] Resolving project: ${displayName} (${fileName})`);
+        const { ModResolver } = await import('../services/mod-resolver');
+        const resolver = new ModResolver();
+        const projectId = await resolver.resolveModrinthProjectId(
+          displayName,
+          fileName,
+          gameVersion,
+          loaderType
+        );
+        console.log(`[IPC Mod] Resolved to: ${projectId}`);
+        return projectId;
+      } catch (error) {
+        console.error('[IPC Mod] Failed to resolve project:', error);
+        return null;
+      }
+    }
+  );
 
   console.log('[IPC Mod] Mod handlers registered');
 }

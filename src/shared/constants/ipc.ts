@@ -52,6 +52,7 @@ export const IPC_CHANNELS = {
   MOD_UPDATE_ALL: 'mod:update-all',
   MOD_CHECK_DEPENDENCIES: 'mod:check-dependencies',
   MOD_INSTALL_DEPENDENCIES: 'mod:install-dependencies',
+  MOD_RESOLVE_PROJECT: 'mod:resolve-project',
   
   // Resource Pack Management
   RESOURCEPACK_LIST: 'resourcepack:list',

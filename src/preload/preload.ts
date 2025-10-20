@@ -170,6 +170,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke(IPC_CHANNELS.MOD_TOGGLE, profileId, fileName, enabled),
     remove: (profileId: string, fileName: string): Promise<{ success: boolean }> =>
       ipcRenderer.invoke(IPC_CHANNELS.MOD_REMOVE, profileId, fileName),
+    resolveModrinthProject: (displayName: string, fileName: string, gameVersion: string, loaderType: string): Promise<string | null> =>
+      ipcRenderer.invoke(IPC_CHANNELS.MOD_RESOLVE_PROJECT, displayName, fileName, gameVersion, loaderType),
   },
 
   // Resource Pack APIs
