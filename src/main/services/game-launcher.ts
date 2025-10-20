@@ -3,6 +3,8 @@ import * as path from 'path';
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import { VersionDetails, Library } from './version-manager';
+import { GameLaunchValidator } from './game-launch-validator';
+import { GameLaunchError } from '../utils/error-handler';
 
 export interface LaunchOptions {
   profileId?: string;  // Profile ID for tracking
@@ -33,6 +35,7 @@ export interface GameProcess {
 
 export class GameLauncher {
   private activeProcesses: Map<string, GameProcess> = new Map();
+  private validator = new GameLaunchValidator();
 
   /**
    * Check if a profile is currently running (checks actual process state)
@@ -69,7 +72,43 @@ export class GameLauncher {
       throw new Error(`프로필 ${options.versionId}이(가) 이미 실행 중입니다!`);
     }
 
-    // Auto-fix invalid memory settings from profile
+    // ✨ 실행 전 검증
+    console.log('[Game Launcher] Validating launch configuration...');
+    const validation = await this.validator.validateBeforeLaunch({
+      profileId: options.profileId,
+      gameVersion: options.versionId,
+      javaPath: options.javaPath,
+      gameDirectory: options.gameDir,
+      memory: {
+        min: options.minMemory || 512,
+        max: options.maxMemory || 2048,
+      },
+    });
+    
+    // Warning 로그 출력
+    validation.issues
+      .filter(i => i.severity === 'warning')
+      .forEach(issue => {
+        console.warn(`[Validator] ${issue.title}: ${issue.message}`);
+      });
+    
+    // Error 또는 Critical 발생 시 실행 차단
+    if (!validation.canLaunch) {
+      const criticalIssue = validation.issues.find(i => i.severity === 'critical') 
+                          || validation.issues.find(i => i.severity === 'error')
+                          || validation.issues[0];
+      
+      console.error('[Game Launcher] Validation failed:', criticalIssue);
+      
+      throw new GameLaunchError({
+        title: criticalIssue.title,
+        message: criticalIssue.message,
+        solution: criticalIssue.solution,
+        technicalDetails: criticalIssue.technicalDetails || JSON.stringify(validation.issues, null, 2),
+      });
+    }
+
+    // Auto-fix invalid memory settings from profile (기존 로직 유지)
     if (options.minMemory && options.maxMemory && options.minMemory > options.maxMemory) {
       console.warn(`[Game Launcher] Invalid memory settings detected: min(${options.minMemory}MB) > max(${options.maxMemory}MB). Auto-correcting...`);
       options.maxMemory = options.minMemory;
@@ -201,6 +240,39 @@ export class GameLauncher {
             const { cacheRpc } = await import('../grpc/clients');
             await cacheRpc.recordProfileCrash({ profileId: options.profileId });
             console.log(`[Game Launcher] Game crashed (exit code: ${code})`);
+            
+            // ✨ 크래시 분석
+            const { CrashAnalyzer } = await import('./crash-analyzer');
+            const analyzer = new CrashAnalyzer();
+            const latestCrashLog = await analyzer.findLatestCrashLog(options.gameDir);
+            
+            if (latestCrashLog) {
+              console.log(`[Game Launcher] Analyzing crash log: ${latestCrashLog}`);
+              const analysis = await analyzer.analyzeCrashLog(latestCrashLog);
+              
+              // showErrorDialog를 통해 UI에 표시
+              const { BrowserWindow } = await import('electron');
+              const { showErrorDialog } = await import('../ipc/error-dialog');
+              const windows = BrowserWindow.getAllWindows();
+              const mainWindow = windows.length > 0 ? windows[0] : null;
+              
+              if (mainWindow) {
+                showErrorDialog(mainWindow, {
+                  type: 'error',
+                  title: analysis.title,
+                  message: analysis.message,
+                  details: analysis.crashLog ? analysis.crashLog.substring(0, 2000) : undefined, // 처음 2000자만
+                  suggestions: analysis.fixes.map(f => f.title),
+                  actions: analysis.fixes
+                    .filter(f => f.action)
+                    .map(f => ({
+                      label: f.title,
+                      type: 'primary' as const,
+                      action: f.action!,
+                    })),
+                });
+              }
+            }
           } catch (error) {
             console.error('[Game Launcher] Failed to record crash:', error);
           }

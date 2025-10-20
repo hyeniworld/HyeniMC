@@ -261,6 +261,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke(IPC_CHANNELS.FILE_WATCH_STOP, profileId),
   },
 
+  // Error Dialog APIs
+  errorDialog: {
+    executeAction: (action: string): Promise<void> =>
+      ipcRenderer.invoke('error-dialog:execute-action', action),
+  },
+  
+  onShowErrorDialog: (callback: (data: any) => void) => {
+    const subscription = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('show-error-dialog', subscription);
+    return () => {
+      ipcRenderer.removeListener('show-error-dialog', subscription);
+    };
+  },
+
   // Event listeners
   on: (channel: string, callback: (...args: any[]) => void) => {
     // Validate channel is in our allowed list

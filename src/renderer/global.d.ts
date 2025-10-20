@@ -118,6 +118,10 @@ declare global {
         start: (profileId: string, gameDirectory: string) => Promise<{ success: boolean }>;
         stop: (profileId: string) => Promise<{ success: boolean }>;
       };
+      errorDialog: {
+        executeAction: (action: string) => Promise<void>;
+      };
+      onShowErrorDialog: (callback: (data: any) => void) => () => void;
       hyeni: {
         checkForUpdate: (profilePath: string, gameVersion: string, loaderType: string) => Promise<any>;
         installUpdate: (profilePath: string, updateInfo: any) => Promise<{ success: boolean; message?: string }>;

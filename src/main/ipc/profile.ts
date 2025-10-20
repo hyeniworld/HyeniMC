@@ -651,6 +651,28 @@ export function registerProfileHandlers(): void {
       return { success: true, message: '게임이 시작되었습니다!' };
     } catch (error) {
       console.error('[IPC Profile] Failed to launch:', error);
+      
+      // GameLaunchError인 경우 ErrorDialog 표시
+      const { GameLaunchError } = await import('../utils/error-handler');
+      if (error instanceof GameLaunchError) {
+        const { BrowserWindow } = await import('electron');
+        const { showErrorDialog } = await import('./error-dialog');
+        const window = BrowserWindow.fromWebContents(event.sender);
+        
+        if (window) {
+          showErrorDialog(window, {
+            type: 'error',
+            title: error.userFriendly.title,
+            message: error.userFriendly.message,
+            details: error.userFriendly.technicalDetails,
+            suggestions: error.userFriendly.solution ? [error.userFriendly.solution] : undefined,
+            actions: [
+              { label: '닫기', type: 'secondary', action: 'close' },
+            ],
+          });
+        }
+      }
+      
       throw new Error(error instanceof Error ? error.message : '게임 실행에 실패했습니다');
     }
   });

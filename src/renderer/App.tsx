@@ -8,6 +8,7 @@ import { GlobalDownloadModal } from './components/common/GlobalDownloadModal';
 import { SettingsPage } from './pages/SettingsPage';
 import { useDownloadProgress } from './hooks/useDownloadProgress';
 import { ToastProvider, useToast } from './contexts/ToastContext';
+import { ErrorDialogProvider } from './contexts/ErrorDialogContext';
 import { HyeniDecorations } from './components/common/HyeniDecorations';
 import { useLauncherUpdate } from './hooks/useLauncherUpdate';
 import { LauncherUpdateBanner } from './components/launcher/LauncherUpdateBanner';
@@ -33,19 +34,21 @@ function App() {
 
   return (
     <ToastProvider>
-      <AccountContext.Provider value={{ selectedAccountId, setSelectedAccountId }}>
-        <HashRouter>
-          <Routes>
-            <Route path="/" element={<MainLayout />}>
-              <Route index element={<ProfileList />} />
-              <Route path="profile/:profileId" element={<ProfileDetailPage />} />
-              <Route path="settings" element={<SettingsPage />} />
-            </Route>
-          </Routes>
-        </HashRouter>
-        {/* Global Download/Install Modal (rich) */}
-        <GlobalDownloadModal />
-      </AccountContext.Provider>
+      <ErrorDialogProvider>
+        <AccountContext.Provider value={{ selectedAccountId, setSelectedAccountId }}>
+          <HashRouter>
+            <Routes>
+              <Route path="/" element={<MainLayout />}>
+                <Route index element={<ProfileList />} />
+                <Route path="profile/:profileId" element={<ProfileDetailPage />} />
+                <Route path="settings" element={<SettingsPage />} />
+              </Route>
+            </Routes>
+          </HashRouter>
+          {/* Global Download/Install Modal (rich) */}
+          <GlobalDownloadModal />
+        </AccountContext.Provider>
+      </ErrorDialogProvider>
     </ToastProvider>
   );
 }

@@ -15,6 +15,7 @@ import { registerSettingsHandlers } from './settings';
 import { registerFileWatcherHandlers } from './file-watcher';
 import { registerHyeniHandlers } from './hyeni';
 import { registerLauncherHandlers } from './launcher';
+import { registerErrorDialogHandlers } from './error-dialog';
 
 /**
  * Register all IPC handlers
@@ -38,6 +39,7 @@ export function registerIpcHandlers(): void {
   registerFileWatcherHandlers();
   registerHyeniHandlers();
   registerLauncherHandlers();
+  registerErrorDialogHandlers();
 
   console.log('[IPC] IPC handlers registered');
 }
