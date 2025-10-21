@@ -13,6 +13,10 @@ export interface ModInfo {
   filePath: string;
   enabled: boolean;
   loader: 'fabric' | 'neoforge' | 'forge' | 'quilt' | 'unknown';
+  // Metadata from .meta.json file (for mods installed from Modrinth/CurseForge)
+  source?: 'modrinth' | 'curseforge' | 'local';
+  sourceModId?: string;
+  sourceFileId?: string;
 }
 
 export class ModManager {
@@ -78,15 +82,20 @@ export class ModManager {
     fileName: string,
     enabled: boolean
   ): Promise<ModInfo> {
-    // 1. 먼저 .meta.json 파일에서 버전 정보 읽기
-    let metaVersion: string | undefined;
+    // 1. 먼저 .meta.json 파일에서 메타데이터 읽기
+    let metadata: {
+      versionNumber?: string;
+      source?: 'modrinth' | 'curseforge' | 'local';
+      sourceModId?: string;
+      sourceFileId?: string;
+    } | undefined;
+    
     try {
       const metaPath = `${filePath}.meta.json`;
       const metaContent = await fs.readFile(metaPath, 'utf8');
-      const metadata = JSON.parse(metaContent);
-      metaVersion = metadata.versionNumber;
-      if (metaVersion) {
-        console.log(`[Mod Manager] Found version in metadata: ${fileName} → ${metaVersion}`);
+      metadata = JSON.parse(metaContent);
+      if (metadata?.versionNumber) {
+        console.log(`[Mod Manager] Found metadata: ${fileName} (${metadata.source || 'local'})`);
       }
     } catch (error) {
       // 메타 파일 없음 - JAR에서 파싱
@@ -115,7 +124,7 @@ export class ModManager {
       return {
         id: json.id || fileName,
         name: json.name || json.id || fileName,
-        version: metaVersion || json.version || 'unknown',
+        version: metadata?.versionNumber || json.version || 'unknown',
         description: json.description,
         authors: Array.isArray(json.authors) 
           ? json.authors.map((a: any) => typeof a === 'string' ? a : a.name)
@@ -125,6 +134,9 @@ export class ModManager {
         filePath,
         enabled,
         loader: 'fabric',
+        source: metadata?.source,
+        sourceModId: metadata?.sourceModId,
+        sourceFileId: metadata?.sourceFileId,
       };
     }
 
@@ -142,13 +154,16 @@ export class ModManager {
         return {
           id: modInfo.modId || fileName,
           name: modInfo.displayName || modInfo.modId || fileName,
-          version: metaVersion || modInfo.version || 'unknown',
+          version: metadata?.versionNumber || modInfo.version || 'unknown',
           description: modInfo.description,
           authors: modInfo.authors ? [modInfo.authors] : undefined,
           fileName,
           filePath,
           enabled,
           loader: 'neoforge',
+          source: metadata?.source,
+          sourceModId: metadata?.sourceModId,
+          sourceFileId: metadata?.sourceFileId,
         };
       } catch (error) {
         console.warn(`[Mod Manager] Failed to parse NeoForge mod metadata: ${fileName}`, error);
@@ -156,11 +171,14 @@ export class ModManager {
         return {
           id: fileName.replace('.jar', ''),
           name: fileName.replace('.jar', ''),
-          version: metaVersion || 'unknown',
+          version: metadata?.versionNumber || 'unknown',
           fileName,
           filePath,
           enabled,
           loader: 'neoforge',
+          source: metadata?.source,
+          sourceModId: metadata?.sourceModId,
+          sourceFileId: metadata?.sourceFileId,
         };
       }
     }
@@ -176,13 +194,16 @@ export class ModManager {
         return {
           id: quilMod.id || json.id || fileName,
           name: quilMod.name || json.name || fileName,
-          version: metaVersion || quilMod.version || json.version || 'unknown',
+          version: metadata?.versionNumber || quilMod.version || json.version || 'unknown',
           description: quilMod.description || json.description,
           authors: quilMod.contributors ? Object.keys(quilMod.contributors) : undefined,
           fileName,
           filePath,
           enabled,
           loader: 'quilt',
+          source: metadata?.source,
+          sourceModId: metadata?.sourceModId,
+          sourceFileId: metadata?.sourceFileId,
         };
       } catch (error) {
         console.warn(`[Mod Manager] Failed to parse Quilt mod metadata: ${fileName}`, error);
@@ -194,11 +215,14 @@ export class ModManager {
     return {
       id: fileName.replace('.jar', ''),
       name: fileName.replace('.jar', ''),
-      version: metaVersion || 'unknown',
+      version: metadata?.versionNumber || 'unknown',
       fileName,
       filePath,
       enabled,
       loader: 'unknown',
+      source: metadata?.source,
+      sourceModId: metadata?.sourceModId,
+      sourceFileId: metadata?.sourceFileId,
     };
   }
 

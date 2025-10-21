@@ -1,7 +1,8 @@
 import { ModrinthAPI } from './modrinth-api';
 import { CurseForgeAPI } from './curseforge-api';
-import { ModManager } from './mod-manager';
 import { ModResolver } from './mod-resolver';
+import { ModManager } from './mod-manager';
+import { isNewerVersion, parseModVersion } from '../../shared/utils/version';
 import type { ModVersion } from '../../shared/types/profile';
 
 export interface ModUpdateInfo {
@@ -62,9 +63,9 @@ export class ModUpdater {
 
         try {
           // Check source metadata (from .meta.json file)
-          const source = (mod as any).source || 'local';
-          const sourceModId = (mod as any).sourceModId;
-          const sourceFileId = (mod as any).sourceFileId;
+          const source = mod.source || 'local';
+          const sourceModId = mod.sourceModId;
+          const sourceFileId = mod.sourceFileId;
 
           // CurseForge mods with metadata
           if (source === 'curseforge' && sourceModId && sourceFileId) {
@@ -197,7 +198,7 @@ export class ModUpdater {
       const slugForVersion = this.modResolver.normalizeSlug(this.modResolver.extractModSlug(mod.fileName));
       const currentVersion = mod.version || this.extractVersionFromFileName(mod.fileName, slugForVersion);
       const isSameFileName = !!latestVersion.fileName && mod.fileName === latestVersion.fileName;
-      const needsUpdate = !isSameFileName && this.isNewerVersion(latestVersion.versionNumber, currentVersion);
+      const needsUpdate = !isSameFileName && isNewerVersion(latestVersion.versionNumber, currentVersion);
 
       if (needsUpdate) {
         console.log(`[ModUpdater] Modrinth update available: ${mod.name} ${currentVersion} -> ${latestVersion.versionNumber}`);
@@ -266,7 +267,10 @@ export class ModUpdater {
 
       // Check if actually newer
       const currentVersion = mod.version || 'unknown';
-      const needsUpdate = this.isNewerVersion(latestVersion.versionNumber, currentVersion);
+      const parsedCurrent = parseModVersion(currentVersion);
+      const parsedLatest = parseModVersion(latestVersion.versionNumber);
+      console.log(`[ModUpdater] Comparing versions for ${mod.name}: current=${currentVersion} (parsed: ${parsedCurrent}), latest=${latestVersion.versionNumber} (parsed: ${parsedLatest})`);
+      const needsUpdate = isNewerVersion(latestVersion.versionNumber, currentVersion);
 
       if (needsUpdate) {
         console.log(`[ModUpdater] CurseForge update available: ${mod.name} ${currentVersion} -> ${latestVersion.versionNumber}`);
@@ -424,48 +428,4 @@ export class ModUpdater {
     return parts.length > 1 ? parts.slice(1).join('-') : base;
   }
 
-  /**
-   * Modrinth 버전 문자열 정규화
-   * 예: 'mc1.21.1-1.8.12-neoforge' -> [1,8,12]
-   *     '0.6.13+mc1.21.1' -> [0,6,13]
-   */
-  private normalizeVersionString(v: string): number[] {
-    if (!v) return [];
-    // mc 접두/접미, 로더 접미 제거
-    let s = v
-      .replace(/^mc\d+(?:\.\d+)*[-_]?/i, '')
-      .replace(/[-_](fabric|forge|neoforge).*$/i, '')
-      .replace(/.*-mc\d+(?:\.\d+)*$/i, '');
-    // 숫자 시퀀스만 추출
-    const nums = s.match(/\d+(?:\.\d+)*/g);
-    if (!nums || nums.length === 0) {
-      // 전체에서 마지막 숫자 시퀀스라도 추출
-      const fallback = v.match(/\d+(?:\.\d+)*/g);
-      if (!fallback) return [];
-      s = fallback[fallback.length - 1];
-    } else {
-      s = nums[0];
-    }
-    return s.split('.').map(n => parseInt(n, 10) || 0);
-  }
-
-  /**
-   * 버전 비교: 정규화된 숫자 배열을 기준으로 비교
-   */
-  private isNewerVersion(latest: string, current: string): boolean {
-    if (!latest) return false;
-    if (!current) return true;
-    const L = this.normalizeVersionString(latest);
-    const C = this.normalizeVersionString(current);
-    if (L.length === 0 || C.length === 0) {
-      return latest !== current; // 정보 부족 시 보수적으로 문자열 비교
-    }
-    for (let i = 0; i < Math.max(L.length, C.length); i++) {
-      const a = L[i] ?? 0;
-      const b = C[i] ?? 0;
-      if (a > b) return true;
-      if (a < b) return false;
-    }
-    return false;
-  }
 }
