@@ -112,6 +112,15 @@ export class CurseForgeAPI {
         modLoaderType = loaderMap[filters.loaderType] || 0;
       }
 
+      // Sort mapping
+      const sortFieldMap: Record<string, number> = {
+        'relevance': 2,    // Popularity
+        'downloads': 6,    // TotalDownloads
+        'updated': 3,      // LastUpdated
+        'newest': 11,      // ReleasedDate
+      };
+      const sortField = sortFieldMap[filters?.sortBy || 'relevance'] || 2;
+
       // Build search parameters
       const params: any = {
         gameId: this.MINECRAFT_GAME_ID,
@@ -119,6 +128,8 @@ export class CurseForgeAPI {
         searchFilter: query,
         pageSize: filters?.limit || 20,
         index: filters?.offset || 0,
+        sortField: sortField,
+        sortOrder: 'desc',
       };
 
       if (filters?.gameVersion) {

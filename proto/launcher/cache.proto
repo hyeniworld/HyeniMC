@@ -88,6 +88,7 @@ message SearchModrinthRequest {
   int32 offset = 3;
   string facets = 4; // JSON string
   bool force_refresh = 5;
+  string index = 6; // Sort index: relevance, downloads, updated, newest
 }
 
 message SearchModrinthResponse {
@@ -130,6 +131,8 @@ message SearchCurseForgeRequest {
   int32 page_size = 4;
   int32 index = 5;
   bool force_refresh = 6;
+  int32 sort_field = 7;   // Sort field: 2=Popularity, 6=TotalDownloads, etc.
+  string sort_order = 8;  // Sort order: asc, desc
 }
 
 message SearchCurseForgeResponse {

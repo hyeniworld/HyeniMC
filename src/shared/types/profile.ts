@@ -132,6 +132,12 @@ export interface InstallModData {
   required?: boolean;
 }
 
+export type ModSearchSortOption = 
+  | 'relevance'      // 관련성 (기본값)
+  | 'downloads'      // 다운로드 수
+  | 'updated'        // 업데이트순
+  | 'newest';        // 최신순
+
 export interface ModSearchFilters {
   gameVersion?: string;
   loaderType?: LoaderType;
@@ -139,6 +145,7 @@ export interface ModSearchFilters {
   source?: ModSource;
   limit?: number;
   offset?: number;
+  sortBy?: ModSearchSortOption;
 }
 
 export interface ModSearchResult {

@@ -126,7 +126,7 @@ func (s *cacheServiceServer) GetQuiltVersions(ctx context.Context, req *pb.GetLo
 
 // SearchModrinthMods searches Modrinth with caching
 func (s *cacheServiceServer) SearchModrinthMods(ctx context.Context, req *pb.SearchModrinthRequest) (*pb.SearchModrinthResponse, error) {
-	data, err := s.modrinthCache.SearchMods(req.Query, int(req.Limit), int(req.Offset), req.Facets, req.ForceRefresh)
+	data, err := s.modrinthCache.SearchMods(req.Query, int(req.Limit), int(req.Offset), req.Facets, req.Index, req.ForceRefresh)
 	if err != nil {
 		return nil, err
 	}
@@ -180,6 +180,8 @@ func (s *cacheServiceServer) SearchCurseForgeMods(ctx context.Context, req *pb.S
 		int(req.ModLoaderType),
 		int(req.PageSize),
 		int(req.Index),
+		int(req.SortField),
+		req.SortOrder,
 		req.ForceRefresh,
 	)
 	if err != nil {

@@ -93,6 +93,15 @@ export class ModrinthAPI {
 
       const facetsJson = facets.length > 0 ? JSON.stringify(facets) : '';
 
+      // Sort mapping
+      const sortMap: Record<string, string> = {
+        'relevance': 'relevance',
+        'downloads': 'downloads',
+        'updated': 'updated',
+        'newest': 'newest',
+      };
+      const sortIndex = sortMap[filters?.sortBy || 'relevance'] || 'relevance';
+
       // Use cached gRPC service
       const { cacheRpc } = await import('../grpc/clients');
       const response = await cacheRpc.searchModrinthMods({
@@ -100,6 +109,7 @@ export class ModrinthAPI {
         limit: filters?.limit || 20,
         offset: filters?.offset || 0,
         facets: facetsJson,
+        index: sortIndex,
         forceRefresh: false,
       });
 

@@ -50,10 +50,11 @@ func (s *ModrinthCacheService) SearchMods(
 	query string,
 	limit, offset int,
 	facets string,
+	index string,
 	forceRefresh bool,
 ) ([]byte, error) {
 	// Generate cache key from query parameters
-	cacheKey := s.generateSearchCacheKey(query, limit, offset, facets)
+	cacheKey := s.generateSearchCacheKey(query, limit, offset, facets, index)
 
 	// Try cache first
 	if !forceRefresh {
@@ -71,6 +72,9 @@ func (s *ModrinthCacheService) SearchMods(
 	params.Set("offset", fmt.Sprintf("%d", offset))
 	if facets != "" {
 		params.Set("facets", facets)
+	}
+	if index != "" {
+		params.Set("index", index)
 	}
 
 	// Fetch from API
@@ -293,9 +297,9 @@ func (s *ModrinthCacheService) fetchFromAPI(url string) ([]byte, error) {
 }
 
 // generateSearchCacheKey creates a unique cache key for search queries
-func (s *ModrinthCacheService) generateSearchCacheKey(query string, limit, offset int, facets string) string {
+func (s *ModrinthCacheService) generateSearchCacheKey(query string, limit, offset int, facets, index string) string {
 	// Create a deterministic cache key
-	hash := sha256.Sum256([]byte(fmt.Sprintf("%s:%d:%d:%s", query, limit, offset, facets)))
+	hash := sha256.Sum256([]byte(fmt.Sprintf("%s:%d:%d:%s:%s", query, limit, offset, facets, index)))
 	return fmt.Sprintf("modrinth:search:%x", hash[:8])
 }
 

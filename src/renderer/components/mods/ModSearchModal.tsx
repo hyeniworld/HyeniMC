@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useToast } from '../../contexts/ToastContext';
 import { X, Search, Download, Loader2, ExternalLink, ChevronDown, AlertCircle, CheckCircle, Check } from 'lucide-react';
-import type { ModSearchResult, ModVersion, Mod } from '../../../shared/types/profile';
+import type { ModSearchResult, ModVersion, Mod, ModSearchSortOption } from '../../../shared/types/profile';
 
 interface ModSearchModalProps {
   isOpen: boolean;
@@ -29,6 +29,7 @@ export function ModSearchModal({ isOpen, onClose, profileId, profile, gameVersio
   const [isCheckingDependencies, setIsCheckingDependencies] = useState(false);
   const [showDependencies, setShowDependencies] = useState(false);
   const [searchSource, setSearchSource] = useState<'modrinth' | 'curseforge'>('modrinth');
+  const [sortBy, setSortBy] = useState<ModSearchSortOption>('relevance');
   const [installedMods, setInstalledMods] = useState<Mod[]>([]);
   const [installedModMap, setInstalledModMap] = useState<Map<string, Mod>>(new Map());
 
@@ -46,7 +47,7 @@ export function ModSearchModal({ isOpen, onClose, profileId, profile, gameVersio
       }, 500);
       return () => clearTimeout(debounce);
     }
-  }, [searchQuery, searchSource]);
+  }, [searchQuery, searchSource, sortBy]);
 
   const loadInstalledMods = async () => {
     try {
@@ -111,6 +112,7 @@ export function ModSearchModal({ isOpen, onClose, profileId, profile, gameVersio
         loaderType: loaderType === 'vanilla' ? undefined : loaderType,
         limit: 20,
         source: searchSource,
+        sortBy: sortBy,
       });
       setSearchResults(result.hits);
       
@@ -271,31 +273,44 @@ export function ModSearchModal({ isOpen, onClose, profileId, profile, gameVersio
                   autoFocus
                 />
               </div>
-              <div className="mt-3 flex items-center justify-between">
-                <div className="text-sm text-gray-400">
+              <div className="mt-3 flex items-center justify-between gap-3">
+                <div className="text-sm text-gray-400 flex-shrink-0">
                   {gameVersion} • {loaderType}
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setSearchSource('modrinth')}
-                    className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
-                      searchSource === 'modrinth'
-                        ? 'bg-green-500/20 text-green-300 border border-green-500/50'
-                        : 'bg-gray-700 text-gray-400 border border-gray-600 hover:border-gray-500'
-                    }`}
+                <div className="flex items-center gap-2">
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setSearchSource('modrinth')}
+                      className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+                        searchSource === 'modrinth'
+                          ? 'bg-green-500/20 text-green-300 border border-green-500/50'
+                          : 'bg-gray-700 text-gray-400 border border-gray-600 hover:border-gray-500'
+                      }`}
+                    >
+                      Modrinth
+                    </button>
+                    <button
+                      onClick={() => setSearchSource('curseforge')}
+                      className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+                        searchSource === 'curseforge'
+                          ? 'bg-orange-500/20 text-orange-300 border border-orange-500/50'
+                          : 'bg-gray-700 text-gray-400 border border-gray-600 hover:border-gray-500'
+                      }`}
+                    >
+                      CurseForge
+                    </button>
+                  </div>
+                  <div className="h-4 w-px bg-gray-700"></div>
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as ModSearchSortOption)}
+                    className="px-3 py-1 text-xs bg-gray-800 border border-gray-700 rounded text-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-500 min-w-[120px]"
                   >
-                    Modrinth
-                  </button>
-                  <button
-                    onClick={() => setSearchSource('curseforge')}
-                    className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
-                      searchSource === 'curseforge'
-                        ? 'bg-orange-500/20 text-orange-300 border border-orange-500/50'
-                        : 'bg-gray-700 text-gray-400 border border-gray-600 hover:border-gray-500'
-                    }`}
-                  >
-                    CurseForge
-                  </button>
+                    <option value="relevance">관련성</option>
+                    <option value="downloads">다운로드 수</option>
+                    <option value="updated">업데이트순</option>
+                    <option value="newest">최신순</option>
+                  </select>
                 </div>
               </div>
             </div>

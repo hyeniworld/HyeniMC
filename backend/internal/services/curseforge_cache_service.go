@@ -57,6 +57,8 @@ func (s *CurseForgeCacheService) SearchMods(
 	gameVersion string,
 	modLoaderType int,
 	pageSize, index int,
+	sortField int,
+	sortOrder string,
 	forceRefresh bool,
 ) ([]byte, error) {
 	if !s.IsConfigured() {
@@ -64,7 +66,7 @@ func (s *CurseForgeCacheService) SearchMods(
 	}
 
 	// Generate cache key from query parameters
-	cacheKey := s.generateSearchCacheKey(query, gameVersion, modLoaderType, pageSize, index)
+	cacheKey := s.generateSearchCacheKey(query, gameVersion, modLoaderType, pageSize, index, sortField, sortOrder)
 
 	// Try cache first
 	if !forceRefresh {
@@ -80,10 +82,20 @@ func (s *CurseForgeCacheService) SearchMods(
 	params.Set("gameId", "432")        // Minecraft
 	params.Set("classId", "6")         // Mods
 	params.Set("searchFilter", query)
-	params.Set("sortField", "2")       // Popularity
-	params.Set("sortOrder", "desc")
 	params.Set("pageSize", fmt.Sprintf("%d", pageSize))
 	params.Set("index", fmt.Sprintf("%d", index))
+	
+	// Set sort parameters (default to Popularity/desc if not specified)
+	if sortField > 0 {
+		params.Set("sortField", fmt.Sprintf("%d", sortField))
+	} else {
+		params.Set("sortField", "2") // Default: Popularity
+	}
+	if sortOrder != "" {
+		params.Set("sortOrder", sortOrder)
+	} else {
+		params.Set("sortOrder", "desc") // Default: descending
+	}
 	
 	if gameVersion != "" {
 		params.Set("gameVersion", gameVersion)
@@ -262,8 +274,8 @@ func (s *CurseForgeCacheService) fetchFromAPI(url string) ([]byte, error) {
 }
 
 // generateSearchCacheKey creates a unique cache key for search queries
-func (s *CurseForgeCacheService) generateSearchCacheKey(query, gameVersion string, modLoaderType, pageSize, index int) string {
-	hash := sha256.Sum256([]byte(fmt.Sprintf("%s:%s:%d:%d:%d", query, gameVersion, modLoaderType, pageSize, index)))
+func (s *CurseForgeCacheService) generateSearchCacheKey(query, gameVersion string, modLoaderType, pageSize, index, sortField int, sortOrder string) string {
+	hash := sha256.Sum256([]byte(fmt.Sprintf("%s:%s:%d:%d:%d:%d:%s", query, gameVersion, modLoaderType, pageSize, index, sortField, sortOrder)))
 	return fmt.Sprintf("curseforge:search:%x", hash[:8])
 }
 
