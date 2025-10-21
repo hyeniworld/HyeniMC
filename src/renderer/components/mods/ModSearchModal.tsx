@@ -120,6 +120,13 @@ export function ModSearchModal({ isOpen, onClose, profileId, profile, gameVersio
 
     setIsSearching(true);
     setSearchResults([]);
+    // 검색 시작 시 이전 선택 초기화
+    setSelectedMod(null);
+    setSelectedVersion(null);
+    setModVersions([]);
+    setDependencies([]);
+    setDependencyIssues([]);
+    
     try {
       const result = await window.electronAPI.mod.search(searchQuery, {
         gameVersion,
