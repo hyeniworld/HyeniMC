@@ -78,6 +78,20 @@ export class ModManager {
     fileName: string,
     enabled: boolean
   ): Promise<ModInfo> {
+    // 1. 먼저 .meta.json 파일에서 버전 정보 읽기
+    let metaVersion: string | undefined;
+    try {
+      const metaPath = `${filePath}.meta.json`;
+      const metaContent = await fs.readFile(metaPath, 'utf8');
+      const metadata = JSON.parse(metaContent);
+      metaVersion = metadata.versionNumber;
+      if (metaVersion) {
+        console.log(`[Mod Manager] Found version in metadata: ${fileName} → ${metaVersion}`);
+      }
+    } catch (error) {
+      // 메타 파일 없음 - JAR에서 파싱
+    }
+
     const zip = new AdmZip(filePath);
     const safeParse = (text: string) => {
       try {
@@ -101,7 +115,7 @@ export class ModManager {
       return {
         id: json.id || fileName,
         name: json.name || json.id || fileName,
-        version: json.version || 'unknown',
+        version: metaVersion || json.version || 'unknown',
         description: json.description,
         authors: Array.isArray(json.authors) 
           ? json.authors.map((a: any) => typeof a === 'string' ? a : a.name)
@@ -128,7 +142,7 @@ export class ModManager {
         return {
           id: modInfo.modId || fileName,
           name: modInfo.displayName || modInfo.modId || fileName,
-          version: modInfo.version || 'unknown',
+          version: metaVersion || modInfo.version || 'unknown',
           description: modInfo.description,
           authors: modInfo.authors ? [modInfo.authors] : undefined,
           fileName,
@@ -142,7 +156,7 @@ export class ModManager {
         return {
           id: fileName.replace('.jar', ''),
           name: fileName.replace('.jar', ''),
-          version: 'unknown',
+          version: metaVersion || 'unknown',
           fileName,
           filePath,
           enabled,
@@ -162,7 +176,7 @@ export class ModManager {
         return {
           id: quilMod.id || json.id || fileName,
           name: quilMod.name || json.name || fileName,
-          version: quilMod.version || json.version || 'unknown',
+          version: metaVersion || quilMod.version || json.version || 'unknown',
           description: quilMod.description || json.description,
           authors: quilMod.contributors ? Object.keys(quilMod.contributors) : undefined,
           fileName,
@@ -180,7 +194,7 @@ export class ModManager {
     return {
       id: fileName.replace('.jar', ''),
       name: fileName.replace('.jar', ''),
-      version: 'unknown',
+      version: metaVersion || 'unknown',
       fileName,
       filePath,
       enabled,

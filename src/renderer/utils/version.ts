@@ -8,7 +8,8 @@
  * parseVersion("1.0.0") => "1.0.0"
  * parseVersion("1.0.0+fabric") => "1.0.0"
  * parseVersion("v1.2.3") => "1.2.3"
- * parseVersion("1.21.1-1.0.0") => "1.0.0" (마지막 버전 번호)
+ * parseVersion("21.1.23+neoforge-1.21.1") => "21.1.23"
+ * parseVersion("neoforge-1.21.1-1.0.0") => "1.0.0"
  * parseVersion("iris-neoforge-1.7.0") => "1.7.0"
  */
 export function parseVersion(versionString: string): string {
@@ -17,20 +18,57 @@ export function parseVersion(versionString: string): string {
   // 1. "v" 접두사 제거
   let cleaned = versionString.replace(/^v/i, '');
 
-  // 2. 여러 버전 패턴 시도
-  // 패턴 1: x.x.x 형태 (가장 마지막 것 선택)
+  // 2. + 또는 - 구분자로 split (메타정보 분리)
+  const parts = cleaned.split(/[+-]/);
+  
+  // 3. 각 파트에서 semver 찾고, 게임 버전 제외
+  const gameVersionPattern = /^1\.(20|21|22|23)\.\d+$/; // MC 1.20.x ~ 1.23.x
+  const candidates: string[] = [];
+  
+  for (const part of parts) {
+    const semverMatch = part.match(/^(\d+)\.(\d+)\.(\d+)$/);
+    if (semverMatch) {
+      const version = semverMatch[0];
+      // 마인크래프트 게임 버전 제외
+      if (!gameVersionPattern.test(version)) {
+        candidates.push(version);
+      }
+    }
+  }
+  
+  // 4. 후보가 있으면 첫 번째 반환 (가장 앞에 있는 모드 버전)
+  if (candidates.length > 0) {
+    return candidates[0];
+  }
+  
+  // 5. 후보가 없으면 모든 semver 찾기 (게임 버전 포함)
   const semverMatches = cleaned.match(/(\d+)\.(\d+)\.(\d+)/g);
   if (semverMatches && semverMatches.length > 0) {
-    return semverMatches[semverMatches.length - 1];
+    // 게임 버전이 아닌 것 우선
+    const nonGameVersions = semverMatches.filter(v => !gameVersionPattern.test(v));
+    if (nonGameVersions.length > 0) {
+      return nonGameVersions[0];
+    }
+    // 전부 게임 버전이면 x.x 형식 찾기 (8.3 같은 모드 버전)
+    const gameShortPattern = /^1\.(20|21|22|23)$/;
+    for (const part of parts) {
+      // x.x 형식인지 확인 (x.x.x는 제외)
+      const shortMatch = part.match(/^(\d+)\.(\d+)$/);
+      if (shortMatch && !gameShortPattern.test(shortMatch[0])) {
+        return `${shortMatch[0]}.0`;
+      }
+    }
+    // 마지막 수단으로 첫 번째 semver 반환
+    return semverMatches[0];
   }
 
-  // 패턴 2: x.x 형태
+  // 6. x.x 형태
   const shortVersionMatch = cleaned.match(/(\d+)\.(\d+)/);
   if (shortVersionMatch) {
     return `${shortVersionMatch[0]}.0`;
   }
 
-  // 패턴 3: x만 있는 경우
+  // 7. x만 있는 경우
   const singleDigitMatch = cleaned.match(/(\d+)/);
   if (singleDigitMatch) {
     return `${singleDigitMatch[0]}.0.0`;

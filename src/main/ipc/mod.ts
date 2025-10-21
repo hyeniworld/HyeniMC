@@ -242,6 +242,7 @@ export function registerModHandlers(): void {
           source: source,
           sourceModId: modId,
           sourceFileId: versionId,
+          versionNumber: version.versionNumber, // 모드 버전 저장
           installedAt: new Date().toISOString(),
         };
         await fs.writeFile(metaPath, JSON.stringify(metadata, null, 2));
@@ -441,6 +442,7 @@ export function registerModHandlers(): void {
               source: dep.source || 'modrinth',
               sourceModId: dep.modId,
               sourceFileId: dep.versionId,
+              versionNumber: version.versionNumber, // 모드 버전 저장
               installedAt: new Date().toISOString(),
               isDependency: true,
             };
@@ -551,6 +553,7 @@ export function registerModHandlers(): void {
         source,
         sourceModId: modId,
         sourceFileId: versionId,
+        versionNumber: version.versionNumber, // 모드 버전 저장
         installedAt: new Date().toISOString(),
       };
       await fs.writeFile(metaPath, JSON.stringify(metadata, null, 2));
