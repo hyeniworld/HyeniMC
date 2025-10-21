@@ -1,4 +1,5 @@
 import { ModrinthAPI } from './modrinth-api';
+import { CurseForgeAPI } from './curseforge-api';
 import { cacheRpc } from '../grpc/clients';
 
 /**
@@ -8,9 +9,11 @@ import { cacheRpc } from '../grpc/clients';
  */
 export class ModResolver {
   private modrinthAPI: ModrinthAPI;
+  private curseforgeAPI: CurseForgeAPI;
 
   constructor() {
     this.modrinthAPI = new ModrinthAPI();
+    this.curseforgeAPI = new CurseForgeAPI();
   }
 
   /**
@@ -130,21 +133,96 @@ export class ModResolver {
     projectId: string,
     projectName: string | undefined,
     resolvedVia: 'slug_lookup' | 'search',
-    confidence: number
+    confidence: number,
+    source: 'modrinth' | 'curseforge' = 'modrinth'
   ): Promise<void> {
     try {
       await cacheRpc.saveModSlugMapping({
         slug,
-        source: 'modrinth',
+        source,
         projectId,
         projectName: projectName || '',
         resolvedVia,
         confidence,
       });
-      console.log(`[ModResolver] Saved mapping to cache: ${slug} -> ${projectId}`);
+      console.log(`[ModResolver] Saved ${source} mapping to cache: ${slug} -> ${projectId}`);
     } catch (error) {
       console.error(`[ModResolver] Failed to save mapping to cache:`, error);
       // 저장 실패해도 계속 진행
+    }
+  }
+
+  /**
+   * CurseForge 프로젝트 ID 해석
+   * 
+   * @param displayName 모드 표시 이름
+   * @param fileName 파일명
+   * @param gameVersion 게임 버전
+   * @param loaderType 로더 타입
+   * @returns CurseForge project ID 또는 null
+   */
+  async resolveCurseForgeProjectId(
+    displayName: string,
+    fileName: string,
+    gameVersion: string,
+    loaderType: string
+  ): Promise<string | null> {
+    // 파일명에서 슬러그 추출 및 정규화
+    const rawSlug = this.extractModSlug(fileName);
+    const slug = this.normalizeSlug(rawSlug);
+
+    console.log(`[ModResolver] Resolving CurseForge: ${displayName} (slug: ${slug})`);
+
+    // 1) DB 캐시 확인 (동적 학습된 매핑)
+    try {
+      const cached = await cacheRpc.getModSlugMapping({
+        slug,
+        source: 'curseforge',
+      });
+      
+      if (cached.found) {
+        console.log(`[ModResolver] Found in CurseForge cache: ${cached.projectId} (${cached.resolvedVia}, hits: ${cached.hitCount})`);
+        return cached.projectId;
+      }
+    } catch (error) {
+      console.log(`[ModResolver] CurseForge cache lookup failed:`, error);
+      // Continue with API fallback
+    }
+
+    // 2) CurseForge는 slug로 직접 조회 불가능하므로 검색 API 사용
+    try {
+      const searchQuery = displayName || slug;
+      const result = await this.curseforgeAPI.searchMods(searchQuery, {
+        gameVersion,
+        loaderType: loaderType as any,
+        limit: 10,
+      });
+
+      if (result.hits.length === 0) {
+        console.log(`[ModResolver] No CurseForge results found for: ${searchQuery}`);
+        return null;
+      }
+
+      // 슬러그나 이름이 포함된 결과 우선 선택
+      const preferred = result.hits.find(h =>
+        h.slug?.toLowerCase().includes(slug) || h.name?.toLowerCase().includes(slug)
+      ) || result.hits[0];
+
+      console.log(`[ModResolver] Resolved via CurseForge search: ${preferred.id} (${preferred.slug})`);
+      
+      // 검색으로 찾은 경우 신뢰도와 함께 저장
+      const confidence = preferred.slug?.toLowerCase() === slug ? 90 : 70;
+      await this.saveMappingToCache(slug, preferred.id, preferred.name, 'search', confidence, 'curseforge');
+      
+      return preferred.id || null;
+    } catch (error: any) {
+      // Rate limit이나 네트워크 에러는 warn 레벨로 처리
+      if (error.message?.includes('rate limit')) {
+        console.warn(`[ModResolver] CurseForge rate limit reached, skipping: ${displayName}`);
+      } else {
+        console.error(`[ModResolver] Failed to resolve CurseForge project:`, error.message || error);
+      }
+      return null;
     }
   }
 }

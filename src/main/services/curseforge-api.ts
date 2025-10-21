@@ -173,8 +173,13 @@ export class CurseForgeAPI {
         hits,
         total: data.pagination?.totalCount || 0,
       };
-    } catch (error) {
-      console.error('[CurseForge] Search failed:', error);
+    } catch (error: any) {
+      if (error.response?.status === 429) {
+        console.warn('[CurseForge] Rate limit exceeded, please try again later');
+        // Rate limit 에러는 빈 결과 반환 (폴백 처리 가능하도록)
+        return { hits: [], total: 0 };
+      }
+      console.error('[CurseForge] Search failed:', error.message || error);
       throw new Error('Failed to search mods from CurseForge');
     }
   }
@@ -217,8 +222,12 @@ export class CurseForgeAPI {
 
       console.log(`[CurseForge] Fetched details for: ${details.name}`);
       return details;
-    } catch (error) {
-      console.error('[CurseForge] Failed to fetch mod details:', error);
+    } catch (error: any) {
+      if (error.response?.status === 429) {
+        console.warn('[CurseForge] Rate limit exceeded for mod details');
+        throw new Error('CurseForge rate limit exceeded');
+      }
+      console.error('[CurseForge] Failed to fetch mod details:', error.message || error);
       throw new Error(`Failed to fetch mod details: ${modId}`);
     }
   }
@@ -276,8 +285,12 @@ export class CurseForgeAPI {
 
       console.log(`[CurseForge] Found ${versions.length} versions`);
       return versions;
-    } catch (error) {
-      console.error('[CurseForge] Failed to fetch versions:', error);
+    } catch (error: any) {
+      if (error.response?.status === 429) {
+        console.warn('[CurseForge] Rate limit exceeded for versions');
+        return []; // 빈 배열 반환으로 부드럽게 처리
+      }
+      console.error('[CurseForge] Failed to fetch versions:', error.message || error);
       throw new Error(`Failed to fetch mod versions: ${modId}`);
     }
   }

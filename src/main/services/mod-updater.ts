@@ -96,30 +96,60 @@ export class ModUpdater {
             continue;
           }
 
-          // Legacy: Try to resolve mod via filename/name search (Modrinth only)
-          if (source === 'local' || source === 'modrinth') {
+          // Legacy: Try to resolve mod via filename/name search
+          // Try Modrinth first, then CurseForge as fallback
+          if (source === 'local' || source === 'modrinth' || source === 'curseforge') {
             console.log(`[ModUpdater] No metadata for ${mod.name}, trying legacy resolution`);
-            const projectIdOrSlug = await this.modResolver.resolveModrinthProjectId(
+            
+            // 1) Try Modrinth first
+            const modrinthProjectId = await this.modResolver.resolveModrinthProjectId(
               mod.name,
               mod.fileName,
               gameVersion,
               loaderType
             );
-            if (!projectIdOrSlug) {
-              console.log(`[ModUpdater] Could not resolve project for: ${mod.name}`);
+            
+            if (modrinthProjectId) {
+              const update = await this.checkModrinthUpdate(
+                mod,
+                modrinthProjectId,
+                undefined,
+                gameVersion,
+                loaderType
+              );
+              if (update) {
+                updates.push(update);
+              }
+              // Modrinth에서 프로젝트를 찾았으면 업데이트 여부와 관계없이 종료
+              // (이미 최신 버전이거나 호환 버전 없는 경우)
               continue;
             }
 
-            const update = await this.checkModrinthUpdate(
-              mod,
-              projectIdOrSlug,
-              undefined,
+            // 2) Modrinth에서 프로젝트를 못 찾은 경우에만 CurseForge 시도
+            console.log(`[ModUpdater] Not found on Modrinth: ${mod.name}, trying CurseForge fallback`);
+            const curseforgeProjectId = await this.modResolver.resolveCurseForgeProjectId(
+              mod.name,
+              mod.fileName,
               gameVersion,
               loaderType
             );
-            if (update) {
-              updates.push(update);
+            
+            if (curseforgeProjectId) {
+              const update = await this.checkCurseForgeUpdate(
+                mod,
+                curseforgeProjectId,
+                '', // No current file ID for legacy mods
+                gameVersion,
+                loaderType
+              );
+              if (update) {
+                updates.push(update);
+              }
+              // CurseForge에서 프로젝트를 찾았으면 종료
+              continue;
             }
+
+            console.log(`[ModUpdater] Could not resolve project for: ${mod.name} (not found on Modrinth or CurseForge)`);
           }
         } catch (error) {
           console.error(`[ModUpdater] Failed to check update for ${mod.name}:`, error);
