@@ -1,7 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useToast } from '../../contexts/ToastContext';
-import { X, Search, Download, Loader2, ExternalLink, ChevronDown, AlertCircle, CheckCircle, Check } from 'lucide-react';
+import { X, Search, Download, Loader2, ExternalLink, ChevronDown, AlertCircle, CheckCircle, Check, ArrowUp, ArrowDown, RefreshCw, ArrowRight, AlertTriangle } from 'lucide-react';
 import type { ModSearchResult, ModVersion, Mod, ModSearchSortOption } from '../../../shared/types/profile';
+import { compareVersions, parseVersion } from '../../utils/version';
+
+type InstallButtonState = 
+  | 'install'        // 설치되지 않음
+  | 'installed'      // 동일 버전 설치됨
+  | 'update'         // 더 최신 버전 존재
+  | 'downgrade'      // 더 낮은 버전 선택
+  | 'reinstall';     // 다른 파일명이지만 같은 버전
+
+interface ButtonStateInfo {
+  state: InstallButtonState;
+  installedVersion?: string;
+  selectedVersionNumber: string;
+}
 
 interface ModSearchModalProps {
   isOpen: boolean;
@@ -201,11 +215,84 @@ export function ModSearchModal({ isOpen, onClose, profileId, profile, gameVersio
     }
   };
 
+  // 설치 버튼 상태 계산
+  const buttonState = useMemo((): ButtonStateInfo => {
+    if (!selectedMod || !selectedVersion) {
+      return { state: 'install', selectedVersionNumber: '' };
+    }
+
+    const installedMod = installedModMap.get(selectedMod.id);
+    
+    if (!installedMod) {
+      return { 
+        state: 'install', 
+        selectedVersionNumber: selectedVersion.versionNumber 
+      };
+    }
+
+    // 버전 비교
+    const installed = parseVersion(installedMod.version);
+    const selected = parseVersion(selectedVersion.versionNumber);
+    const comparison = compareVersions(installed, selected);
+
+    if (comparison === 0) {
+      // 파일명 확인
+      if (installedMod.fileName === selectedVersion.fileName) {
+        return { 
+          state: 'installed', 
+          installedVersion: installed, 
+          selectedVersionNumber: selected 
+        };
+      } else {
+        return { 
+          state: 'reinstall', 
+          installedVersion: installed, 
+          selectedVersionNumber: selected 
+        };
+      }
+    } else if (comparison < 0) {
+      return { 
+        state: 'update', 
+        installedVersion: installed, 
+        selectedVersionNumber: selected 
+      };
+    } else {
+      return { 
+        state: 'downgrade', 
+        installedVersion: installed, 
+        selectedVersionNumber: selected 
+      };
+    }
+  }, [selectedMod, selectedVersion, installedModMap]);
+
   const handleInstall = async () => {
     if (!selectedMod || !selectedVersion) return;
 
+    // 설치됨 상태는 버튼이 비활성화되므로 여기까지 오지 않음
+    if (buttonState.state === 'installed') return;
+
+    // 다운그레이드 경고
+    if (buttonState.state === 'downgrade') {
+      const confirmed = window.confirm(
+        `⚠️ 다운그레이드 경고\n\n` +
+        `현재 버전: v${buttonState.installedVersion}\n` +
+        `선택한 버전: v${buttonState.selectedVersionNumber}\n\n` +
+        `이전 버전으로 다운그레이드하면 호환성 문제가 발생할 수 있습니다.\n계속하시겠습니까?`
+      );
+      if (!confirmed) return;
+    }
+
     setIsInstalling(true);
     try {
+      // 기존 파일 삭제 (업데이트/다운그레이드/재설치)
+      if (['update', 'downgrade', 'reinstall'].includes(buttonState.state)) {
+        const installedMod = installedModMap.get(selectedMod.id);
+        if (installedMod) {
+          console.log(`[ModSearchModal] Removing old version: ${installedMod.fileName}`);
+          await window.electronAPI.mod.remove(profileId, installedMod.fileName);
+        }
+      }
+
       // Install dependencies first if any
       const requiredDeps = dependencies.filter(dep => dep.required);
       if (requiredDeps.length > 0) {
@@ -222,11 +309,16 @@ export function ModSearchModal({ isOpen, onClose, profileId, profile, gameVersio
       const source = selectedMod.source === 'modrinth' || selectedMod.source === 'curseforge' ? selectedMod.source : 'modrinth';
       await window.electronAPI.mod.install(profileId, selectedMod.id, selectedVersion.id, source);
       
-      const message = requiredDeps.length > 0
-        ? `${selectedMod.name} 및 ${requiredDeps.length}개 의존성 설치 완료!`
-        : `${selectedMod.name} 설치 완료!`;
+      let actionText = '설치';
+      if (buttonState.state === 'update') actionText = '업데이트';
+      else if (buttonState.state === 'downgrade') actionText = '다운그레이드';
+      else if (buttonState.state === 'reinstall') actionText = '재설치';
       
-      toast.success('설치 성공', message);
+      const message = requiredDeps.length > 0
+        ? `${selectedMod.name} ${actionText} 및 ${requiredDeps.length}개 의존성 설치 완료!`
+        : `${selectedMod.name} ${actionText} 완료!`;
+      
+      toast.success(`${actionText} 성공`, message);
       
       // Reload installed mods to update UI
       await loadInstalledMods();
@@ -576,13 +668,51 @@ export function ModSearchModal({ isOpen, onClose, profileId, profile, gameVersio
                 <div className="p-6">
                   <button
                     onClick={handleInstall}
-                    disabled={!selectedVersion || isInstalling}
-                    className="w-full btn-primary py-4 text-lg font-semibold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={!selectedVersion || isInstalling || buttonState.state === 'installed'}
+                    className={`w-full py-4 text-lg font-semibold flex items-center justify-center gap-2 rounded-lg transition-colors ${
+                      buttonState.state === 'installed'
+                        ? 'bg-gray-600 text-gray-300 cursor-not-allowed'
+                        : buttonState.state === 'update'
+                        ? 'bg-green-600 hover:bg-green-700 text-white'
+                        : buttonState.state === 'downgrade'
+                        ? 'bg-orange-600 hover:bg-orange-700 text-white'
+                        : buttonState.state === 'reinstall'
+                        ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                        : 'btn-primary'
+                    } ${(!selectedVersion || isInstalling) && 'opacity-50 cursor-not-allowed'}`}
                   >
                     {isInstalling ? (
                       <>
                         <Loader2 className="w-5 h-5 animate-spin" />
-                        설치 중...
+                        {buttonState.state === 'update' ? '업데이트 중...' :
+                         buttonState.state === 'downgrade' ? '다운그레이드 중...' :
+                         buttonState.state === 'reinstall' ? '재설치 중...' : '설치 중...'}
+                      </>
+                    ) : buttonState.state === 'installed' ? (
+                      <>
+                        <Check className="w-5 h-5" />
+                        설치됨
+                      </>
+                    ) : buttonState.state === 'update' ? (
+                      <>
+                        <ArrowUp className="w-5 h-5" />
+                        {dependencies.filter(d => d.required).length > 0
+                          ? `업데이트 + 의존성 ${dependencies.filter(d => d.required).length}개`
+                          : '업데이트'}
+                      </>
+                    ) : buttonState.state === 'downgrade' ? (
+                      <>
+                        <ArrowDown className="w-5 h-5" />
+                        {dependencies.filter(d => d.required).length > 0
+                          ? `다운그레이드 + 의존성 ${dependencies.filter(d => d.required).length}개`
+                          : '다운그레이드'}
+                      </>
+                    ) : buttonState.state === 'reinstall' ? (
+                      <>
+                        <RefreshCw className="w-5 h-5" />
+                        {dependencies.filter(d => d.required).length > 0
+                          ? `재설치 + 의존성 ${dependencies.filter(d => d.required).length}개`
+                          : '재설치'}
                       </>
                     ) : (
                       <>
@@ -593,7 +723,32 @@ export function ModSearchModal({ isOpen, onClose, profileId, profile, gameVersio
                       </>
                     )}
                   </button>
-                  {dependencies.filter(d => d.required).length > 0 && (
+                  
+                  {/* 버전 정보 표시 */}
+                  {buttonState.installedVersion && buttonState.state !== 'installed' && (
+                    <div className="text-xs text-center mt-2 flex items-center justify-center gap-1">
+                      {buttonState.state === 'update' ? (
+                        <>
+                          <span className="text-gray-500">v{buttonState.installedVersion}</span>
+                          <ArrowRight className="w-3 h-3 text-gray-400" />
+                          <span className="text-green-400 font-medium">v{buttonState.selectedVersionNumber}</span>
+                        </>
+                      ) : buttonState.state === 'downgrade' ? (
+                        <>
+                          <AlertTriangle className="w-3 h-3 text-orange-400" />
+                          <span className="text-orange-400">
+                            v{buttonState.installedVersion} → v{buttonState.selectedVersionNumber}
+                          </span>
+                        </>
+                      ) : buttonState.state === 'reinstall' ? (
+                        <span className="text-blue-400">
+                          v{buttonState.selectedVersionNumber} 재설치
+                        </span>
+                      ) : null}
+                    </div>
+                  )}
+                  
+                  {dependencies.filter(d => d.required).length > 0 && buttonState.state === 'install' && (
                     <p className="text-xs text-gray-400 text-center mt-2">
                       필수 의존성이 자동으로 함께 설치됩니다
                     </p>
