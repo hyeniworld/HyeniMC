@@ -192,8 +192,13 @@ export class ModrinthAPI {
 
       console.log(`[Modrinth] Fetched details for: ${details.name} [cached]`);
       return details;
-    } catch (error) {
-      console.error('[Modrinth] Failed to fetch mod details:', error);
+    } catch (error: any) {
+      // 404 에러는 간단하게 로깅 (폴백 메커니즘에서 처리됨)
+      if (error?.message?.includes('404') || error?.code === 2) {
+        console.log(`[Modrinth] Project not found: ${projectId}`);
+      } else {
+        console.error('[Modrinth] Failed to fetch mod details:', error);
+      }
       throw new Error(`Failed to fetch mod details: ${projectId}`);
     }
   }

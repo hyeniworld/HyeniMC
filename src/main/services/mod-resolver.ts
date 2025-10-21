@@ -84,7 +84,8 @@ export class ModResolver {
         return details.id;
       }
     } catch (error) {
-      // 실패하면 검색으로 폴백
+      // 404나 기타 에러 발생 시 검색으로 폴백
+      console.log(`[ModResolver] Slug lookup failed for '${slug}', falling back to search`);
     }
 
     // 3) 검색 API 폴백
