@@ -481,8 +481,8 @@ export function ModSearchModal({ isOpen, onClose, profileId, profile, gameVersio
           <div className="w-1/2 flex flex-col">
             {selectedMod ? (
               <>
-                {/* Mod Info */}
-                <div className="p-6 border-b border-gray-800">
+                {/* Mod Info (고정) */}
+                <div className="p-6 border-b border-gray-800 flex-shrink-0">
                   <div className="flex gap-4">
                     {selectedMod.iconUrl && (
                       <img
@@ -518,8 +518,10 @@ export function ModSearchModal({ isOpen, onClose, profileId, profile, gameVersio
                   </p>
                 </div>
 
-                {/* Version Selection */}
-                <div className="p-6 border-b border-gray-800">
+                {/* Scrollable Content: Version Selection & Dependencies */}
+                <div className="flex-1 overflow-y-auto">
+                  {/* Version Selection */}
+                  <div className="p-6 border-b border-gray-800">
                   <div className="flex items-center justify-between mb-3">
                     <label className="text-sm font-semibold text-gray-300">
                       버전 선택
@@ -592,80 +594,81 @@ export function ModSearchModal({ isOpen, onClose, profileId, profile, gameVersio
                   )}
                 </div>
 
-                {/* Dependencies Section */}
-                {(dependencies.length > 0 || dependencyIssues.length > 0) && (
-                  <div className="px-6 pb-4 border-b border-gray-800">
-                    <div className="flex items-center gap-2 mb-3">
-                      {isCheckingDependencies ? (
-                        <Loader2 className="w-4 h-4 text-purple-500 animate-spin" />
-                      ) : dependencies.length > 0 ? (
-                        <CheckCircle className="w-4 h-4 text-green-500" />
-                      ) : (
-                        <AlertCircle className="w-4 h-4 text-yellow-500" />
+                  {/* Dependencies Section */}
+                  {(dependencies.length > 0 || dependencyIssues.length > 0) && (
+                    <div className="px-6 pb-4 border-b border-gray-800">
+                      <div className="flex items-center gap-2 mb-3">
+                        {isCheckingDependencies ? (
+                          <Loader2 className="w-4 h-4 text-purple-500 animate-spin" />
+                        ) : dependencies.length > 0 ? (
+                          <CheckCircle className="w-4 h-4 text-green-500" />
+                        ) : (
+                          <AlertCircle className="w-4 h-4 text-yellow-500" />
+                        )}
+                        <span className="text-sm font-semibold text-gray-300">
+                          의존성 {dependencies.length}개
+                        </span>
+                      </div>
+
+                      {dependencies.length > 0 && (
+                        <div className="space-y-2">
+                          {dependencies.map((dep: any, idx: number) => (
+                            <div
+                              key={idx}
+                              className="p-2 bg-gray-800/50 rounded border border-gray-700 text-sm"
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium text-gray-200">
+                                    {dep.modName}
+                                  </span>
+                                  <span className="text-xs text-gray-500">
+                                    v{dep.versionNumber}
+                                  </span>
+                                </div>
+                                <span
+                                  className={`text-xs px-2 py-0.5 rounded ${
+                                    dep.required
+                                      ? 'bg-red-500/20 text-red-300'
+                                      : 'bg-blue-500/20 text-blue-300'
+                                  }`}
+                                >
+                                  {dep.required ? '필수' : '선택'}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       )}
-                      <span className="text-sm font-semibold text-gray-300">
-                        의존성 {dependencies.length}개
-                      </span>
+
+                      {dependencyIssues.length > 0 && (
+                        <div className="mt-2 space-y-2">
+                          {dependencyIssues.map((issue: any, idx: number) => (
+                            <div
+                              key={idx}
+                              className="p-2 bg-yellow-500/10 border border-yellow-500/30 rounded text-sm"
+                            >
+                              <div className="flex items-start gap-2">
+                                <AlertCircle className="w-4 h-4 text-yellow-500 mt-0.5" />
+                                <div>
+                                  <div className="font-medium text-yellow-300">
+                                    {issue.modName}
+                                  </div>
+                                  <div className="text-xs text-yellow-200/80">
+                                    {issue.message}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
+                  )}
+                </div>
 
-                    {dependencies.length > 0 && (
-                      <div className="space-y-2">
-                        {dependencies.map((dep: any, idx: number) => (
-                          <div
-                            key={idx}
-                            className="p-2 bg-gray-800/50 rounded border border-gray-700 text-sm"
-                          >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium text-gray-200">
-                                  {dep.modName}
-                                </span>
-                                <span className="text-xs text-gray-500">
-                                  v{dep.versionNumber}
-                                </span>
-                              </div>
-                              <span
-                                className={`text-xs px-2 py-0.5 rounded ${
-                                  dep.required
-                                    ? 'bg-red-500/20 text-red-300'
-                                    : 'bg-blue-500/20 text-blue-300'
-                                }`}
-                              >
-                                {dep.required ? '필수' : '선택'}
-                              </span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {dependencyIssues.length > 0 && (
-                      <div className="mt-2 space-y-2">
-                        {dependencyIssues.map((issue: any, idx: number) => (
-                          <div
-                            key={idx}
-                            className="p-2 bg-yellow-500/10 border border-yellow-500/30 rounded text-sm"
-                          >
-                            <div className="flex items-start gap-2">
-                              <AlertCircle className="w-4 h-4 text-yellow-500 mt-0.5" />
-                              <div>
-                                <div className="font-medium text-yellow-300">
-                                  {issue.modName}
-                                </div>
-                                <div className="text-xs text-yellow-200/80">
-                                  {issue.message}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Install Button */}
-                <div className="p-6">
+                {/* Install Button (하단 고정) */}
+                <div className="p-6 border-t border-gray-800 flex-shrink-0">
                   <button
                     onClick={handleInstall}
                     disabled={!selectedVersion || isInstalling || buttonState.state === 'installed'}
