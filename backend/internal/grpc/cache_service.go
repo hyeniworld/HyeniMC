@@ -16,10 +16,11 @@ type cacheServiceServer struct {
 	pb.UnimplementedCacheServiceServer
 	
 	// Repositories
-	apiCacheRepo        *cache.APICacheRepository
-	loaderVersionsRepo  *cache.LoaderVersionsRepository
-	javaRepo            *cache.JavaInstallationsRepository
-	profileStatsRepo    *cache.ProfileStatsRepository
+	apiCacheRepo          *cache.APICacheRepository
+	loaderVersionsRepo    *cache.LoaderVersionsRepository
+	javaRepo              *cache.JavaInstallationsRepository
+	profileStatsRepo      *cache.ProfileStatsRepository
+	modSlugMappingRepo    *cache.ModSlugMappingRepository
 	
 	// Services
 	minecraftVersions *services.MinecraftVersionsService
@@ -35,6 +36,7 @@ func NewCacheServiceServer(db *sql.DB, curseforgeAPIKey string) pb.CacheServiceS
 	loaderVersionsRepo := cache.NewLoaderVersionsRepository(db)
 	javaRepo := cache.NewJavaInstallationsRepository(db)
 	profileStatsRepo := cache.NewProfileStatsRepository(db)
+	modSlugMappingRepo := cache.NewModSlugMappingRepository(db)
 	
 	// Initialize services
 	minecraftVersions := services.NewMinecraftVersionsService(apiCacheRepo)
@@ -43,14 +45,15 @@ func NewCacheServiceServer(db *sql.DB, curseforgeAPIKey string) pb.CacheServiceS
 	curseforgeCache := services.NewCurseForgeCacheService(apiCacheRepo, curseforgeAPIKey)
 	
 	return &cacheServiceServer{
-		apiCacheRepo:       apiCacheRepo,
-		loaderVersionsRepo: loaderVersionsRepo,
-		javaRepo:           javaRepo,
-		profileStatsRepo:   profileStatsRepo,
-		minecraftVersions:  minecraftVersions,
-		loaderVersions:     loaderVersions,
-		modrinthCache:      modrinthCache,
-		curseforgeCache:    curseforgeCache,
+		apiCacheRepo:        apiCacheRepo,
+		loaderVersionsRepo:  loaderVersionsRepo,
+		javaRepo:            javaRepo,
+		profileStatsRepo:    profileStatsRepo,
+		modSlugMappingRepo:  modSlugMappingRepo,
+		minecraftVersions:   minecraftVersions,
+		loaderVersions:      loaderVersions,
+		modrinthCache:       modrinthCache,
+		curseforgeCache:     curseforgeCache,
 	}
 }
 
@@ -379,4 +382,52 @@ func (s *cacheServiceServer) convertLoaderVersions(versions []*cache.LoaderVersi
 	return &pb.GetLoaderVersionsResponse{
 		Versions: pbVersions,
 	}
+}
+
+// GetModSlugMapping retrieves a mod slug mapping from cache
+func (s *cacheServiceServer) GetModSlugMapping(ctx context.Context, req *pb.GetModSlugMappingRequest) (*pb.GetModSlugMappingResponse, error) {
+	mapping, err := s.modSlugMappingRepo.GetMapping(req.Slug, req.Source)
+	if err != nil {
+		return nil, err
+	}
+	
+	if mapping == nil {
+		return &pb.GetModSlugMappingResponse{
+			Found: false,
+		}, nil
+	}
+	
+	// Update last used timestamp
+	if err := s.modSlugMappingRepo.UpdateLastUsed(req.Slug, req.Source); err != nil {
+		// Log error but don't fail the request
+		fmt.Printf("[ModSlugMapping] Failed to update last used: %v\n", err)
+	}
+	
+	return &pb.GetModSlugMappingResponse{
+		Found:       true,
+		ProjectId:   mapping.ProjectID,
+		ProjectName: mapping.ProjectName,
+		ResolvedVia: mapping.ResolvedVia,
+		Confidence:  int32(mapping.Confidence),
+		HitCount:    int32(mapping.HitCount),
+	}, nil
+}
+
+// SaveModSlugMapping saves a mod slug mapping to cache
+func (s *cacheServiceServer) SaveModSlugMapping(ctx context.Context, req *pb.SaveModSlugMappingRequest) (*pb.SaveModSlugMappingResponse, error) {
+	mapping := &cache.ModSlugMapping{
+		Slug:        req.Slug,
+		Source:      req.Source,
+		ProjectID:   req.ProjectId,
+		ProjectName: req.ProjectName,
+		ResolvedVia: req.ResolvedVia,
+		Confidence:  int(req.Confidence),
+	}
+	
+	err := s.modSlugMappingRepo.SaveMapping(mapping)
+	if err != nil {
+		return &pb.SaveModSlugMappingResponse{Success: false}, err
+	}
+	
+	return &pb.SaveModSlugMappingResponse{Success: true}, nil
 }

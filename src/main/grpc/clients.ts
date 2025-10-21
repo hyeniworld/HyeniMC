@@ -105,6 +105,10 @@ import {
   type InvalidateCacheResponse,
   type ClearExpiredCacheRequest,
   type ClearExpiredCacheResponse,
+  type GetModSlugMappingRequest,
+  type GetModSlugMappingResponse,
+  type SaveModSlugMappingRequest,
+  type SaveModSlugMappingResponse,
 } from '../gen/launcher/cache';
 import {
   AccountServiceClient,
@@ -482,6 +486,16 @@ export const cacheRpc = {
   clearExpiredCache: (req: ClearExpiredCacheRequest) =>
     promisify<ClearExpiredCacheRequest, ClearExpiredCacheResponse>(
       ensureCacheClient().clearExpiredCache.bind(ensureCacheClient())
+    )(req),
+  
+  // Mod slug mappings (dynamic learning cache)
+  getModSlugMapping: (req: GetModSlugMappingRequest) =>
+    promisify<GetModSlugMappingRequest, GetModSlugMappingResponse>(
+      ensureCacheClient().getModSlugMapping.bind(ensureCacheClient())
+    )(req),
+  saveModSlugMapping: (req: SaveModSlugMappingRequest) =>
+    promisify<SaveModSlugMappingRequest, SaveModSlugMappingResponse>(
+      ensureCacheClient().saveModSlugMapping.bind(ensureCacheClient())
     )(req),
 };
 

@@ -325,6 +325,41 @@ var migrations = []Migration{
 			CREATE INDEX IF NOT EXISTS idx_accounts_device_id ON accounts(device_id);
 		`,
 	},
+	{
+		Version: 17,
+		Name:    "create_mod_slug_mappings",
+		SQL: `
+			CREATE TABLE IF NOT EXISTS mod_slug_mappings (
+				slug TEXT NOT NULL,
+				source TEXT NOT NULL CHECK(source IN ('modrinth', 'curseforge')),
+				project_id TEXT NOT NULL,
+				project_name TEXT,
+				resolved_via TEXT NOT NULL CHECK(resolved_via IN ('known', 'slug_lookup', 'search')),
+				confidence INTEGER DEFAULT 100,
+				hit_count INTEGER DEFAULT 1,
+				created_at INTEGER NOT NULL,
+				last_used INTEGER NOT NULL,
+				PRIMARY KEY (slug, source)
+			);
+			
+			CREATE INDEX IF NOT EXISTS idx_mod_slug_mappings_hit_count ON mod_slug_mappings(hit_count DESC);
+			CREATE INDEX IF NOT EXISTS idx_mod_slug_mappings_confidence ON mod_slug_mappings(confidence DESC);
+			CREATE INDEX IF NOT EXISTS idx_mod_slug_mappings_last_used ON mod_slug_mappings(last_used DESC);
+			
+			-- Seed with known mappings
+			INSERT OR IGNORE INTO mod_slug_mappings (slug, source, project_id, project_name, resolved_via, confidence, hit_count, created_at, last_used) VALUES
+				('iris', 'modrinth', 'YL57xq9U', 'Iris Shaders', 'known', 100, 0, strftime('%s', 'now'), strftime('%s', 'now')),
+				('sodium', 'modrinth', 'AANobbMI', 'Sodium', 'known', 100, 0, strftime('%s', 'now'), strftime('%s', 'now')),
+				('lithium', 'modrinth', 'gvQqBUqZ', 'Lithium', 'known', 100, 0, strftime('%s', 'now'), strftime('%s', 'now')),
+				('phosphor', 'modrinth', 'hEOCdOgW', 'Phosphor', 'known', 100, 0, strftime('%s', 'now'), strftime('%s', 'now')),
+				('indium', 'modrinth', 'Orvt0mRa', 'Indium', 'known', 100, 0, strftime('%s', 'now'), strftime('%s', 'now')),
+				('fabric-api', 'modrinth', 'P7dR8mSH', 'Fabric API', 'known', 100, 0, strftime('%s', 'now'), strftime('%s', 'now')),
+				('connector', 'modrinth', 'u58R1TMW', 'Connector', 'known', 100, 0, strftime('%s', 'now'), strftime('%s', 'now')),
+				('sinytra-connector', 'modrinth', 'u58R1TMW', 'Sinytra Connector', 'known', 100, 0, strftime('%s', 'now'), strftime('%s', 'now')),
+				('yacl', 'modrinth', '1eAoo2KR', 'YetAnotherConfigLib', 'known', 100, 0, strftime('%s', 'now'), strftime('%s', 'now')),
+				('yet_another_config_lib', 'modrinth', '1eAoo2KR', 'YetAnotherConfigLib', 'known', 100, 0, strftime('%s', 'now'), strftime('%s', 'now'));
+		`,
+	},
 }
 
 func runMigrations(db *sql.DB) error {

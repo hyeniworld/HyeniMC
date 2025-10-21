@@ -37,6 +37,10 @@ service CacheService {
   // Cache management
   rpc InvalidateCache(InvalidateCacheRequest) returns (InvalidateCacheResponse);
   rpc ClearExpiredCache(ClearExpiredCacheRequest) returns (ClearExpiredCacheResponse);
+  
+  // Mod slug mappings (dynamic learning cache)
+  rpc GetModSlugMapping(GetModSlugMappingRequest) returns (GetModSlugMappingResponse);
+  rpc SaveModSlugMapping(SaveModSlugMappingRequest) returns (SaveModSlugMappingResponse);
 }
 
 // Minecraft Versions
@@ -239,4 +243,32 @@ message ClearExpiredCacheRequest {}
 
 message ClearExpiredCacheResponse {
   int32 deleted_count = 1;
+}
+
+// Mod Slug Mappings
+message GetModSlugMappingRequest {
+  string slug = 1;
+  string source = 2; // 'modrinth' or 'curseforge'
+}
+
+message GetModSlugMappingResponse {
+  bool found = 1;
+  string project_id = 2;
+  string project_name = 3;
+  string resolved_via = 4;
+  int32 confidence = 5;
+  int32 hit_count = 6;
+}
+
+message SaveModSlugMappingRequest {
+  string slug = 1;
+  string source = 2; // 'modrinth' or 'curseforge'
+  string project_id = 3;
+  string project_name = 4;
+  string resolved_via = 5; // 'known', 'slug_lookup', 'search'
+  int32 confidence = 6;
+}
+
+message SaveModSlugMappingResponse {
+  bool success = 1;
 }

@@ -1,23 +1,13 @@
 import { ModrinthAPI } from './modrinth-api';
+import { cacheRpc } from '../grpc/clients';
 
 /**
  * 모드 프로젝트 ID 해석 유틸리티
  * 파일명, 이름 등을 통해 Modrinth/CurseForge 프로젝트 ID를 찾음
+ * 동적 학습 캐싱 시스템: 검색으로 찾은 매핑을 DB에 자동 저장하여 재사용
  */
 export class ModResolver {
   private modrinthAPI: ModrinthAPI;
-  
-  // 알려진 모드 매핑 (슬러그 -> Modrinth project ID)
-  private static readonly KNOWN_MOD_MAPPINGS: Record<string, string> = {
-    iris: 'YL57xq9U',
-    sodium: 'AANobbMI',
-    lithium: 'gvQqBUqZ',
-    phosphor: 'hEOCdOgW',
-    indium: 'Orvt0mRa',
-    'fabric-api': 'P7dR8mSH',
-    'connector': 'u58R1TMW',
-    'sinytra-connector': 'u58R1TMW',
-  };
 
   constructor() {
     this.modrinthAPI = new ModrinthAPI();
@@ -70,10 +60,20 @@ export class ModResolver {
 
     console.log(`[ModResolver] Resolving: ${displayName} (slug: ${slug})`);
 
-    // 1) 알려진 매핑 확인
-    if (ModResolver.KNOWN_MOD_MAPPINGS[slug]) {
-      console.log(`[ModResolver] Found in known mappings: ${ModResolver.KNOWN_MOD_MAPPINGS[slug]}`);
-      return ModResolver.KNOWN_MOD_MAPPINGS[slug];
+    // 1) DB 캐시 확인 (동적 학습된 매핑)
+    try {
+      const cached = await cacheRpc.getModSlugMapping({
+        slug,
+        source: 'modrinth',
+      });
+      
+      if (cached.found) {
+        console.log(`[ModResolver] Found in cache: ${cached.projectId} (${cached.resolvedVia}, hits: ${cached.hitCount})`);
+        return cached.projectId;
+      }
+    } catch (error) {
+      console.log(`[ModResolver] Cache lookup failed:`, error);
+      // Continue with API fallback
     }
 
     // 2) 슬러그로 직접 조회
@@ -81,6 +81,8 @@ export class ModResolver {
       const details = await this.modrinthAPI.getModDetails(slug);
       if (details?.id) {
         console.log(`[ModResolver] Resolved via slug lookup: ${details.id}`);
+        // 성공 시 DB에 저장 (향후 재사용)
+        await this.saveMappingToCache(slug, details.id, details.name, 'slug_lookup', 100);
         return details.id;
       }
     } catch (error) {
@@ -108,6 +110,11 @@ export class ModResolver {
       ) || result.hits[0];
 
       console.log(`[ModResolver] Resolved via search: ${preferred.id} (${preferred.slug})`);
+      
+      // 검색으로 찾은 경우 낮은 신뢰도로 저장 (정확도가 떨어질 수 있음)
+      const confidence = preferred.slug?.toLowerCase() === slug ? 90 : 70;
+      await this.saveMappingToCache(slug, preferred.id, preferred.name, 'search', confidence);
+      
       return preferred.id || null;
     } catch (error) {
       console.error(`[ModResolver] Failed to resolve project:`, error);
@@ -116,9 +123,28 @@ export class ModResolver {
   }
 
   /**
-   * 알려진 매핑에 모드 추가 (런타임)
+   * 매핑을 DB 캐시에 저장
    */
-  static addKnownMapping(slug: string, projectId: string): void {
-    ModResolver.KNOWN_MOD_MAPPINGS[slug] = projectId;
+  private async saveMappingToCache(
+    slug: string,
+    projectId: string,
+    projectName: string | undefined,
+    resolvedVia: 'slug_lookup' | 'search',
+    confidence: number
+  ): Promise<void> {
+    try {
+      await cacheRpc.saveModSlugMapping({
+        slug,
+        source: 'modrinth',
+        projectId,
+        projectName: projectName || '',
+        resolvedVia,
+        confidence,
+      });
+      console.log(`[ModResolver] Saved mapping to cache: ${slug} -> ${projectId}`);
+    } catch (error) {
+      console.error(`[ModResolver] Failed to save mapping to cache:`, error);
+      // 저장 실패해도 계속 진행
+    }
   }
 }
