@@ -14,6 +14,7 @@ import { registerShaderPackHandlers } from './shaderpack';
 import { registerSettingsHandlers } from './settings';
 import { registerFileWatcherHandlers } from './file-watcher';
 import { registerHyeniHandlers } from './hyeni';
+import { registerWorkerModsHandlers } from './worker-mods';
 import { registerLauncherHandlers } from './launcher';
 import { registerErrorDialogHandlers } from './error-dialog';
 
@@ -38,6 +39,7 @@ export function registerIpcHandlers(): void {
   registerSettingsHandlers();
   registerFileWatcherHandlers();
   registerHyeniHandlers();
+  registerWorkerModsHandlers();
   registerLauncherHandlers();
   registerErrorDialogHandlers();
 

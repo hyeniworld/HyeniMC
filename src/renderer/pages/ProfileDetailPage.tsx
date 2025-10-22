@@ -6,7 +6,9 @@ import { ResourcePackList } from '../components/resourcepacks/ResourcePackList';
 import { ShaderPackList } from '../components/shaderpacks/ShaderPackList';
 import { ProfileSettingsTab } from '../components/profiles/ProfileSettingsTab';
 import { HyeniUpdateNotification } from '../components/hyeni/HyeniUpdateNotification';
+import { WorkerModUpdatePanel } from '../components/worker-mods/WorkerModUpdatePanel';
 import { useHyeniUpdate } from '../hooks/useHyeniUpdate';
+import { useWorkerModUpdates } from '../hooks/useWorkerModUpdates';
 import { useDownloadStore } from '../store/downloadStore';
 import { useToast } from '../contexts/ToastContext';
 
@@ -356,6 +358,34 @@ const OverviewTab: React.FC<{ profile: any }> = ({ profile }) => {
     checkForUpdate(); // Re-check to confirm
   };
 
+  // Check for Worker Mods updates (multi-mod system)
+  const {
+    updates: workerModUpdates,
+    hasUpdates: hasWorkerModUpdates,
+    isInstalling: isInstallingWorkerMods,
+    installProgress: workerModInstallProgress,
+    installSelected: installWorkerMods,
+    clearUpdates: clearWorkerModUpdates,
+    error: workerModError,
+  } = useWorkerModUpdates({
+    profilePath,
+    gameVersion: profile?.gameVersion || '',
+    loaderType: profile?.loaderType || '',
+    serverAddress: profile?.serverAddress,
+    autoCheck: true,
+    checkInterval: 30 * 60 * 1000 // 30 minutes
+  });
+
+
+  const handleWorkerModInstall = async (selectedModIds: string[]) => {
+    try {
+      await installWorkerMods(selectedModIds);
+      toast.success('업데이트 완료', `${selectedModIds.length}개 모드가 성공적으로 업데이트되었습니다.`);
+    } catch (error) {
+      toast.error('업데이트 실패', '일부 모드 업데이트에 실패했습니다.');
+    }
+  };
+
   const handleOpenFolder = async () => {
     if (!profile?.id) {
       toast.error('오류', '프로필 정보가 올바르지 않습니다.');
@@ -391,7 +421,19 @@ const OverviewTab: React.FC<{ profile: any }> = ({ profile }) => {
 
   return (
     <div className="p-6 space-y-4">
-      {/* HyeniHelper Update Notification */}
+      {/* Worker Mods Update Panel (Multi-Mod System) */}
+      {profilePath && hasWorkerModUpdates && (
+        <WorkerModUpdatePanel
+          updates={workerModUpdates}
+          isInstalling={isInstallingWorkerMods}
+          installProgress={workerModInstallProgress}
+          onInstall={handleWorkerModInstall}
+          onDismiss={clearWorkerModUpdates}
+        />
+      )}
+
+      {/* HyeniHelper Update Notification (Legacy - Single Mod) */}
+      {/* Show if: Worker Mods not available OR no Worker updates found */}
       {profilePath && updateInfo && (
         <HyeniUpdateNotification
           profileId={profile.id}

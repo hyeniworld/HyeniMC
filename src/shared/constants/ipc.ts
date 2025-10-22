@@ -89,6 +89,10 @@ export const IPC_CHANNELS = {
   HYENI_CHECK_UPDATE: 'hyeni:check-update',
   HYENI_INSTALL_UPDATE: 'hyeni:install-update',
   
+  // Worker Mods (Multi-Mod Updates from Worker API)
+  WORKER_MODS_CHECK_UPDATES: 'worker-mods:check-updates',
+  WORKER_MODS_INSTALL_MULTIPLE: 'worker-mods:install-multiple',
+  
   // Version
   VERSION_MINECRAFT_LIST: 'version:minecraft-list',
   VERSION_LOADER_LIST: 'version:loader-list',
@@ -150,6 +154,10 @@ export const IPC_EVENTS = {
   
   // HyeniHelper Events
   HYENI_UPDATE_PROGRESS: 'hyeni:update-progress',
+  
+  // Worker Mods Events
+  WORKER_MODS_INSTALL_PROGRESS: 'worker-mods:install-progress',
+  WORKER_MODS_UPDATE_COMPLETE: 'worker-mods:update-complete',
   
   // Modpack Events
   MODPACK_INSTALL_PROGRESS: 'modpack:install-progress',

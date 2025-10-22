@@ -239,6 +239,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke(IPC_CHANNELS.HYENI_INSTALL_UPDATE, profilePath, updateInfo),
   },
 
+  // Worker Mods APIs (Multi-Mod Updates)
+  workerMods: {
+    checkUpdates: (profilePath: string, gameVersion: string, loaderType: string, serverAddress?: string): Promise<any[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.WORKER_MODS_CHECK_UPDATES, profilePath, gameVersion, loaderType, serverAddress),
+    
+    installMultiple: (profilePath: string, updates: any[]): Promise<any[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.WORKER_MODS_INSTALL_MULTIPLE, profilePath, updates),
+  },
+
   // Launcher update APIs
   launcher: {
     checkForUpdates: (): Promise<{ success: boolean }> =>

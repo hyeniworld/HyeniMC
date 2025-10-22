@@ -126,6 +126,10 @@ declare global {
         checkForUpdate: (profilePath: string, gameVersion: string, loaderType: string, serverAddress?: string) => Promise<any>;
         installUpdate: (profilePath: string, updateInfo: any) => Promise<{ success: boolean; message?: string }>;
       };
+      workerMods: {
+        checkUpdates: (profilePath: string, gameVersion: string, loaderType: string, serverAddress?: string) => Promise<any[]>;
+        installMultiple: (profilePath: string, updates: any[]) => Promise<any[]>;
+      };
       launcher: {
         checkForUpdates: () => Promise<{ success: boolean }>;
         downloadUpdate: () => Promise<{ success: boolean }>;
