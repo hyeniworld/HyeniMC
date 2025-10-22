@@ -336,6 +336,15 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
         gameDirectory: gameDir,
         icon,
         serverAddress: serverAddress.trim(),
+        // Preserve fields that are not editable in this UI
+        favorite: profile.favorite ?? false,
+        totalPlayTime: profile.totalPlayTime ?? 0,
+        modpackId: profile.modpackId ?? '',
+        modpackSource: profile.modpackSource ?? '',
+        // Always include gameArgs to ensure jvmArgs empty array updates work
+        // Proto3 serialization can fail if some array fields are undefined
+        gameArgs: profile.gameArgs ?? [],
+        description: profile.description ?? '',
       };
       await window.electronAPI.profile.update(profile.id, updates);
       
