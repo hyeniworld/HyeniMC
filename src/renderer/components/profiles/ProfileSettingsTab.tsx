@@ -326,7 +326,9 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
           max: useGlobalMemory ? 0 : maxMemory,
         },
         javaPath: useGlobalJava ? '' : selectedJava,  // empty = use global settings
-        jvmArgs: jvmArgs.trim() ? jvmArgs.trim().split(/\s+/) : [],
+        // Proto3 workaround: empty array is omitted during serialization
+        // Use special marker to signal "clear jvmArgs"
+        jvmArgs: jvmArgs.trim() ? jvmArgs.trim().split(/\s+/) : ['__CLEAR_JVM_ARGS__'],
         resolution: {
           width: useGlobalResolution ? 0 : windowWidth,  // 0 = use global settings
           height: useGlobalResolution ? 0 : windowHeight,

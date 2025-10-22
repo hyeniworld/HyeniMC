@@ -104,11 +104,16 @@ func (s *profileServiceServer) UpdateProfile(ctx context.Context, req *pb.Update
 		}
 		// Always update jvmArgs if provided (including empty array to clear)
 		if patch.JvmArgs != nil {
-			arr := make([]interface{}, 0, len(patch.JvmArgs))
-			for _, v := range patch.JvmArgs {
-				arr = append(arr, v)
+			// Proto3 workaround: Check for special marker to clear jvmArgs
+			if len(patch.JvmArgs) == 1 && patch.JvmArgs[0] == "__CLEAR_JVM_ARGS__" {
+				updates["jvmArgs"] = []interface{}{}
+			} else {
+				arr := make([]interface{}, 0, len(patch.JvmArgs))
+				for _, v := range patch.JvmArgs {
+					arr = append(arr, v)
+				}
+				updates["jvmArgs"] = arr
 			}
-			updates["jvmArgs"] = arr
 		}
 		// Always update gameArgs if provided (including empty array to clear)
 		if patch.GameArgs != nil {

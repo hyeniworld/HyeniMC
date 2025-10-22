@@ -69,6 +69,7 @@ export function registerProfileHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.PROFILE_UPDATE, async (event, id: string, data: Partial<Profile>) => {
     try {
       console.log(`[IPC Profile] Updating profile ${id} with data:`, data);
+      console.log(`[IPC Profile] jvmArgs:`, data.jvmArgs, 'type:', typeof data.jvmArgs, 'isArray:', Array.isArray(data.jvmArgs));
       
       const addr = getBackendAddress();
       if (!addr) {
@@ -85,10 +86,13 @@ export function registerProfileHandlers(): void {
         loaderType: data.loaderType ?? '',
         loaderVersion: data.loaderVersion ?? '',
         gameDirectory: data.gameDirectory ?? '',
+        // Proto3 fix: jvmArgs with special marker handling
+        // Pass through jvmArgs as-is (may contain special marker "__CLEAR_JVM_ARGS__")
         jvmArgs: data.jvmArgs ?? [],
         memoryMin: data.memory?.min ?? 0,
         memoryMax: data.memory?.max ?? 0,
-        gameArgs: data.gameArgs ?? [],
+        // gameArgs: only include if provided to avoid unnecessary updates
+        gameArgs: data.gameArgs !== undefined ? data.gameArgs : [],
         modpackId: data.modpackId ?? '',
         modpackSource: (data as any).modpackSource ?? '',
         createdAt: 0,
