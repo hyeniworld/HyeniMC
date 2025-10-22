@@ -350,38 +350,18 @@ export class WorkerModRegistry {
       throw new Error(error instanceof Error ? error.message : '인증 토큰을 찾을 수 없습니다');
     }
     
-    // Download file
+    // Download file with progress tracking
     const fullDownloadUrl = `${downloadUrl}?token=${encodeURIComponent(token)}`;
     console.log(`[WorkerModRegistry] Downloading: ${downloadUrl} (token: ${token.substring(0, 8)}...)`);
     
-    const response = await net.fetch(fullDownloadUrl);
+    const buffer = await this.downloadWithProgress(
+      fullDownloadUrl,
+      update.size,
+      update.sha256,
+      onProgress
+    );
     
-    if (!response.ok) {
-      console.error(`[WorkerModRegistry] Download failed: ${response.status} for URL: ${downloadUrl}`);
-
-      if (response.status === 401 || response.status === 403) {
-        throw new Error('인증 실패: 토큰이 만료되었거나 유효하지 않습니다. Discord /인증 명령어로 재인증해주세요.');
-      } else if (response.status === 404) {
-        throw new Error('파일을 찾을 수 없습니다: 서버에서 모드 파일을 찾을 수 없습니다.');
-      } else {
-        throw new Error(`다운로드 실패: ${response.status} ${response.statusText}`);
-      }
-    }
-    
-    const buffer = Buffer.from(await response.arrayBuffer());
-    
-    // Verify file size
-    if (buffer.length !== update.size) {
-      throw new Error(`파일 크기 불일치: 예상 ${update.size} bytes, 실제 ${buffer.length} bytes`);
-    }
-    
-    // Verify SHA256
-    const hash = crypto.createHash('sha256').update(buffer).digest('hex');
-    if (hash !== update.sha256) {
-      throw new Error(`SHA256 불일치: 예상 ${update.sha256}, 실제 ${hash}`);
-    }
-    
-    console.log(`[WorkerModRegistry] Download verified: ${buffer.length} bytes, SHA256: ${hash}`);
+    console.log(`[WorkerModRegistry] Download verified: ${buffer.length} bytes, SHA256: ${update.sha256}`);
     
     // Remove old version
     await this.removeOldVersion(modsPath, update.modId);
@@ -394,6 +374,78 @@ export class WorkerModRegistry {
     await fs.writeFile(targetPath, buffer);
     
     onProgress?.(100);
+  }
+
+  /**
+   * Download file with progress tracking and verification
+   */
+  private async downloadWithProgress(
+    url: string,
+    expectedSize: number,
+    expectedSha256: string,
+    onProgress?: (progress: number) => void
+  ): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+      const request = net.request(url);
+      
+      request.on('response', (response) => {
+        if (response.statusCode !== 200) {
+          let errorMsg = `다운로드 실패: ${response.statusCode}`;
+          if (response.statusCode === 401 || response.statusCode === 403) {
+            errorMsg = '인증 실패: 토큰이 만료되었거나 유효하지 않습니다. Discord /인증 명령어로 재인증해주세요.';
+          } else if (response.statusCode === 404) {
+            errorMsg = '파일을 찾을 수 없습니다: 서버에서 모드 파일을 찾을 수 없습니다.';
+          }
+          reject(new Error(errorMsg));
+          return;
+        }
+        
+        const totalSize = parseInt(response.headers['content-length'] as string || '0') || expectedSize;
+        let downloadedSize = 0;
+        const chunks: Buffer[] = [];
+        const hash = crypto.createHash('sha256');
+        
+        response.on('data', (chunk: Buffer) => {
+          chunks.push(chunk);
+          hash.update(chunk);
+          downloadedSize += chunk.length;
+          
+          if (onProgress && totalSize > 0) {
+            const progress = Math.round((downloadedSize / totalSize) * 100);
+            onProgress(progress);
+          }
+        });
+        
+        response.on('end', () => {
+          const buffer = Buffer.concat(chunks);
+          
+          // Verify file size
+          if (expectedSize > 0 && buffer.length !== expectedSize) {
+            reject(new Error(`파일 크기 불일치: 예상 ${expectedSize} bytes, 실제 ${buffer.length} bytes`));
+            return;
+          }
+          
+          // Verify SHA256
+          const actualSha256 = hash.digest('hex');
+          if (actualSha256 !== expectedSha256) {
+            reject(new Error(`SHA256 불일치: 예상 ${expectedSha256}, 실제 ${actualSha256}`));
+            return;
+          }
+          
+          resolve(buffer);
+        });
+        
+        response.on('error', (error: Error) => {
+          reject(error);
+        });
+      });
+      
+      request.on('error', (error) => {
+        reject(error);
+      });
+      
+      request.end();
+    });
   }
 
   /**
