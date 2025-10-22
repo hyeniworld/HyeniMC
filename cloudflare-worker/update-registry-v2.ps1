@@ -122,7 +122,7 @@ foreach ($MOD_ID in $ModIds) {
     }
     
     # Determine category (default: optional)
-    $CATEGORY = "optional"
+    $CATEGORY = $response.category
     
     # Add to list
     $modsList += @{

@@ -189,6 +189,7 @@ $manifest = @{
     changelog = $CHANGELOG
     gameVersions = @($allGameVersions)
     loaders = $loadersObj
+    category = $CATEGORY
 }
 
 $MANIFEST_PATH = Join-Path $TEMP_PATH "manifest.json"

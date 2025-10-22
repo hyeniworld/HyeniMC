@@ -110,7 +110,7 @@ EOF
     LOADERS_ARRAY+="]"
     
     # Determine category (default: optional)
-    CATEGORY="optional"
+    CATEGORY=$(echo "$RESPONSE" | jq -r '.category // "optional"')
     
     # Add to JSON
     if [ "$FIRST" = false ]; then

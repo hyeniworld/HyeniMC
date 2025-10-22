@@ -236,7 +236,8 @@ cat > "$MANIFEST_PATH" <<EOF
   "releaseDate": "$RELEASE_DATE",
   "changelog": "$CHANGELOG",
   "gameVersions": $GAME_VERSIONS_JSON,
-  "loaders": $LOADERS_JSON
+  "loaders": $LOADERS_JSON,
+  "category": "$CATEGORY"
 }
 EOF
 
