@@ -15,6 +15,7 @@ import * as crypto from 'crypto';
 import * as nbt from 'prismarine-nbt';
 import { ENV_CONFIG } from '../config/env-config';
 import { isAuthorizedServer } from '../../shared/config/server-config';
+import { parseModVersion, isNewerVersion, compareVersions } from '../../shared/utils/version';
 
 // ============================================================================
 // Types
@@ -410,8 +411,8 @@ export class WorkerModUpdater {
         return null;
       }
       
-      // Compare versions
-      const needsUpdate = !localVersion || this.isNewerVersion(modInfo.version, localVersion);
+      // Compare versions using shared utility
+      const needsUpdate = !localVersion || isNewerVersion(modInfo.version, localVersion);
       
       if (needsUpdate) {
         console.log(`[WorkerModUpdater] Update available for ${modId}: ${localVersion || 'none'} -> ${modInfo.version}`);
@@ -571,21 +572,17 @@ export class WorkerModUpdater {
       return null;
     }
     
-    // Extract version from filename
+    // Extract version from filename using shared utility
     // Patterns:
     // - hyenihelper-fabric-1.21.1-1.0.0.jar -> 1.0.0
     // - hyenihelper-1.0.0.jar -> 1.0.0
     // - hyenicore-neoforge-2.0.1.jar -> 2.0.1
-    const fileName = path.basename(files[0]);
+    // - FastSuite-1.21.1-6.0.5.jar -> 6.0.5
+    const fileName = path.basename(files[0], '.jar');
+    const version = parseModVersion(fileName);
     
-    // Try to extract version: {modId}-{version}.jar or {modId}-{loader}-{gameVersion}-{version}.jar
-    const versionMatch = fileName.match(new RegExp(`${modId}-(\\d+\\.\\d+\\.\\d+)`, 'i'));
-    
-    if (versionMatch) {
-      return versionMatch[1];
-    }
-    
-    return null;
+    // parseModVersion returns '0.0.0' on failure
+    return version !== '0.0.0' ? version : null;
   }
   
   /**
@@ -620,37 +617,16 @@ export class WorkerModUpdater {
     minVersion: string,
     maxVersion: string | null
   ): boolean {
-    // Compare with minimum version
-    const isAboveMin = this.compareVersions(currentVersion, minVersion) >= 0;
+    // Compare with minimum version using shared utility
+    const isAboveMin = compareVersions(currentVersion, minVersion) >= 0;
     
     // Compare with maximum version (if specified)
     if (maxVersion) {
-      const isBelowMax = this.compareVersions(currentVersion, maxVersion) <= 0;
+      const isBelowMax = compareVersions(currentVersion, maxVersion) <= 0;
       return isAboveMin && isBelowMax;
     }
     
     return isAboveMin;
-  }
-  
-  /**
-   * Compare semantic versions
-   * @returns -1 if v1 < v2, 0 if equal, 1 if v1 > v2
-   */
-  private compareVersions(v1: string, v2: string): number {
-    const parts1 = v1.split('.').map(p => parseInt(p, 10) || 0);
-    const parts2 = v2.split('.').map(p => parseInt(p, 10) || 0);
-    
-    const maxLength = Math.max(parts1.length, parts2.length);
-    
-    for (let i = 0; i < maxLength; i++) {
-      const p1 = parts1[i] || 0;
-      const p2 = parts2[i] || 0;
-      
-      if (p1 < p2) return -1;
-      if (p1 > p2) return 1;
-    }
-    
-    return 0;
   }
   
   /**
@@ -749,24 +725,9 @@ export class WorkerModUpdater {
     });
   }
   
-  /**
-   * Compare semantic versions
-   */
-  private isNewerVersion(latest: string, current: string): boolean {
-    const latestParts = latest.split('.').map(Number);
-    const currentParts = current.split('.').map(Number);
-    
-    for (let i = 0; i < Math.max(latestParts.length, currentParts.length); i++) {
-      const latestPart = latestParts[i] || 0;
-      const currentPart = currentParts[i] || 0;
-      
-      if (latestPart > currentPart) return true;
-      if (latestPart < currentPart) return false;
-    }
-    
-    return false;
-  }
 }
+
+// Note: Version comparison methods moved to shared/utils/version.ts
 
 // Export singleton instance
 export const workerModUpdater = new WorkerModUpdater();

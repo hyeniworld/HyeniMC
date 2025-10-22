@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { IPC_CHANNELS } from '../../shared/constants';
+import { IPC_CHANNELS, IPC_EVENTS } from '../../shared/constants';
 import { Profile, CreateProfileData } from '../../shared/types';
 import { getBackendAddress } from '../backend/manager';
 import { getAccountManager } from './account';
@@ -434,7 +434,7 @@ export function registerProfileHandlers(): void {
             
             // Notify renderer that mods were updated
             if (window) {
-              window.webContents.send('mod:update-complete', {
+              window.webContents.send(IPC_EVENTS.WORKER_MODS_UPDATE_COMPLETE, {
                 profileId: profile.id,
                 updatedMods: updates.map(u => ({ modId: u.modId, modName: u.modName, version: u.latestVersion }))
               });
