@@ -2,7 +2,7 @@
  * Hook for checking and managing HyeniHelper updates
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 interface HyeniUpdateInfo {
   available: boolean;
@@ -38,8 +38,11 @@ export function useHyeniUpdate({
   const [isChecking, setIsChecking] = useState(false);
   const [lastCheck, setLastCheck] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
+  
+  // Use ref to store the latest checkForUpdate function
+  const checkForUpdateRef = useRef<() => Promise<void>>();
 
-  const checkForUpdate = async () => {
+  const checkForUpdate = useCallback(async () => {
     if (!profilePath || !gameVersion || !loaderType) {
       console.log('[useHyeniUpdate] Missing required parameters');
       return;
@@ -73,7 +76,12 @@ export function useHyeniUpdate({
     } finally {
       setIsChecking(false);
     }
-  };
+  }, [profilePath, gameVersion, loaderType, serverAddress]);
+  
+  // Update ref whenever checkForUpdate changes
+  useEffect(() => {
+    checkForUpdateRef.current = checkForUpdate;
+  }, [checkForUpdate]);
 
   // Auto check on mount and interval
   useEffect(() => {
@@ -86,22 +94,22 @@ export function useHyeniUpdate({
 
       return () => clearInterval(interval);
     }
-  }, [profilePath, gameVersion, loaderType, serverAddress, autoCheck, checkInterval]);
+  }, [checkForUpdate, autoCheck, checkInterval]);
 
   // Listen for mod updates from game launch
+  // Only register once on mount, use ref to call the latest checkForUpdate
   useEffect(() => {
-    const handleModUpdateComplete = (_event: any, data: { profileId: string; updatedMods: any[] }) => {
+    const handleModUpdateComplete = (data: { profileId: string; updatedMods: any[] }) => {
       console.log('[useHyeniUpdate] Mod update completed during game launch, refreshing...', data);
-      // Re-check for updates to refresh UI
-      checkForUpdate();
+      // Call the latest checkForUpdate via ref
+      checkForUpdateRef.current?.();
     };
 
-    window.electronAPI.on('mod:update-complete', handleModUpdateComplete);
+    // Use the cleanup function returned by 'on' instead of 'off'
+    const cleanup = window.electronAPI.on('mod:update-complete', handleModUpdateComplete);
 
-    return () => {
-      window.electronAPI.off('mod:update-complete', handleModUpdateComplete);
-    };
-  }, [checkForUpdate]);
+    return cleanup;
+  }, []); // Empty dependency - only register once
 
   return {
     updateInfo,

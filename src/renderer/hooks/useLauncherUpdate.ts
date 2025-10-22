@@ -70,12 +70,12 @@ export function useLauncherUpdate() {
       setChecking(false);
     };
 
-    // Register listeners
-    window.electronAPI.on('launcher:update-available', handleUpdateAvailable);
-    window.electronAPI.on('launcher:update-not-available', handleUpdateNotAvailable);
-    window.electronAPI.on('launcher:download-progress', handleDownloadProgress);
-    window.electronAPI.on('launcher:update-downloaded', handleUpdateDownloaded);
-    window.electronAPI.on('launcher:update-error', handleUpdateError);
+    // Register listeners - use cleanup functions returned by 'on'
+    const cleanup1 = window.electronAPI.on('launcher:update-available', handleUpdateAvailable);
+    const cleanup2 = window.electronAPI.on('launcher:update-not-available', handleUpdateNotAvailable);
+    const cleanup3 = window.electronAPI.on('launcher:download-progress', handleDownloadProgress);
+    const cleanup4 = window.electronAPI.on('launcher:update-downloaded', handleUpdateDownloaded);
+    const cleanup5 = window.electronAPI.on('launcher:update-error', handleUpdateError);
 
     // Check for updates on mount
     checkForUpdates();
@@ -87,11 +87,11 @@ export function useLauncherUpdate() {
 
     return () => {
       clearInterval(interval);
-      window.electronAPI.off('launcher:update-available', handleUpdateAvailable);
-      window.electronAPI.off('launcher:update-not-available', handleUpdateNotAvailable);
-      window.electronAPI.off('launcher:download-progress', handleDownloadProgress);
-      window.electronAPI.off('launcher:update-downloaded', handleUpdateDownloaded);
-      window.electronAPI.off('launcher:update-error', handleUpdateError);
+      cleanup1();
+      cleanup2();
+      cleanup3();
+      cleanup4();
+      cleanup5();
     };
   }, []);
 

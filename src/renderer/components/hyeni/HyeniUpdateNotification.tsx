@@ -51,17 +51,17 @@ export function HyeniUpdateNotification({
 
     try {
       // Listen for progress updates
-      const progressListener = (_event: any, progressValue: number) => {
+      const progressListener = (progressValue: number) => {
         setProgress(progressValue);
       };
       
-      window.electronAPI.on('hyeni:update-progress', progressListener);
+      const cleanup = window.electronAPI.on('hyeni:update-progress', progressListener);
 
       // Install update
       const result = await window.electronAPI.hyeni.installUpdate(profilePath, updateInfo);
 
       // Cleanup listener
-      window.electronAPI.off('hyeni:update-progress', progressListener);
+      cleanup();
 
       if (result.success) {
         console.log('[HyeniUpdate] Update installed successfully');
