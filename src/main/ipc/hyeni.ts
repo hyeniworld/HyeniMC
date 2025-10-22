@@ -16,15 +16,17 @@ export function registerHyeniHandlers() {
       _event,
       profilePath: string,
       gameVersion: string,
-      loaderType: string
+      loaderType: string,
+      serverAddress?: string
     ): Promise<HyeniHelperUpdateInfo | null> => {
       try {
-        console.log(`[IPC] Checking HyeniHelper update for profile: ${profilePath}`);
+        console.log(`[IPC] Checking HyeniHelper update for profile: ${profilePath}${serverAddress ? ` (server: ${serverAddress})` : ''}`);
         
         const updateInfo = await hyeniUpdater.checkHyeniHelperUpdate(
           profilePath,
           gameVersion,
-          loaderType
+          loaderType,
+          serverAddress
         );
         
         if (updateInfo) {

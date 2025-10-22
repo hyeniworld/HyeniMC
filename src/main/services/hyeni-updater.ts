@@ -10,6 +10,7 @@ import * as fs from 'fs-extra';
 import { app, net } from 'electron';
 import * as crypto from 'crypto';
 import { ENV_CONFIG } from '../config/env-config';
+import { isAuthorizedServer } from '../../shared/config/server-config';
 
 // HyeniMC Worker URL (CurseForge API Proxy + Mod Distribution)
 function getWorkerUrl(): string {
@@ -80,17 +81,36 @@ interface LatestReleaseResponse {
 export class HyeniUpdater {
   /**
    * Check if HyeniHelper update is available for a profile
+   * @param profilePath - Profile path
+   * @param gameVersion - Game version
+   * @param loaderType - Loader type (neoforge, fabric, etc.)
+   * @param serverAddress - Server address from profile settings (optional)
    */
   async checkHyeniHelperUpdate(
     profilePath: string,
     gameVersion: string,
-    loaderType: string
+    loaderType: string,
+    serverAddress?: string
   ): Promise<HyeniHelperUpdateInfo | null> {
     try {
       // 1. Get local version
       const localVersion = await this.getLocalVersion(profilePath);
       
-      // 2. Fetch latest version from API
+      // 2. Check if update check should be performed
+      // - Always check if HyeniHelper is already installed
+      // - Also check if authorized server is configured (for installation recommendation)
+      const isAuthorizedServerConfigured = serverAddress?.trim() && isAuthorizedServer(serverAddress);
+      
+      if (!localVersion && !isAuthorizedServerConfigured) {
+        console.log('[HyeniUpdater] HyeniHelper not installed and no authorized server configured, skipping update check');
+        return null;
+      }
+      
+      if (!localVersion && isAuthorizedServerConfigured) {
+        console.log(`[HyeniUpdater] HyeniHelper not installed but authorized server configured (${serverAddress}), checking for installation`);
+      }
+      
+      // 3. Fetch latest version from API
       const latest = await this.fetchLatestRelease();
       
       if (!latest) {
@@ -98,14 +118,14 @@ export class HyeniUpdater {
         return null;
       }
       
-      // 3. Check if loader is supported
+      // 4. Check if loader is supported
       const loaderInfo = latest.loaders[loaderType];
       if (!loaderInfo) {
         console.log(`[HyeniUpdater] Loader ${loaderType} not supported in latest release`);
         return null;
       }
       
-      // 4. Extract file info based on API version (v1 or v2)
+      // 5. Extract file info based on API version (v1 or v2)
       let fileInfo: {
         downloadUrl: string;
         sha256: string;
@@ -157,9 +177,12 @@ export class HyeniUpdater {
         };
       }
       
-      // 5. Compare versions
-      if (!localVersion || this.isNewerVersion(latest.version, localVersion)) {
-        console.log(`[HyeniUpdater] Update available: ${localVersion || 'none'} -> ${latest.version}`);
+      // 6. Compare versions
+      // If not installed or newer version available, return update info
+      const needsUpdate = !localVersion || this.isNewerVersion(latest.version, localVersion);
+      
+      if (needsUpdate) {
+        console.log(`[HyeniUpdater] Update available: ${localVersion || 'not installed'} -> ${latest.version}`);
         
         return {
           available: true,

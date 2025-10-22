@@ -345,6 +345,7 @@ const OverviewTab: React.FC<{ profile: any }> = ({ profile }) => {
     profilePath,
     gameVersion: profile?.gameVersion || '',
     loaderType: profile?.loaderType || '',
+    serverAddress: profile?.serverAddress,
     autoCheck: true,
     checkInterval: 30 * 60 * 1000 // 30 minutes
   });

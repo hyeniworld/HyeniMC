@@ -21,6 +21,7 @@ interface UseHyeniUpdateOptions {
   profilePath: string;
   gameVersion: string;
   loaderType: string;
+  serverAddress?: string;
   autoCheck?: boolean;
   checkInterval?: number; // in milliseconds
 }
@@ -29,6 +30,7 @@ export function useHyeniUpdate({
   profilePath,
   gameVersion,
   loaderType,
+  serverAddress,
   autoCheck = true,
   checkInterval = 30 * 60 * 1000 // 30 minutes
 }: UseHyeniUpdateOptions) {
@@ -52,7 +54,8 @@ export function useHyeniUpdate({
       const info = await window.electronAPI.hyeni.checkForUpdate(
         profilePath,
         gameVersion,
-        loaderType
+        loaderType,
+        serverAddress
       );
 
       setUpdateInfo(info);
@@ -83,7 +86,7 @@ export function useHyeniUpdate({
 
       return () => clearInterval(interval);
     }
-  }, [profilePath, gameVersion, loaderType, autoCheck, checkInterval]);
+  }, [profilePath, gameVersion, loaderType, serverAddress, autoCheck, checkInterval]);
 
   // Listen for mod updates from game launch
   useEffect(() => {

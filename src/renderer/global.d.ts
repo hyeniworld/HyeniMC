@@ -123,7 +123,7 @@ declare global {
       };
       onShowErrorDialog: (callback: (data: any) => void) => () => void;
       hyeni: {
-        checkForUpdate: (profilePath: string, gameVersion: string, loaderType: string) => Promise<any>;
+        checkForUpdate: (profilePath: string, gameVersion: string, loaderType: string, serverAddress?: string) => Promise<any>;
         installUpdate: (profilePath: string, updateInfo: any) => Promise<{ success: boolean; message?: string }>;
       };
       launcher: {
