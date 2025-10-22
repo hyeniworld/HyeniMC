@@ -5,9 +5,7 @@ import { ModList } from '../components/mods/ModList';
 import { ResourcePackList } from '../components/resourcepacks/ResourcePackList';
 import { ShaderPackList } from '../components/shaderpacks/ShaderPackList';
 import { ProfileSettingsTab } from '../components/profiles/ProfileSettingsTab';
-import { HyeniUpdateNotification } from '../components/hyeni/HyeniUpdateNotification';
 import { WorkerModUpdatePanel } from '../components/worker-mods/WorkerModUpdatePanel';
-import { useHyeniUpdate } from '../hooks/useHyeniUpdate';
 import { useWorkerModUpdates } from '../hooks/useWorkerModUpdates';
 import { useDownloadStore } from '../store/downloadStore';
 import { useToast } from '../contexts/ToastContext';
@@ -337,27 +335,6 @@ const OverviewTab: React.FC<{ profile: any }> = ({ profile }) => {
     }
   }, [profile?.id]);
 
-  // Check for HyeniHelper updates
-  const {
-    updateInfo,
-    isChecking,
-    checkForUpdate,
-    clearUpdate
-  } = useHyeniUpdate({
-    profilePath,
-    gameVersion: profile?.gameVersion || '',
-    loaderType: profile?.loaderType || '',
-    serverAddress: profile?.serverAddress,
-    autoCheck: true,
-    checkInterval: 30 * 60 * 1000 // 30 minutes
-  });
-
-  const handleUpdateComplete = () => {
-    toast.success('업데이트 완료', 'HyeniHelper가 성공적으로 업데이트되었습니다.');
-    clearUpdate();
-    checkForUpdate(); // Re-check to confirm
-  };
-
   // Check for Worker Mods updates (multi-mod system)
   const {
     updates: workerModUpdates,
@@ -432,19 +409,6 @@ const OverviewTab: React.FC<{ profile: any }> = ({ profile }) => {
         />
       )}
 
-      {/* HyeniHelper Update Notification (Legacy - Single Mod) */}
-      {/* Show if: Worker Mods not available OR no Worker updates found */}
-      {profilePath && updateInfo && (
-        <HyeniUpdateNotification
-          profileId={profile.id}
-          profilePath={profilePath}
-          gameVersion={profile.gameVersion}
-          loaderType={profile.loaderType}
-          updateInfo={updateInfo}
-          onUpdateComplete={handleUpdateComplete}
-          onDismiss={clearUpdate}
-        />
-      )}
       <div className="bg-gray-800 rounded-lg p-6 shadow border border-gray-700">
         <h2 className="text-xl font-semibold text-gray-200 mb-4">
           프로필 정보
