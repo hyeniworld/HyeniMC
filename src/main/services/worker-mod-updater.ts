@@ -691,17 +691,29 @@ export class WorkerModUpdater {
         });
         
         response.on('end', () => {
+          // Close the write stream
           writer.end();
-          
+        });
+        
+        // Wait for file to be completely written to disk
+        writer.on('finish', () => {
           const actualSha256 = hash.digest('hex');
           
+          // Verify file size
+          if (totalSize > 0 && downloadedSize !== totalSize) {
+            fs.remove(tempPath);
+            reject(new Error(`File size mismatch: expected ${totalSize} bytes, got ${downloadedSize} bytes`));
+            return;
+          }
+          
+          // Verify SHA256
           if (actualSha256 !== expectedSha256) {
             fs.remove(tempPath);
             reject(new Error(`SHA256 mismatch: expected ${expectedSha256}, got ${actualSha256}`));
             return;
           }
           
-          console.log(`[WorkerModUpdater] Download complete: ${tempPath}`);
+          console.log(`[WorkerModUpdater] Download complete: ${tempPath} (${downloadedSize} bytes, SHA256: ${actualSha256})`);
           resolve(tempPath);
         });
         
