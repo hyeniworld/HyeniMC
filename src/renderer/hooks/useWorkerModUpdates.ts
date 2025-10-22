@@ -4,6 +4,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { WorkerModUpdateCheck } from '../../shared/types/worker-mods';
+import { IPC_EVENTS } from '../../shared/constants/ipc';
 
 interface UseWorkerModUpdatesOptions {
   profilePath: string;
@@ -83,7 +84,7 @@ export function useWorkerModUpdates({
 
   // Listen for update completion events
   useEffect(() => {
-    const cleanup = window.electronAPI.on('worker-mods:update-complete', () => {
+    const cleanup = window.electronAPI.on(IPC_EVENTS.WORKER_MODS_UPDATE_COMPLETE, () => {
       console.log('[useWorkerModUpdates] Update completed, refreshing...');
       checkForUpdatesRef.current?.();
     });
@@ -105,7 +106,7 @@ export function useWorkerModUpdates({
 
     try {
       // Listen for progress updates
-      const progressCleanup = window.electronAPI.on('worker-mods:install-progress', 
+      const progressCleanup = window.electronAPI.on(IPC_EVENTS.WORKER_MODS_INSTALL_PROGRESS, 
         (data: { modId: string; progress: number }) => {
           setInstallProgress(prev => new Map(prev).set(data.modId, data.progress));
         }

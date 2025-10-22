@@ -146,18 +146,11 @@ export const IPC_EVENTS = {
   GAME_CRASHED: 'game:crashed',
   GAME_DOWNLOAD_PROGRESS: 'game:download-progress',
   
-  // Mod Events
-  MOD_UPDATES_AVAILABLE: 'mod:updates-available',
-  MOD_UPDATE_PROGRESS: 'mod:update-progress',
-  MOD_UPDATE_COMPLETE: 'mod:update-complete',
-  MOD_UPDATE_ERROR: 'mod:update-error',
-  
-  // HyeniHelper Events
-  HYENI_UPDATE_PROGRESS: 'hyeni:update-progress',
-  
-  // Worker Mods Events
-  WORKER_MODS_INSTALL_PROGRESS: 'worker-mods:install-progress',
-  WORKER_MODS_UPDATE_COMPLETE: 'worker-mods:update-complete',
+  // Worker Mods Events (혜니월드 필수 모드 시스템)
+  WORKER_MODS_UPDATE_PROGRESS: 'worker-mods:update-progress',    // 게임 시작 시 자동 업데이트 진행률
+  WORKER_MODS_UPDATE_ERROR: 'worker-mods:update-error',          // 게임 시작 시 자동 업데이트 실패
+  WORKER_MODS_INSTALL_PROGRESS: 'worker-mods:install-progress',  // UI 수동 설치 진행률
+  WORKER_MODS_UPDATE_COMPLETE: 'worker-mods:update-complete',    // 자동/수동 업데이트 완료
   
   // Modpack Events
   MODPACK_INSTALL_PROGRESS: 'modpack:install-progress',

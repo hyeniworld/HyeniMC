@@ -55,6 +55,7 @@ export function HyeniUpdateNotification({
         setProgress(progressValue);
       };
       
+      // @deprecated - 이 컴포넌트는 더 이상 사용되지 않음 (레거시)
       const cleanup = window.electronAPI.on('hyeni:update-progress', progressListener);
 
       // Install update

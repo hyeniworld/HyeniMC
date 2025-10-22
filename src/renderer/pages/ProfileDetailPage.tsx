@@ -9,6 +9,7 @@ import { WorkerModUpdatePanel } from '../components/worker-mods/WorkerModUpdateP
 import { useWorkerModUpdates } from '../hooks/useWorkerModUpdates';
 import { useDownloadStore } from '../store/downloadStore';
 import { useToast } from '../contexts/ToastContext';
+import { IPC_EVENTS } from '../../shared/constants/ipc';
 
 type TabType = 'overview' | 'mods' | 'resourcepacks' | 'shaderpacks' | 'settings';
 
@@ -65,7 +66,7 @@ export const ProfileDetailPage: React.FC = () => {
     });
 
     // Listen for mod update progress
-    const cleanupModProgress = window.electronAPI.on('mod:update-progress', (data: any) => {
+    const cleanupModProgress = window.electronAPI.on(IPC_EVENTS.WORKER_MODS_UPDATE_PROGRESS, (data: any) => {
       console.log('[ProfileDetail] Mod update progress:', data);
       setDl({
         phase: 'mods',
@@ -76,7 +77,7 @@ export const ProfileDetailPage: React.FC = () => {
     });
 
     // Listen for mod update error
-    const cleanupModError = window.electronAPI.on('mod:update-error', (data: any) => {
+    const cleanupModError = window.electronAPI.on(IPC_EVENTS.WORKER_MODS_UPDATE_ERROR, (data: any) => {
       console.error('[ProfileDetail] Mod update error:', data);
       setIsLaunching(false);
       const errorMsg = data.message || '모드 업데이트에 실패했습니다.';

@@ -416,7 +416,7 @@ export function registerProfileHandlers(): void {
                 token,
                 (progress) => {
                   if (window) {
-                    window.webContents.send('mod:update-progress', {
+                    window.webContents.send(IPC_EVENTS.WORKER_MODS_UPDATE_PROGRESS, {
                       modId: update.modId,
                       modName: update.modName,
                       progress,
@@ -447,7 +447,7 @@ export function registerProfileHandlers(): void {
           
           // Send error to UI
           if (window) {
-            window.webContents.send('mod:update-error', {
+            window.webContents.send(IPC_EVENTS.WORKER_MODS_UPDATE_ERROR, {
               message: modError instanceof Error ? modError.message : 'Unknown error',
             });
           }

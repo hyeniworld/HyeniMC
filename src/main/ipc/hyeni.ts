@@ -61,6 +61,7 @@ export function registerHyeniHandlers() {
           updateInfo,
           (progress) => {
             // Send progress updates to renderer
+            // @deprecated - 레거시, 더 이상 사용되지 않음
             event.sender.send('hyeni:update-progress', progress);
           }
         );

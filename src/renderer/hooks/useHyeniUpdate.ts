@@ -1,8 +1,14 @@
 /**
  * Hook for checking and managing HyeniHelper updates
+ * 
+ * @deprecated 이 훅은 더 이상 사용되지 않습니다.
+ * 대신 useWorkerModUpdates를 사용하세요 (다중 모드 지원).
+ * 
+ * 레거시 코드 호환성을 위해 유지되며, Worker Mods 시스템과 연동됩니다.
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { IPC_EVENTS } from '../../shared/constants/ipc';
 
 interface HyeniUpdateInfo {
   available: boolean;
@@ -96,17 +102,17 @@ export function useHyeniUpdate({
     }
   }, [checkForUpdate, autoCheck, checkInterval]);
 
-  // Listen for mod updates from game launch
+  // Listen for Worker Mods updates from game launch
   // Only register once on mount, use ref to call the latest checkForUpdate
   useEffect(() => {
     const handleModUpdateComplete = (data: { profileId: string; updatedMods: any[] }) => {
-      console.log('[useHyeniUpdate] Mod update completed during game launch, refreshing...', data);
+      console.log('[useHyeniUpdate] Worker Mods update completed during game launch, refreshing...', data);
       // Call the latest checkForUpdate via ref
       checkForUpdateRef.current?.();
     };
 
     // Use the cleanup function returned by 'on' instead of 'off'
-    const cleanup = window.electronAPI.on('mod:update-complete', handleModUpdateComplete);
+    const cleanup = window.electronAPI.on(IPC_EVENTS.WORKER_MODS_UPDATE_COMPLETE, handleModUpdateComplete);
 
     return cleanup;
   }, []); // Empty dependency - only register once

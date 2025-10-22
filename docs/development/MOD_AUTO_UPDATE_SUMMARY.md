@@ -108,12 +108,16 @@ hyenicore-neoforge-2.0.1.jar         ✅
 
 **파일:** `/src/main/ipc/mod.ts` (신규)
 
-**IPC 채널:**
-- `mod:check-updates` - 업데이트 체크
-- `mod:get-registry` - 레지스트리 조회
-- `mod:install` - 모드 설치
-- `mod:update-progress` - 진행률 (이벤트)
-- `mod:update-complete` - 완료 (이벤트)
+**IPC 채널 (Worker Mods 시스템):**
+- `worker-mods:check-updates` - 업데이트 체크
+- `worker-mods:install-multiple` - 다중 모드 설치
+- `worker-mods:install-progress` - 개별 모드 진행률 (이벤트)
+- `worker-mods:update-complete` - 게임 시작 시 자동 업데이트 완료 (이벤트)
+
+**레거시 채널 (단일 모드 - 호환성 유지):**
+- `hyeni:check-update` - HyeniHelper 업데이트 체크
+- `hyeni:install-update` - HyeniHelper 설치
+- `hyeni:update-progress` - 진행률 (이벤트)
 
 ---
 
