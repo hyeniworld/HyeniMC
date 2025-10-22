@@ -240,6 +240,11 @@ export class WorkerModRegistry {
       return null;
     }
     
+    // Construct download URL manually (don't trust API's downloadUrl)
+    // Format: /download/v2/mods/{modId}/versions/{version}/{loader}/{gameVersion}/{file}
+    const fileName = gameVersionInfo.file;
+    const downloadUrl = `/download/v2/mods/${modId}/versions/${latest.version}/${loaderType}/${gameVersion}/${fileName}`;
+    
     return {
       modId: modId,
       name: latest.name || modId,  // Fallback to id if name is null
@@ -248,7 +253,7 @@ export class WorkerModRegistry {
       available: true,
       isInstalled: isInstalled,
       category: isInstalled ? 'required' : 'optional',  // Treat installed as required
-      downloadUrl: gameVersionInfo.downloadUrl,
+      downloadUrl: downloadUrl,
       sha256: gameVersionInfo.sha256,
       size: gameVersionInfo.size,
       changelog: latest.changelog || '',
@@ -336,23 +341,47 @@ export class WorkerModRegistry {
       ? update.downloadUrl
       : `${getWorkerUrl()}${update.downloadUrl}`;
     
-    // Get auth token from config file
-    const token = await this.getAuthToken(profilePath);
+    // Get auth token from config file (throws error if not found)
+    let token: string;
+    try {
+      token = await this.getAuthToken(profilePath);
+    } catch (error) {
+      // Re-throw token errors with clear message
+      throw new Error(error instanceof Error ? error.message : '인증 토큰을 찾을 수 없습니다');
+    }
     
     // Download file
-    const response = await net.fetch(`${downloadUrl}?token=${token}`);
+    const fullDownloadUrl = `${downloadUrl}?token=${encodeURIComponent(token)}`;
+    console.log(`[WorkerModRegistry] Downloading: ${downloadUrl} (token: ${token.substring(0, 8)}...)`);
+    
+    const response = await net.fetch(fullDownloadUrl);
     
     if (!response.ok) {
-      throw new Error(`다운로드 실패: ${response.status} ${response.statusText}`);
+      console.error(`[WorkerModRegistry] Download failed: ${response.status} for URL: ${downloadUrl}`);
+
+      if (response.status === 401 || response.status === 403) {
+        throw new Error('인증 실패: 토큰이 만료되었거나 유효하지 않습니다. Discord /인증 명령어로 재인증해주세요.');
+      } else if (response.status === 404) {
+        throw new Error('파일을 찾을 수 없습니다: 서버에서 모드 파일을 찾을 수 없습니다.');
+      } else {
+        throw new Error(`다운로드 실패: ${response.status} ${response.statusText}`);
+      }
     }
     
     const buffer = Buffer.from(await response.arrayBuffer());
     
+    // Verify file size
+    if (buffer.length !== update.size) {
+      throw new Error(`파일 크기 불일치: 예상 ${update.size} bytes, 실제 ${buffer.length} bytes`);
+    }
+    
     // Verify SHA256
     const hash = crypto.createHash('sha256').update(buffer).digest('hex');
     if (hash !== update.sha256) {
-      throw new Error(`SHA256 불일치: ${update.name}`);
+      throw new Error(`SHA256 불일치: 예상 ${update.sha256}, 실제 ${hash}`);
     }
+    
+    console.log(`[WorkerModRegistry] Download verified: ${buffer.length} bytes, SHA256: ${hash}`);
     
     // Remove old version
     await this.removeOldVersion(modsPath, update.modId);

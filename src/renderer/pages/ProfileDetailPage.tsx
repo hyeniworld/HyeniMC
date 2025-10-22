@@ -356,11 +356,15 @@ const OverviewTab: React.FC<{ profile: any }> = ({ profile }) => {
 
 
   const handleWorkerModInstall = async (selectedModIds: string[]) => {
-    try {
-      await installWorkerMods(selectedModIds);
-      toast.success('업데이트 완료', `${selectedModIds.length}개 모드가 성공적으로 업데이트되었습니다.`);
-    } catch (error) {
-      toast.error('업데이트 실패', '일부 모드 업데이트에 실패했습니다.');
+    const result = await installWorkerMods(selectedModIds);
+    
+    if (result.success) {
+      toast.success('업데이트 완료', `${result.successCount}개 모드가 성공적으로 업데이트되었습니다.`);
+    } else {
+      // Show detailed error message
+      const message = result.error || 
+        `${result.successCount}/${result.totalCount}개 모드 업데이트 완료. ${result.totalCount - result.successCount}개 실패`;
+      toast.error('업데이트 실패', message);
     }
   };
 

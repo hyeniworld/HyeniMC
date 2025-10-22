@@ -669,7 +669,13 @@ export class WorkerModUpdater {
       
       request.on('response', (response) => {
         if (response.statusCode !== 200) {
-          reject(new Error(`Download failed: ${response.statusCode}`));
+          let errorMsg = `다운로드 실패: ${response.statusCode}`;
+          if (response.statusCode === 401 || response.statusCode === 403) {
+            errorMsg = '인증 실패: 토큰이 만료되었거나 유효하지 않습니다. Discord /인증 명령어로 재인증해주세요.';
+          } else if (response.statusCode === 404) {
+            errorMsg = '파일을 찾을 수 없습니다: 서버에서 모드 파일을 찾을 수 없습니다.';
+          }
+          reject(new Error(errorMsg));
           return;
         }
         

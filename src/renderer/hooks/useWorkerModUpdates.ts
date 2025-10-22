@@ -93,11 +93,11 @@ export function useWorkerModUpdates({
   }, []);
 
   // Install selected mods
-  const installSelected = useCallback(async (selectedModIds: string[]) => {
+  const installSelected = useCallback(async (selectedModIds: string[]): Promise<{ success: boolean; successCount: number; totalCount: number; error?: string }> => {
     const selectedUpdates = updates.filter(u => selectedModIds.includes(u.modId));
     
     if (selectedUpdates.length === 0) {
-      return;
+      return { success: true, successCount: 0, totalCount: 0 };
     }
     
     setIsInstalling(true);
@@ -121,19 +121,50 @@ export function useWorkerModUpdates({
 
       // Check for failures
       const failures = results.filter(r => !r.success);
+      const successCount = results.filter(r => r.success).length;
+      
       if (failures.length > 0) {
-        const errorMsg = `${failures.length}개 모드 설치 실패: ${failures.map(f => f.modId).join(', ')}`;
+        // Show first failure's detailed error message
+        const firstFailure = failures[0];
+        const errorMsg = firstFailure.error || `${failures.length}개 모드 설치 실패`;
+        
         setError(errorMsg);
-        console.error('[Worker Mods]', errorMsg);
+        console.error('[Worker Mods] 설치 실패:', {
+          count: failures.length,
+          failures: failures.map(f => ({ modId: f.modId, error: f.error }))
+        });
+        
+        // Refresh updates list
+        await checkForUpdates();
+        
+        return { 
+          success: false, 
+          successCount, 
+          totalCount: results.length, 
+          error: errorMsg 
+        };
       } else {
         console.log(`[Worker Mods] ${results.length}개 모드 설치 완료`);
+        
+        // Refresh updates list
+        await checkForUpdates();
+        
+        return { 
+          success: true, 
+          successCount: results.length, 
+          totalCount: results.length 
+        };
       }
-
-      // Refresh updates list
-      await checkForUpdates();
     } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : '모드 설치에 실패했습니다.';
       console.error('[Worker Mods] 모드 설치 실패:', err);
-      setError(err instanceof Error ? err.message : '모드 설치에 실패했습니다.');
+      setError(errorMsg);
+      return { 
+        success: false, 
+        successCount: 0, 
+        totalCount: selectedUpdates.length, 
+        error: errorMsg 
+      };
     } finally {
       setIsInstalling(false);
       setInstallProgress(new Map());
