@@ -252,6 +252,23 @@ export class MetadataManager {
   }
 
   /**
+   * 모드 메타 정보 이름 변경 (활성화/비활성화 시)
+   */
+  async renameModMetadata(modsDir: string, oldFileName: string, newFileName: string): Promise<void> {
+    const unified = await this.readUnifiedMetadata(modsDir);
+    if (!unified || !unified.mods[oldFileName]) {
+      return;
+    }
+
+    // 기존 메타데이터를 새 파일명으로 복사
+    unified.mods[newFileName] = unified.mods[oldFileName];
+    delete unified.mods[oldFileName];
+
+    // 저장
+    await this.writeUnifiedMetadata(modsDir, unified);
+  }
+
+  /**
    * 모드 메타 정보 삭제
    */
   async removeModMetadata(modsDir: string, fileName: string): Promise<void> {

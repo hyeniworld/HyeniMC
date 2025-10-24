@@ -466,6 +466,7 @@ func (s *ModCacheService) ToggleMod(ctx context.Context, modID string, enabled b
 	}
 
 	// Rename file to toggle .disabled extension
+	oldFileName := filepath.Base(mod.FilePath)
 	newPath := mod.FilePath
 	if enabled && strings.HasSuffix(mod.FilePath, ".disabled") {
 		newPath = strings.TrimSuffix(mod.FilePath, ".disabled")
@@ -485,6 +486,25 @@ func (s *ModCacheService) ToggleMod(ctx context.Context, modID string, enabled b
 
 		if err := s.repo.Save(mod); err != nil {
 			return fmt.Errorf("failed to update mod cache: %w", err)
+		}
+
+		// Update unified metadata
+		modsDir := filepath.Dir(mod.FilePath)
+		newFileName := filepath.Base(newPath)
+		
+		unified, err := loadUnifiedMetadata(modsDir)
+		if err == nil && unified != nil {
+			// Rename metadata key
+			if metadata, exists := unified.Mods[oldFileName]; exists {
+				unified.Mods[newFileName] = metadata
+				delete(unified.Mods, oldFileName)
+				
+				if saveErr := saveUnifiedMetadata(modsDir, unified); saveErr != nil {
+					log.Printf("[ModCacheService] Failed to update unified metadata: %v", saveErr)
+				} else {
+					log.Printf("[ModCacheService] Updated unified metadata: %s -> %s", oldFileName, newFileName)
+				}
+			}
 		}
 	}
 
@@ -520,6 +540,17 @@ func loadUnifiedMetadata(modsDir string) (*UnifiedMetadata, error) {
 	}
 
 	return &unified, nil
+}
+
+// saveUnifiedMetadata saves metadata to .hyenimc-metadata.json
+func saveUnifiedMetadata(modsDir string, unified *UnifiedMetadata) error {
+	metaPath := filepath.Join(modsDir, ".hyenimc-metadata.json")
+	data, err := json.MarshalIndent(unified, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(metaPath, data, 0644)
 }
 
 // loadMetadataFile loads source metadata from .meta.json file (legacy)

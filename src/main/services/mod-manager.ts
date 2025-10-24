@@ -327,6 +327,13 @@ export class ModManager {
       await fs.access(disabledPath);
       await fs.rename(disabledPath, enabledPath);
       console.log(`[Mod Manager] Enabled mod: ${fileName}`);
+
+      // Update metadata: rename key from "mod.jar.disabled" to "mod.jar"
+      try {
+        await metadataManager.renameModMetadata(modsDir, `${fileName}.disabled`, fileName);
+      } catch (metaError) {
+        console.error('[Mod Manager] Failed to update metadata on enable:', metaError);
+      }
     } catch (error) {
       throw new Error(`Failed to enable mod: ${fileName}`);
     }
@@ -344,6 +351,13 @@ export class ModManager {
       await fs.access(enabledPath);
       await fs.rename(enabledPath, disabledPath);
       console.log(`[Mod Manager] Disabled mod: ${fileName}`);
+
+      // Update metadata: rename key from "mod.jar" to "mod.jar.disabled"
+      try {
+        await metadataManager.renameModMetadata(modsDir, fileName, `${fileName}.disabled`);
+      } catch (metaError) {
+        console.error('[Mod Manager] Failed to update metadata on disable:', metaError);
+      }
     } catch (error) {
       throw new Error(`Failed to disable mod: ${fileName}`);
     }
