@@ -1,5 +1,6 @@
 import { ModrinthAPI } from './modrinth-api';
 import { CurseForgeAPI } from './curseforge-api';
+import { metadataManager } from './metadata-manager';
 import { ModResolver } from './mod-resolver';
 import { ModManager } from './mod-manager';
 import { isNewerVersion, parseModVersion } from '../../shared/utils/version';
@@ -342,18 +343,17 @@ export class ModUpdater {
         onProgress?.(progress.progress);
       });
 
-      // Save source metadata for the updated mod
+      // Save source metadata to unified metadata file
       try {
-        const fs = await import('fs/promises');
-        const metaPath = `${modsDir}/${version.fileName}.meta.json`;
-        const metadata = {
+        await metadataManager.updateModMetadata(modsDir, version.fileName, {
           source: update.source,
           sourceModId: update.modId,
           sourceFileId: update.latestVersionId,
+          versionNumber: update.latestVersion,
           installedAt: new Date().toISOString(),
-        };
-        await fs.writeFile(metaPath, JSON.stringify(metadata, null, 2));
-        console.log(`[ModUpdater] Saved metadata for updated mod: ${metaPath}`);
+          installedFrom: 'update',
+        });
+        console.log(`[ModUpdater] Saved metadata for updated mod: ${version.fileName}`);
       } catch (metaError) {
         console.error('[ModUpdater] Failed to save metadata:', metaError);
       }

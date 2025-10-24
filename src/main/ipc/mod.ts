@@ -8,6 +8,7 @@ import { CurseForgeAPI } from '../services/curseforge-api';
 import { ModAggregator } from '../services/mod-aggregator';
 import { DependencyResolver } from '../services/dependency-resolver';
 import { ModUpdater } from '../services/mod-updater';
+import { metadataManager } from '../services/metadata-manager';
 import { getProfileInstanceDir } from '../utils/paths';
 import type { ModSearchFilters } from '../../shared/types/profile';
 
@@ -235,18 +236,18 @@ export function registerModHandlers(): void {
 
       console.log(`[IPC Mod] Mod installed successfully: ${version.fileName}`);
       
-      // Save source metadata for update checks
+      // Save to unified metadata file
       try {
-        const metaPath = `${destPath}.meta.json`;
-        const metadata = {
-          source: source,
+        const modsDir = destPath.substring(0, destPath.lastIndexOf('/'));
+        await metadataManager.updateModMetadata(modsDir, version.fileName, {
+          source: source as 'modrinth' | 'curseforge',
           sourceModId: modId,
           sourceFileId: versionId,
-          versionNumber: version.versionNumber, // 모드 버전 저장
+          versionNumber: version.versionNumber,
           installedAt: new Date().toISOString(),
-        };
-        await fs.writeFile(metaPath, JSON.stringify(metadata, null, 2));
-        console.log(`[IPC Mod] Saved metadata: ${metaPath}`);
+          installedFrom: 'manual',
+        });
+        console.log(`[IPC Mod] Saved metadata to unified file: ${version.fileName}`);
       } catch (metaError) {
         console.error('[IPC Mod] Failed to save metadata:', metaError);
         // Don't fail the installation if metadata save fails
@@ -266,6 +267,20 @@ export function registerModHandlers(): void {
       const gameDir = getProfileInstanceDir(profileId);
       const modManager = new ModManager();
       const installedMods = await modManager.listMods(gameDir);
+      
+      // Get parent mod details
+      let parentModName = modId;
+      try {
+        if (source === 'modrinth') {
+          const parentDetails = await getModrinthAPI().getModDetails(modId);
+          parentModName = parentDetails.name;
+        } else {
+          const parentDetails = await getCurseForgeAPI().getModDetails(modId);
+          parentModName = parentDetails.name;
+        }
+      } catch (err) {
+        console.warn(`[IPC Mod] Failed to get parent mod name:`, err);
+      }
       
       const dependencies: any[] = [];
       const issues: any[] = [];
@@ -321,6 +336,7 @@ export function registerModHandlers(): void {
                   required: true,
                   alreadyInstalled: false,
                   source: 'curseforge',
+                  parentModName: parentModName,
                 });
                 console.log(`[IPC Mod] Found CurseForge dependency: ${depDetails.name}`);
               } else {
@@ -357,8 +373,14 @@ export function registerModHandlers(): void {
           source
         );
         
+        // Add parent mod name to dependencies
+        const dependenciesWithParent = result.dependencies.map((dep: any) => ({
+          ...dep,
+          parentModName: parentModName,
+        }));
+        
         console.log(`[IPC Mod] Found ${result.dependencies.length} dependencies, ${result.issues.length} issues`);
-        return result;
+        return { dependencies: dependenciesWithParent, issues: result.issues };
       }
     } catch (error) {
       console.error('[IPC Mod] Failed to check dependencies:', error);
@@ -435,19 +457,19 @@ export function registerModHandlers(): void {
           success.push(dep.modName);
           console.log(`[IPC Mod] Dependency installed: ${version.fileName}`);
           
-          // Save source metadata for dependency
+          // Save to unified metadata file
           try {
-            const metaPath = `${destPath}.meta.json`;
-            const metadata = {
-              source: dep.source || 'modrinth',
+            await metadataManager.updateModMetadata(modsDir, version.fileName, {
+              source: (dep.source || 'modrinth') as 'modrinth' | 'curseforge',
               sourceModId: dep.modId,
               sourceFileId: dep.versionId,
-              versionNumber: version.versionNumber, // 모드 버전 저장
+              versionNumber: version.versionNumber,
               installedAt: new Date().toISOString(),
+              installedFrom: 'dependency',
               isDependency: true,
-            };
-            await fs.writeFile(metaPath, JSON.stringify(metadata, null, 2));
-            console.log(`[IPC Mod] Saved dependency metadata: ${metaPath}`);
+              dependencyOf: dep.parentModName || dep.modName || dep.modId,
+            });
+            console.log(`[IPC Mod] Saved dependency metadata to unified file: ${version.fileName}`);
           } catch (metaError) {
             console.error('[IPC Mod] Failed to save dependency metadata:', metaError);
           }
@@ -547,17 +569,16 @@ export function registerModHandlers(): void {
         );
       });
       
-      // Save metadata
-      const metaPath = `${destPath}.meta.json`;
-      const metadata = {
-        source,
+      // Save to unified metadata file
+      await metadataManager.updateModMetadata(modsDir, version.fileName, {
+        source: source as 'modrinth' | 'curseforge',
         sourceModId: modId,
         sourceFileId: versionId,
-        versionNumber: version.versionNumber, // 모드 버전 저장
+        versionNumber: version.versionNumber,
         installedAt: new Date().toISOString(),
-      };
-      await fs.writeFile(metaPath, JSON.stringify(metadata, null, 2));
-      console.log(`[IPC Mod] Saved metadata: ${metaPath}`);
+        installedFrom: 'update',
+      });
+      console.log(`[IPC Mod] Saved metadata to unified file: ${version.fileName}`);
       
       console.log(`[IPC Mod] Successfully updated mod to ${version.fileName}`);
       return { success: true, fileName: version.fileName };

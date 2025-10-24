@@ -35,7 +35,14 @@ type fileMeta struct {
 }
 
 // writeFileMeta writes file metadata to a sidecar file
+// NOTE: Disabled for .jar files - metadata is now managed by MetadataManager in Node.js
 func writeFileMeta(dest string, c checksumReq) error {
+	// Skip .meta.json generation for mod files (.jar)
+	// Metadata is now centralized in .hyenimc-metadata.json by MetadataManager
+	if strings.HasSuffix(strings.ToLower(dest), ".jar") {
+		return nil
+	}
+	
 	fi, err := os.Stat(dest)
 	if err != nil {
 		return err

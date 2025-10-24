@@ -155,12 +155,33 @@ func (s *ModCacheService) parseModFile(profileID, filePath string, info os.FileI
 		UpdatedAt:    time.Now(),
 	}
 
-	// Try to load source metadata from .meta.json file
-	metaPath := filePath + ".meta.json"
-	if metaData, err := loadMetadataFile(metaPath); err == nil {
-		mod.Source = metaData.Source
-		mod.SourceModID = metaData.SourceModID
-		mod.SourceFileID = metaData.SourceFileID
+	// Try to load source metadata from unified metadata (priority) or legacy .meta.json
+	modsDir := filepath.Dir(filePath)
+	fileName := filepath.Base(filePath)
+	
+	// 1. Try unified metadata first
+	if unified, err := loadUnifiedMetadata(modsDir); err == nil {
+		if modMeta, exists := unified.Mods[fileName]; exists {
+			mod.Source = modMeta.Source
+			mod.SourceModID = modMeta.SourceModID
+			mod.SourceFileID = modMeta.SourceFileID
+		} else {
+			// 2. Fallback to legacy .meta.json
+			metaPath := filePath + ".meta.json"
+			if metaData, err := loadMetadataFile(metaPath); err == nil {
+				mod.Source = metaData.Source
+				mod.SourceModID = metaData.SourceModID
+				mod.SourceFileID = metaData.SourceFileID
+			}
+		}
+	} else {
+		// If unified metadata doesn't exist, try legacy
+		metaPath := filePath + ".meta.json"
+		if metaData, err := loadMetadataFile(metaPath); err == nil {
+			mod.Source = metaData.Source
+			mod.SourceModID = metaData.SourceModID
+			mod.SourceFileID = metaData.SourceFileID
+		}
 	}
 
 	// Try to extract metadata from JAR
@@ -478,7 +499,30 @@ type SourceMetadata struct {
 	InstalledAt  string `json:"installedAt"`
 }
 
-// loadMetadataFile loads source metadata from .meta.json file
+// UnifiedMetadata represents the unified .hyenimc-metadata.json structure
+type UnifiedMetadata struct {
+	Version   int                       `json:"version"`
+	Source    string                    `json:"source"`
+	Mods      map[string]SourceMetadata `json:"mods"`
+}
+
+// loadUnifiedMetadata loads metadata from .hyenimc-metadata.json
+func loadUnifiedMetadata(modsDir string) (*UnifiedMetadata, error) {
+	metaPath := filepath.Join(modsDir, ".hyenimc-metadata.json")
+	data, err := os.ReadFile(metaPath)
+	if err != nil {
+		return nil, err
+	}
+
+	var unified UnifiedMetadata
+	if err := json.Unmarshal(data, &unified); err != nil {
+		return nil, err
+	}
+
+	return &unified, nil
+}
+
+// loadMetadataFile loads source metadata from .meta.json file (legacy)
 func loadMetadataFile(path string) (*SourceMetadata, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {

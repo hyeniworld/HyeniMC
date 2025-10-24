@@ -1,6 +1,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import AdmZip from 'adm-zip';
+import { metadataManager } from './metadata-manager';
 
 export interface ModInfo {
   id: string;
@@ -13,8 +14,8 @@ export interface ModInfo {
   filePath: string;
   enabled: boolean;
   loader: 'fabric' | 'neoforge' | 'forge' | 'quilt' | 'unknown';
-  // Metadata from .meta.json file (for mods installed from Modrinth/CurseForge)
-  source?: 'modrinth' | 'curseforge' | 'local';
+  // Metadata from metadata files (for mods installed from Modrinth/CurseForge)
+  source?: 'modrinth' | 'curseforge' | 'url' | 'local';
   sourceModId?: string;
   sourceFileId?: string;
 }
@@ -54,7 +55,7 @@ export class ModManager {
       const actualFileName = enabled ? file : file.replace('.disabled', '');
 
       try {
-        const modInfo = await this.parseModInfo(filePath, actualFileName, enabled);
+        const modInfo = await this.parseModInfo(filePath, actualFileName, enabled, modsDir);
         mods.push(modInfo);
       } catch (error) {
         console.error(`[Mod Manager] Failed to parse mod: ${file}`, error);
@@ -76,29 +77,36 @@ export class ModManager {
 
   /**
    * Parse mod info from JAR file
+   * 통합 메타 우선, 개별 메타 fallback, JAR 파싱 순서로 시도
    */
   private async parseModInfo(
     filePath: string,
     fileName: string,
-    enabled: boolean
+    enabled: boolean,
+    modsDir: string
   ): Promise<ModInfo> {
-    // 1. 먼저 .meta.json 파일에서 메타데이터 읽기
+    // 1. MetadataManager를 통해 메타데이터 읽기 (통합 메타 우선, 개별 메타 fallback)
     let metadata: {
       versionNumber?: string;
-      source?: 'modrinth' | 'curseforge' | 'local';
+      source?: 'modrinth' | 'curseforge' | 'url' | 'local';
       sourceModId?: string;
       sourceFileId?: string;
     } | undefined;
     
     try {
-      const metaPath = `${filePath}.meta.json`;
-      const metaContent = await fs.readFile(metaPath, 'utf8');
-      metadata = JSON.parse(metaContent);
-      if (metadata?.versionNumber) {
-        console.log(`[Mod Manager] Found metadata: ${fileName} (${metadata.source || 'local'})`);
+      const metaResult = await metadataManager.getModMetadata(modsDir, fileName);
+      if (metaResult.found && metaResult.metadata) {
+        metadata = {
+          versionNumber: metaResult.metadata.versionNumber,
+          source: metaResult.metadata.source,
+          sourceModId: metaResult.metadata.sourceModId,
+          sourceFileId: metaResult.metadata.sourceFileId,
+        };
+        console.log(`[Mod Manager] Found metadata (${metaResult.source}): ${fileName} (${metadata?.source || 'unknown'})`);
       }
     } catch (error) {
       // 메타 파일 없음 - JAR에서 파싱
+      console.debug(`[Mod Manager] No metadata for ${fileName}, will parse JAR`);
     }
 
     const zip = new AdmZip(filePath);
@@ -354,12 +362,20 @@ export class ModManager {
       try {
         await fs.unlink(enabledPath);
         console.log(`[Mod Manager] Deleted mod: ${fileName}`);
-        return;
-      } catch {}
+      } catch {
+        // Try to delete disabled version
+        await fs.unlink(disabledPath);
+        console.log(`[Mod Manager] Deleted disabled mod: ${fileName}`);
+      }
 
-      // Try to delete disabled version
-      await fs.unlink(disabledPath);
-      console.log(`[Mod Manager] Deleted disabled mod: ${fileName}`);
+      // Remove from unified metadata
+      try {
+        await metadataManager.removeModMetadata(modsDir, fileName);
+        console.log(`[Mod Manager] Removed metadata from unified file: ${fileName}`);
+      } catch (metaError) {
+        console.error('[Mod Manager] Failed to remove metadata:', metaError);
+        // 메타 제거 실패해도 모드 삭제는 성공으로 처리
+      }
     } catch (error) {
       throw new Error(`Failed to delete mod: ${fileName}`);
     }
@@ -387,7 +403,23 @@ export class ModManager {
     await fs.copyFile(sourceFile, targetPath);
     console.log(`[Mod Manager] Installed mod: ${fileName}`);
 
-    // Parse and return mod info
-    return await this.parseModInfo(targetPath, fileName, true);
+    // Parse mod info
+    const modInfo = await this.parseModInfo(targetPath, fileName, true, modsDir);
+
+    // Save to unified metadata
+    try {
+      await metadataManager.updateModMetadata(modsDir, fileName, {
+        source: 'local',
+        versionNumber: modInfo.version,
+        installedAt: new Date().toISOString(),
+        installedFrom: 'manual',
+      });
+      console.log(`[Mod Manager] Saved metadata to unified file: ${fileName}`);
+    } catch (metaError) {
+      console.error('[Mod Manager] Failed to save metadata:', metaError);
+      // 메타 저장 실패해도 모드 설치는 성공으로 처리
+    }
+
+    return modInfo;
   }
 }
