@@ -124,6 +124,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('shell:openExternal', url),
   },
 
+  // Dialog APIs
+  dialog: {
+    showSaveDialog: (options: any): Promise<string | null> =>
+      ipcRenderer.invoke('dialog:showSaveDialog', options),
+    showMessageBox: (options: any): Promise<number> =>
+      ipcRenderer.invoke('dialog:showMessageBox', options),
+  },
+
+  // File system APIs
+  fs: {
+    exists: (path: string): Promise<boolean> =>
+      ipcRenderer.invoke('fs:exists', path),
+  },
+
   // System APIs
   system: {
     getPath: (name: string): Promise<string> =>
@@ -261,6 +275,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
     
     getVersion: (): Promise<{ success: boolean; version: string }> =>
       ipcRenderer.invoke('launcher:get-version'),
+  },
+
+  // HyeniPack APIs
+  hyenipack: {
+    getFileTree: (instanceDir: string): Promise<{ success: boolean; tree?: any[]; error?: string }> =>
+      ipcRenderer.invoke('hyenipack:get-file-tree', instanceDir),
+    
+    preview: (filePath: string): Promise<{ success: boolean; manifest?: any; error?: string }> =>
+      ipcRenderer.invoke('hyenipack:preview', filePath),
+    
+    import: (filePath: string, profileId: string, instanceDir: string): Promise<{ success: boolean; installedMods?: number; error?: string }> =>
+      ipcRenderer.invoke('hyenipack:import', filePath, profileId, instanceDir),
+    
+    export: (profileId: string, options: any, outputPath?: string): Promise<{ success: boolean; filePath?: string; error?: string }> =>
+      ipcRenderer.invoke('hyenipack:export', profileId, options, outputPath),
   },
 
   // File Watcher APIs

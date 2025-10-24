@@ -112,12 +112,12 @@ export function registerModpackHandlers(): void {
         const instanceDir = getProfileInstanceDir(profileId);
         console.log(`[IPC Modpack] Profile: ${profileId}, Instance: ${instanceDir}`);
 
-        await modpackManager.importModpackFromFile(filePath, profileId, instanceDir, (progress) => {
+        const loaderInfo = await modpackManager.importModpackFromFile(filePath, profileId, instanceDir, (progress) => {
           // Send progress updates to renderer
           event.sender.send('modpack:import-progress', progress);
         });
 
-        console.log('[IPC Modpack] Modpack import complete');
+        console.log('[IPC Modpack] Modpack import complete', loaderInfo);
         return { success: true };
       } catch (error) {
         console.error('[IPC Modpack] Failed to import modpack:', error);
@@ -134,7 +134,7 @@ export function registerModpackHandlers(): void {
         filters: [
           {
             name: 'Modpack Files',
-            extensions: ['zip', 'mrpack'],
+            extensions: ['zip', 'mrpack', 'hyenipack'],
           },
           { name: 'All Files', extensions: ['*'] },
         ],

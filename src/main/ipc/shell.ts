@@ -1,4 +1,4 @@
-import { ipcMain, shell, app } from 'electron';
+import { ipcMain, shell, app, dialog } from 'electron';
 import * as os from 'os';
 
 /**
@@ -26,6 +26,42 @@ export function registerShellHandlers(): void {
     } catch (error) {
       console.error('[Shell] Failed to open external URL:', error);
       throw error;
+    }
+  });
+
+  // Show save dialog
+  ipcMain.handle('dialog:showSaveDialog', async (_event, options: any) => {
+    try {
+      const result = await dialog.showSaveDialog(options);
+      if (result.canceled || !result.filePath) {
+        return null;
+      }
+      return result.filePath;
+    } catch (error) {
+      console.error('[Dialog] Failed to show save dialog:', error);
+      throw error;
+    }
+  });
+
+  // Show message box
+  ipcMain.handle('dialog:showMessageBox', async (_event, options: any) => {
+    try {
+      const result = await dialog.showMessageBox(options);
+      return result.response;
+    } catch (error) {
+      console.error('[Dialog] Failed to show message box:', error);
+      throw error;
+    }
+  });
+
+  // Check if file exists
+  ipcMain.handle('fs:exists', async (_event, filePath: string) => {
+    try {
+      const fs = await import('fs/promises');
+      await fs.access(filePath);
+      return true;
+    } catch {
+      return false;
     }
   });
 

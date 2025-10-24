@@ -15,7 +15,7 @@ import * as path from 'path';
  */
 export interface InstalledModMeta {
   // 기본 정보
-  source: 'modrinth' | 'curseforge' | 'hyeniworld' | 'url' | 'local';
+  source: 'modrinth' | 'curseforge' | 'url' | 'local';
   sourceModId?: string;
   sourceFileId?: string;
   versionNumber: string;

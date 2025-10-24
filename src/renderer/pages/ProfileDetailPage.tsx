@@ -5,11 +5,13 @@ import { ModList } from '../components/mods/ModList';
 import { ResourcePackList } from '../components/resourcepacks/ResourcePackList';
 import { ShaderPackList } from '../components/shaderpacks/ShaderPackList';
 import { ProfileSettingsTab } from '../components/profiles/ProfileSettingsTab';
+import { ExportHyeniPackModal } from '../components/profiles/ExportHyeniPackModal';
 import { WorkerModUpdatePanel } from '../components/worker-mods/WorkerModUpdatePanel';
 import { useWorkerModUpdates } from '../hooks/useWorkerModUpdates';
 import { useDownloadStore } from '../store/downloadStore';
 import { useToast } from '../contexts/ToastContext';
 import { IPC_EVENTS } from '../../shared/constants/ipc';
+import { Package, Trash2 } from 'lucide-react';
 
 type TabType = 'overview' | 'mods' | 'resourcepacks' | 'shaderpacks' | 'settings';
 
@@ -23,6 +25,8 @@ export const ProfileDetailPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [isRunning, setIsRunning] = useState(false);
   const [isLaunching, setIsLaunching] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const showDownload = useDownloadStore(s => s.show);
   const setDl = useDownloadStore(s => s.setProgress);
   const resetDownload = useDownloadStore(s => s.reset);
@@ -322,7 +326,10 @@ export const ProfileDetailPage: React.FC = () => {
 // Overview Tab
 const OverviewTab: React.FC<{ profile: any }> = ({ profile }) => {
   const toast = useToast();
+  const navigate = useNavigate();
   const [profilePath, setProfilePath] = useState<string>('');
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   
   const getInstancePath = async () => {
     // Get userData path from electron
@@ -401,6 +408,23 @@ const OverviewTab: React.FC<{ profile: any }> = ({ profile }) => {
     }
   };
 
+  const handleExport = () => {
+    setShowExportModal(true);
+  };
+
+  const handleDelete = async () => {
+    if (!profile?.id) return;
+    
+    try {
+      await window.electronAPI.profile.delete(profile.id);
+      toast.success('성공', '프로필이 삭제되었습니다.');
+      navigate('/');
+    } catch (error) {
+      console.error('Failed to delete profile:', error);
+      toast.error('오류', '프로필 삭제에 실패했습니다.');
+    }
+  };
+
   return (
     <div className="p-6 space-y-4">
       {/* Worker Mods Update Panel (Multi-Mod System) */}
@@ -467,8 +491,70 @@ const OverviewTab: React.FC<{ profile: any }> = ({ profile }) => {
             <div className="font-medium text-gray-200">로그 보기</div>
             <div className="text-xs text-gray-400">게임 로그 확인</div>
           </button>
+          <button 
+            onClick={handleExport}
+            className="p-4 border border-gray-700 rounded-lg hover:bg-purple-900 hover:border-purple-800 transition-colors text-left"
+          >
+            <div className="flex items-center gap-2 text-2xl mb-2">
+              <Package className="w-6 h-6 text-purple-400" />
+            </div>
+            <div className="font-medium text-gray-200">혜니팩 내보내기</div>
+            <div className="text-xs text-gray-400">모드팩 파일로 저장</div>
+          </button>
+          <button 
+            onClick={() => setShowDeleteConfirm(true)}
+            className="p-4 border border-gray-700 rounded-lg hover:bg-red-900 hover:border-red-800 transition-colors text-left"
+          >
+            <div className="flex items-center gap-2 text-2xl mb-2">
+              <Trash2 className="w-6 h-6 text-red-400" />
+            </div>
+            <div className="font-medium text-gray-200">프로필 삭제</div>
+            <div className="text-xs text-gray-400">영구적으로 제거</div>
+          </button>
         </div>
       </div>
+
+      {/* Export Modal */}
+      {showExportModal && profile && (
+        <ExportHyeniPackModal
+          isOpen={showExportModal}
+          onClose={() => setShowExportModal(false)}
+          profileId={profile.id}
+          profileName={profile.name}
+        />
+      )}
+
+      {/* Delete Confirmation */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4 border border-gray-700">
+            <h3 className="text-xl font-bold mb-4 text-red-400">프로필 삭제</h3>
+            <p className="text-gray-300 mb-2">
+              정말로 이 프로필을 삭제하시겠습니까?
+            </p>
+            <p className="text-sm text-gray-400 mb-4">
+              모든 데이터가 영구적으로 삭제되며 복구할 수 없습니다.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  handleDelete();
+                  setShowDeleteConfirm(false);
+                }}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded-lg font-medium transition-colors"
+              >
+                삭제
+              </button>
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="flex-1 btn-secondary"
+              >
+                취소
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

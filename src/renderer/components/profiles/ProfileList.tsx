@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Play, Settings, Trash2, Plus, FolderOpen, Clock, Loader2, Star, Sparkles } from 'lucide-react';
+import { Play, Settings, Trash2, Plus, FolderOpen, Clock, Loader2, Star, Sparkles, Package } from 'lucide-react';
 import { CreateProfileModal } from './CreateProfileModal';
+import { ExportHyeniPackModal } from './ExportHyeniPackModal';
 import { useDownloadStore } from '../../store/downloadStore';
 import { useAccount } from '../../App';
 import { useToast } from '../../contexts/ToastContext';
@@ -19,6 +20,8 @@ export function ProfileList() {
   const [runningProfiles, setRunningProfiles] = useState<Set<string>>(new Set());
   const [launchingProfiles, setLaunchingProfiles] = useState<Set<string>>(new Set());
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportingProfile, setExportingProfile] = useState<any>(null);
   const showDownload = useDownloadStore(s => s.show);
   const setDl = useDownloadStore(s => s.setProgress);
   const resetDownload = useDownloadStore(s => s.reset);
@@ -406,16 +409,6 @@ export function ProfileList() {
                 >
                   <Settings className="w-5 h-5" />
                 </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDelete(profile.id);
-                  }}
-                  className="btn-secondary p-3 hover:bg-red-900 hover:text-red-200 hover:border-red-800"
-                  title="삭제"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </button>
               </div>
             </div>
           ))}
@@ -427,6 +420,19 @@ export function ProfileList() {
         <CreateProfileModal
           onClose={() => setShowCreateModal(false)}
           onSuccess={handleCreateSuccess}
+        />
+      )}
+
+      {/* Export HyeniPack Modal */}
+      {showExportModal && exportingProfile && (
+        <ExportHyeniPackModal
+          isOpen={showExportModal}
+          onClose={() => {
+            setShowExportModal(false);
+            setExportingProfile(null);
+          }}
+          profileId={exportingProfile.id}
+          profileName={exportingProfile.name}
         />
       )}
     </div>

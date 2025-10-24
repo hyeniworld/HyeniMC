@@ -45,7 +45,7 @@ export interface ModpackFileInfo {
   errors?: string[];
 }
 
-export type ModpackFormat = 'modrinth' | 'curseforge' | 'multimc' | 'prism' | 'atlauncher' | 'unknown';
+export type ModpackFormat = 'modrinth' | 'curseforge' | 'multimc' | 'prism' | 'atlauncher' | 'hyenipack' | 'unknown';
 
 export interface ModpackMetadata {
   name: string;
@@ -451,6 +451,11 @@ export class ModpackManager {
       const entries = zip.getEntries();
       const fileNames = entries.map((e) => e.entryName);
 
+      // HyeniPack 형식 (.hyenipack)
+      if (filePath.endsWith('.hyenipack') || fileNames.includes('hyenipack.json')) {
+        return 'hyenipack';
+      }
+
       // Modrinth 형식 (.mrpack)
       if (filePath.endsWith('.mrpack') || fileNames.includes('modrinth.index.json')) {
         return 'modrinth';
@@ -500,6 +505,8 @@ export class ModpackManager {
 
     try {
       switch (format) {
+        case 'hyenipack':
+          return await this.extractHyeniPackMetadata(zip, stats.size);
         case 'modrinth':
           return await this.extractModrinthMetadata(zip, stats.size);
         case 'curseforge':
@@ -516,6 +523,29 @@ export class ModpackManager {
       console.error('[ModpackManager] Failed to extract metadata:', error);
       throw error;
     }
+  }
+
+  /**
+   * HyeniPack 메타데이터 추출
+   */
+  private async extractHyeniPackMetadata(zip: AdmZip, fileSize: number): Promise<ModpackMetadata> {
+    const manifestEntry = zip.getEntry('hyenipack.json');
+    if (!manifestEntry) {
+      throw new Error('hyenipack.json을 찾을 수 없습니다');
+    }
+
+    const manifest = JSON.parse(manifestEntry.getData().toString('utf-8'));
+
+    return {
+      name: manifest.name || 'Unknown Modpack',
+      version: manifest.version,
+      author: manifest.author,
+      gameVersion: manifest.minecraft?.version || 'unknown',
+      loaderType: manifest.minecraft?.loaderType || 'vanilla',
+      loaderVersion: manifest.minecraft?.loaderVersion,
+      modCount: manifest.mods?.length || 0,
+      fileSize,
+    };
   }
 
   /**
@@ -701,7 +731,11 @@ export class ModpackManager {
     profileName: string,
     instanceDir: string,
     onProgress?: (progress: ModpackInstallProgress) => void
-  ): Promise<void> {
+  ): Promise<{
+    minecraftVersion?: string;
+    loaderType?: string;
+    loaderVersion?: string;
+  }> {
     const tempDir = path.join(instanceDir, '.temp_modpack_import');
 
     try {
@@ -735,7 +769,80 @@ export class ModpackManager {
       zip.extractAllTo(tempDir, true);
 
       // 4. 형식별 처리
+      let loaderInfo: { minecraftVersion?: string; loaderType?: string; loaderVersion?: string } = {};
+      
       switch (fileInfo.format) {
+        case 'hyenipack':
+          // HyeniPack importer 사용
+          const { hyeniPackImporter } = await import('./hyenipack-importer');
+          const result = await hyeniPackImporter.importHyeniPack(filePath, '', instanceDir, onProgress ? (progress) => {
+            // HyeniPackImportProgress를 ModpackInstallProgress로 변환
+            let mappedStage: ModpackInstallProgress['stage'];
+            switch (progress.stage) {
+              case 'extracting':
+                mappedStage = 'extracting';
+                break;
+              case 'installing_mods':
+                mappedStage = 'installing_mods';
+                break;
+              case 'applying_overrides':
+                mappedStage = 'applying_overrides';
+                break;
+              case 'complete':
+                mappedStage = 'complete';
+                break;
+              default:
+                mappedStage = 'extracting';
+            }
+            
+            onProgress({
+              stage: mappedStage,
+              progress: progress.progress,
+              message: progress.message,
+            });
+          } : undefined);
+          
+          // 로더 정보 저장
+          loaderInfo = {
+            minecraftVersion: result.minecraftVersion,
+            loaderType: result.loaderType,
+            loaderVersion: result.loaderVersion,
+          };
+          break;
+          /* // 이전 코드 (삭제됨)
+          await hyeniPackManager.installHyeniPack(filePath, profileName, instanceDir, onProgress ? (progress) => {
+            // HyeniPackInstallProgress를 ModpackInstallProgress로 변환
+            let mappedStage: ModpackInstallProgress['stage'];
+            switch (progress.stage) {
+              case 'validating':
+                mappedStage = 'validating';
+                break;
+              case 'downloading_mods':
+                mappedStage = 'installing_mods';
+                break;
+              case 'installing_loader':
+                mappedStage = 'installing_loader';
+                break;
+              case 'applying_overrides':
+                mappedStage = 'applying_overrides';
+                break;
+              case 'generating_metadata':
+                mappedStage = 'applying_overrides';
+                break;
+              case 'complete':
+                mappedStage = 'complete';
+                break;
+              default:
+                mappedStage = 'extracting';
+            }
+            
+            onProgress({
+              stage: mappedStage,
+              progress: progress.progress,
+              message: progress.message,
+            });
+          } : undefined); */
+          break;
         case 'modrinth':
           await this.installModrinthPack(tempDir, instanceDir, onProgress);
           break;
@@ -760,15 +867,13 @@ export class ModpackManager {
       });
 
       console.log('[ModpackManager] Modpack import complete');
-    } catch (error) {
-      console.error('[ModpackManager] Failed to import modpack:', error);
-      throw error;
+      return loaderInfo;
     } finally {
-      // Cleanup temp directory
+      // 임시 디렉토리 정리
       try {
         await fs.rm(tempDir, { recursive: true, force: true });
       } catch (error) {
-        console.error('[ModpackManager] Failed to cleanup temp directory:', error);
+        console.error('[ModpackManager] Failed to clean up temp directory:', error);
       }
     }
   }

@@ -17,6 +17,7 @@ import { registerHyeniHandlers } from './hyeni';
 import { registerWorkerModsHandlers } from './worker-mods';
 import { registerLauncherHandlers } from './launcher';
 import { registerErrorDialogHandlers } from './error-dialog';
+import { registerHyeniPackHandlers } from './hyenipack-handlers';
 
 /**
  * Register all IPC handlers
@@ -42,6 +43,7 @@ export function registerIpcHandlers(): void {
   registerWorkerModsHandlers();
   registerLauncherHandlers();
   registerErrorDialogHandlers();
+  registerHyeniPackHandlers();
 
   console.log('[IPC] IPC handlers registered');
 }

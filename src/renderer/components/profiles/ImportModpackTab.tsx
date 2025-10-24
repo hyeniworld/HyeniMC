@@ -87,8 +87,8 @@ export function ImportModpackTab({ onSuccess }: ImportModpackTabProps) {
     const file = e.dataTransfer.files[0];
     if (!file) return;
 
-    if (!file.name.endsWith('.zip') && !file.name.endsWith('.mrpack')) {
-      setError('지원하지 않는 파일 형식입니다. .zip 또는 .mrpack 파일을 선택해주세요.');
+    if (!file.name.endsWith('.zip') && !file.name.endsWith('.mrpack') && !file.name.endsWith('.hyenipack')) {
+      setError('지원하지 않는 파일 형식입니다. .hyenipack, .zip 또는 .mrpack 파일을 선택해주세요.');
       return;
     }
 
@@ -198,7 +198,7 @@ export function ImportModpackTab({ onSuccess }: ImportModpackTabProps) {
                     모드팩 파일을 드래그하거나 선택하세요
                   </p>
                   <p className="text-sm text-gray-400 mb-4">
-                    .mrpack, .zip 파일 지원
+                    .hyenipack, .mrpack, .zip 파일 지원
                   </p>
                   <button
                     type="button"
@@ -211,7 +211,7 @@ export function ImportModpackTab({ onSuccess }: ImportModpackTabProps) {
                 </div>
                 <div className="text-xs text-gray-500 mt-4">
                   <p className="font-semibold mb-1">지원하는 형식:</p>
-                  <p>Modrinth (.mrpack), CurseForge (.zip), MultiMC/Prism (.zip), ATLauncher (.zip)</p>
+                  <p>혜니팩 (.hyenipack), Modrinth (.mrpack), CurseForge (.zip), MultiMC/Prism (.zip), ATLauncher (.zip)</p>
                 </div>
               </>
             )}
