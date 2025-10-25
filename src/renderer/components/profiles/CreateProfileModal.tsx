@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useToast } from '../../contexts/ToastContext';
 import { X, Loader2, Package, Settings, FileArchive } from 'lucide-react';
 import { ModpackSearchModal } from '../modpack/ModpackSearchModal';
@@ -48,17 +48,6 @@ export function CreateProfileModal({ isOpen, onClose, onSuccess, initialModpackI
   const [loaderVersions, setLoaderVersions] = useState<Array<{ version: string; stable: boolean }>>([]);
   const [loadingLoaderVersions, setLoadingLoaderVersions] = useState(false);
   const [includeUnstableVersions, setIncludeUnstableVersions] = useState(false);
-  const nameInputRef = useRef<HTMLInputElement>(null);
-
-  React.useEffect(() => {
-    // isOpen이 undefined면 조건부 렌더링되므로 렌더링 = 열림으로 간주
-    if (isOpen !== false && step === 'basic' && tab === 'custom') {
-      // Focus name input when modal opens
-      setTimeout(() => {
-        nameInputRef.current?.focus();
-      }, 100);
-    }
-  }, [isOpen, step, tab]);
 
   React.useEffect(() => {
     const loadVersions = async () => {
@@ -306,13 +295,13 @@ export function CreateProfileModal({ isOpen, onClose, onSuccess, initialModpackI
               프로필 이름 <span className="text-pink-400">*</span>
             </label>
             <input
-              ref={nameInputRef}
               type="text"
               value={formData.name}
               onChange={(e) => handleChange('name', e.target.value)}
               className="input text-base"
               placeholder="예: 혜니월드 생존"
               required
+              autoFocus
             />
           </div>
 
