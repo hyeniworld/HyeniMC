@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useToast } from '../../contexts/ToastContext';
 import { X, Search, Download, Loader2, ExternalLink, ChevronDown, AlertCircle, CheckCircle, Check, ArrowUp, ArrowDown, RefreshCw, ArrowRight, AlertTriangle } from 'lucide-react';
 import type { ModSearchResult, ModVersion, Mod, ModSearchSortOption } from '../../../shared/types/profile';
@@ -46,11 +46,16 @@ export function ModSearchModal({ isOpen, onClose, profileId, profile, gameVersio
   const [sortBy, setSortBy] = useState<ModSearchSortOption>('relevance');
   const [installedMods, setInstalledMods] = useState<Mod[]>([]);
   const [installedModMap, setInstalledModMap] = useState<Map<string, Mod>>(new Map());
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Load installed mods when modal opens
   useEffect(() => {
     if (isOpen) {
       loadInstalledMods();
+      // Focus search input after modal opens with a small delay
+      setTimeout(() => {
+        searchInputRef.current?.focus();
+      }, 100);
     }
   }, [isOpen, profileId]);
 
@@ -373,12 +378,12 @@ export function ModSearchModal({ isOpen, onClose, profileId, profile, gameVersio
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <input
+                  ref={searchInputRef}
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="모드 검색..."
                   className="w-full pl-10 pr-4 py-3 bg-gray-800 border border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  autoFocus
                 />
               </div>
               <div className="mt-3 flex items-center justify-between gap-3">

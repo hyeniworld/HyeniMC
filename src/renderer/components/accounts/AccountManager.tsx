@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useToast } from '../../contexts/ToastContext';
 import { User, UserPlus, Trash2, LogIn, ChevronDown } from 'lucide-react';
 
@@ -23,10 +23,20 @@ export function AccountManager({ selectedAccountId, onAccountChange }: AccountMa
   const [showOfflineModal, setShowOfflineModal] = useState(false);
   const [offlineUsername, setOfflineUsername] = useState('');
   const [loading, setLoading] = useState(false);
+  const usernameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadAccounts();
   }, []);
+
+  useEffect(() => {
+    if (showOfflineModal) {
+      // Focus username input when modal opens
+      setTimeout(() => {
+        usernameInputRef.current?.focus();
+      }, 100);
+    }
+  }, [showOfflineModal]);
 
   const loadAccounts = async () => {
     try {
@@ -259,6 +269,7 @@ export function AccountManager({ selectedAccountId, onAccountChange }: AccountMa
               오프라인 계정은 싱글플레이 또는 크랙 서버에서만 사용할 수 있습니다.
             </p>
             <input
+              ref={usernameInputRef}
               type="text"
               value={offlineUsername}
               onChange={(e) => setOfflineUsername(e.target.value)}
@@ -266,7 +277,6 @@ export function AccountManager({ selectedAccountId, onAccountChange }: AccountMa
               placeholder="사용자 이름"
               className="input mb-4"
               maxLength={16}
-              autoFocus
             />
             <div className="flex gap-2 justify-end">
               <button

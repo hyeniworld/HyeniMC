@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useToast } from '../../contexts/ToastContext';
 import { X, Search, Download, Loader2, Package, Calendar, Users } from 'lucide-react';
 
@@ -48,6 +48,16 @@ export function ModpackSearchModal({
   const [modpackVersions, setModpackVersions] = useState<ModpackVersion[]>([]);
   const [selectedVersion, setSelectedVersion] = useState<ModpackVersion | null>(null);
   const [isLoadingVersions, setIsLoadingVersions] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      // Focus search input when modal opens
+      setTimeout(() => {
+        searchInputRef.current?.focus();
+      }, 100);
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (searchQuery.length > 2) {
@@ -136,12 +146,12 @@ export function ModpackSearchModal({
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <input
+                  ref={searchInputRef}
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="모드팩 검색... (예: 혜니월드, Fabulously Optimized)"
                   className="w-full pl-10 pr-4 py-3 bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 border border-gray-300 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  autoFocus
                 />
               </div>
             </div>
