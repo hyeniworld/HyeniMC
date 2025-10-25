@@ -136,14 +136,20 @@ export class HyeniPackImporter {
             }
             
             // 다운로드 실행
-            const destPath = path.join(modsDir, version.fileName);
+            // 원본 파일명이 .disabled로 끝나면 다운로드 파일도 .disabled로 저장
+            let finalFileName = version.fileName;
+            if (modEntry.fileName.endsWith('.disabled') && !finalFileName.endsWith('.disabled')) {
+              finalFileName = `${finalFileName}.disabled`;
+            }
+            
+            const destPath = path.join(modsDir, finalFileName);
             const req: any = {
               taskId: `hyenipack-${version.id}`,
               url: version.downloadUrl,
               destPath,
               profileId,
               type: 'mod',
-              name: version.fileName,
+              name: finalFileName,
               maxRetries: 3,
               concurrency: 1,
             };
@@ -171,7 +177,7 @@ export class HyeniPackImporter {
             });
             
             installedCount++;
-            console.log(`[HyeniPackImporter] Downloaded: ${version.fileName}`);
+            console.log(`[HyeniPackImporter] Downloaded: ${finalFileName}`);
           } catch (error) {
             console.error(`[HyeniPackImporter] Download error: ${modEntry.fileName}`, error);
           }
