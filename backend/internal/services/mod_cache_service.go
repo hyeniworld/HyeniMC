@@ -282,8 +282,10 @@ func parseForgeModsTOML(file *zip.File) (*ModMetadata, error) {
 	metadata := &ModMetadata{}
 	
 	// Simple TOML parser for [[mods]] section
+	// Note: Only parse the FIRST [[mods]] section, as it contains the main mod info
 	lines := strings.Split(content, "\n")
 	inModsSection := false
+	foundFirstModsSection := false
 	
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -295,7 +297,21 @@ func parseForgeModsTOML(file *zip.File) (*ModMetadata, error) {
 		
 		// Check for [[mods]] section
 		if strings.HasPrefix(line, "[[mods]]") {
+			if foundFirstModsSection {
+				// We've already processed the first [[mods]] section, stop here
+				break
+			}
 			inModsSection = true
+			foundFirstModsSection = true
+			continue
+		}
+		
+		// Check for other sections (like [[dependencies.*]])
+		if strings.HasPrefix(line, "[[") && strings.HasSuffix(line, "]]") {
+			// We've hit another section, stop parsing
+			if inModsSection {
+				break
+			}
 			continue
 		}
 		
