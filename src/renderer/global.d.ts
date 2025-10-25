@@ -63,7 +63,7 @@ declare global {
         openExternal: (url: string) => Promise<void>;
       };
       mod: {
-        list: (profileId: string) => Promise<any[]>;
+        list: (profileId: string, forceRefresh?: boolean) => Promise<any[]>;
         search: (query: string, filters?: any) => Promise<{ hits: any[]; total: number }>;
         getDetails: (modId: string, source?: 'modrinth' | 'curseforge') => Promise<any>;
         getVersions: (modId: string, gameVersion?: string, loaderType?: string, source?: 'modrinth' | 'curseforge') => Promise<any[]>;

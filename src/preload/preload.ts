@@ -158,8 +158,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Mod APIs
   mod: {
-    list: (profileId: string): Promise<any[]> =>
-      ipcRenderer.invoke(IPC_CHANNELS.MOD_LIST, profileId),
+    list: (profileId: string, forceRefresh?: boolean): Promise<any[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.MOD_LIST, profileId, forceRefresh),
     search: (query: string, filters?: any): Promise<{ hits: any[]; total: number }> =>
       ipcRenderer.invoke(IPC_CHANNELS.MOD_SEARCH, query, filters),
     getDetails: (modId: string, source?: 'modrinth' | 'curseforge'): Promise<any> =>

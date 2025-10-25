@@ -54,6 +54,14 @@ export function ModSearchModal({ isOpen, onClose, profileId, profile, gameVersio
     }
   }, [isOpen, profileId]);
 
+  // Re-check installed mods when installedMods changes (after deletion/disable)
+  useEffect(() => {
+    if (searchResults.length > 0) {
+      checkInstalledMods(searchResults);
+      console.log('[ModSearchModal] Re-checked installed mods for existing search results');
+    }
+  }, [installedMods]);
+
   useEffect(() => {
     if (searchQuery.length > 2) {
       const debounce = setTimeout(() => {
@@ -65,7 +73,8 @@ export function ModSearchModal({ isOpen, onClose, profileId, profile, gameVersio
 
   const loadInstalledMods = async () => {
     try {
-      const mods = await window.electronAPI.mod.list(profileId);
+      // Force refresh to get latest mod list (bypass cache)
+      const mods = await window.electronAPI.mod.list(profileId, true);
       setInstalledMods(mods);
       console.log('[ModSearchModal] Loaded installed mods:', mods);
     } catch (error) {
