@@ -97,10 +97,12 @@ npx wrangler publish
 cp .env.example .env
 ```
 
-2. `.env` 파일에 실제 Worker URL 입력:
+2. `.env` 파일에 실제 설정값 입력:
 ```bash
 # .env
-CURSEFORGE_PROXY_URL=https://hyenimc-worker.your-account.workers.dev
+HYENIMC_WORKER_URL=https://hyenimc-worker.your-account.workers.dev
+AZURE_CLIENT_ID=your-azure-client-id
+AUTHORIZED_SERVER_DOMAINS=*.hyeniworld.com,*.example.net
 ```
 
 ⚠️ **보안**: `.env` 파일은 `.gitignore`에 포함되어 GitHub에 커밋되지 않습니다.

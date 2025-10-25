@@ -34,6 +34,7 @@ jobs:
           @"
           HYENIMC_WORKER_URL=${{ secrets.HYENIMC_WORKER_URL }}
           AZURE_CLIENT_ID=${{ secrets.AZURE_CLIENT_ID }}
+          AUTHORIZED_SERVER_DOMAINS=${{ secrets.AUTHORIZED_SERVER_DOMAINS }}
           "@ | Out-File -FilePath .env -Encoding utf8
       
       - name: Generate config files
@@ -84,6 +85,7 @@ jobs:
           cat > .env << 'EOF'
           HYENIMC_WORKER_URL=${{ secrets.HYENIMC_WORKER_URL }}
           AZURE_CLIENT_ID=${{ secrets.AZURE_CLIENT_ID }}
+          AUTHORIZED_SERVER_DOMAINS=${{ secrets.AUTHORIZED_SERVER_DOMAINS }}
           APPLE_ID=${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD=${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID=${{ secrets.APPLE_TEAM_ID }}

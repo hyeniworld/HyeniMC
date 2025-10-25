@@ -16,21 +16,30 @@ Microsoft 인증을 위한 Azure Client ID
 
 **예시**: `https://hyenimc-worker.YOUR_ACCOUNT.workers.dev`
 
+### 3. `AUTHORIZED_SERVER_DOMAINS`
+자동 모드 업데이트를 허용할 서버 도메인 목록
+
+**형식**: 쉼표로 구분된 도메인 리스트 (와일드카드 지원)
+
+**예시**: `*.hyeniworld.com,*.example.net`
+
+**중요**: 이 설정이 없으면 모든 서버에서 자동 모드 업데이트가 작동하지 않습니다.
+
 ## 선택적 Secrets (macOS 자동 업데이트)
 
 macOS에서 자동 업데이트를 활성화하려면 다음 시크릿이 필요합니다:
 
-### 3. `APPLE_ID`
+### 4. `APPLE_ID`
 Apple Developer 계정 이메일
 
 **예시**: `your-apple-id@example.com`
 
-### 4. `APPLE_APP_SPECIFIC_PASSWORD`
+### 5. `APPLE_APP_SPECIFIC_PASSWORD`
 Apple App-Specific Password (공증용)
 
 **설정 방법**: [MACOS_CODE_SIGNING.md](./MACOS_CODE_SIGNING.md) 참조
 
-### 5. `APPLE_TEAM_ID`
+### 6. `APPLE_TEAM_ID`
 Apple Developer Team ID
 
 **예시**: `ABC123XYZ4`
@@ -58,6 +67,10 @@ Apple Developer Team ID
 - **Name**: `HYENIMC_WORKER_URL`
 - **Value**: `https://hyenimc-worker.YOUR_ACCOUNT.workers.dev`
 
+**AUTHORIZED_SERVER_DOMAINS**
+- **Name**: `AUTHORIZED_SERVER_DOMAINS`
+- **Value**: `*.hyeniworld.com,*.example.net` (실제 도메인으로 수정)
+
 3. **Add secret** 클릭
 
 ### 3. 설정 확인
@@ -67,6 +80,7 @@ Apple Developer Team ID
 **필수**:
 - ✅ `AZURE_CLIENT_ID`
 - ✅ `HYENIMC_WORKER_URL`
+- ✅ `AUTHORIZED_SERVER_DOMAINS`
 - ✅ `GITHUB_TOKEN` (자동 생성됨)
 
 **선택적 (macOS 자동 업데이트)**:
@@ -85,6 +99,7 @@ GitHub Actions는 `.env` 파일을 생성하고 자동으로 TypeScript 설정 �
     cat > .env << 'EOF'
     HYENIMC_WORKER_URL=${{ secrets.HYENIMC_WORKER_URL }}
     AZURE_CLIENT_ID=${{ secrets.AZURE_CLIENT_ID }}
+    AUTHORIZED_SERVER_DOMAINS=${{ secrets.AUTHORIZED_SERVER_DOMAINS }}
     EOF
 
 # 2. TypeScript 설정 파일 자동 생성
@@ -95,6 +110,7 @@ GitHub Actions는 `.env` 파일을 생성하고 자동으로 TypeScript 설정 �
 이 스크립트가 자동으로 다음 파일들을 생성합니다:
 - `src/main/services/auth-config.ts` (AZURE_CLIENT_ID에서 생성)
 - `src/main/config/env-config.ts` (HYENIMC_WORKER_URL 등에서 생성)
+- `src/shared/config/server-config.ts` (AUTHORIZED_SERVER_DOMAINS에서 생성)
 
 ## 테스트
 
@@ -191,6 +207,7 @@ npm run build
     cat > .env << 'EOF'
     HYENIMC_WORKER_URL=${{ secrets.HYENIMC_WORKER_URL }}
     AZURE_CLIENT_ID=${{ secrets.AZURE_CLIENT_ID }}
+    AUTHORIZED_SERVER_DOMAINS=${{ secrets.AUTHORIZED_SERVER_DOMAINS }}
     CURSEFORGE_API_KEY=${{ secrets.CURSEFORGE_API_KEY }}
     NODE_ENV=production
     LOG_LEVEL=info

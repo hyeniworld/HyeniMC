@@ -34,6 +34,7 @@ GitHub Actions는 다음 작업을 자동으로 수행합니다:
 |------|-------|------|
 | `AZURE_CLIENT_ID` | `your-client-id-here` | Azure Portal의 Microsoft OAuth Client ID |
 | `HYENIMC_WORKER_URL` | `https://hyenimc-worker.YOUR_ACCOUNT.workers.dev` | HyeniMC Worker URL (비공개) |
+| `AUTHORIZED_SERVER_DOMAINS` | `*.hyeniworld.com,*.example.net` | 자동 모드 업데이트 허용 서버 도메인 |
 
 > 💡 **참고**: `GITHUB_TOKEN`은 GitHub Actions에서 자동으로 제공되므로 별도 설정이 필요 없습니다.
 
@@ -53,6 +54,7 @@ Secret이 올바르게 설정되었는지 확인:
 - Settings → Secrets and variables → Actions
 - `AZURE_CLIENT_ID`가 목록에 표시되어야 함
 - `HYENIMC_WORKER_URL`이 목록에 표시되어야 함
+- `AUTHORIZED_SERVER_DOMAINS`가 목록에 표시되어야 함
 - 값은 보안상 표시되지 않음 (정상)
 
 > ⚠️ **중요**: 이 Secrets이 없으면 빌드가 실패합니다!
@@ -93,10 +95,10 @@ on:
 2. ✅ Node.js 18 설치 (`actions/setup-node@v3`)
 3. ✅ Go 1.21 설치 (`actions/setup-go@v4`)
 4. ✅ 의존성 설치 (`npm install`)
-5. ✅ 인증 설정 파일 생성 (`auth-config.ts`)
-   - GitHub Secrets에서 `AZURE_CLIENT_ID` 가져오기
-6. ✅ 환경 변수 파일 생성 (`.env`)
-   - GitHub Secrets에서 `HYENIMC_WORKER_URL` 가져오기
+5. ✅ `.env` 파일 생성
+   - GitHub Secrets에서 `HYENIMC_WORKER_URL`, `AZURE_CLIENT_ID`, `AUTHORIZED_SERVER_DOMAINS` 가져오기
+6. ✅ TypeScript 설정 파일 자동 생성 (`generate:config`)
+   - `auth-config.ts`, `env-config.ts`, `server-config.ts` 생성
 7. ✅ Protobuf 코드 생성 (`npm run proto:gen`)
 8. ✅ Go 백엔드 빌드 (`npm run backend:build:win-x64`)
 9. ✅ Electron 앱 패키징 (`npm run package:win`)
@@ -113,8 +115,8 @@ on:
 2. ✅ Node.js 18 설치
 3. ✅ Go 1.21 설치
 4. ✅ 의존성 설치
-5. ✅ 인증 설정 파일 생성
-6. ✅ 환경 변수 파일 생성 (`.env`)
+5. ✅ `.env` 파일 생성
+6. ✅ TypeScript 설정 파일 자동 생성
 7. ✅ Protobuf 코드 생성
 8. ✅ Go 백엔드 빌드 (`npm run backend:build:mac-universal`)
    - ARM64 + x64 Universal Binary
@@ -314,6 +316,7 @@ permissions:
 
 - [ ] GitHub Secrets에 `AZURE_CLIENT_ID` 설정됨
 - [ ] GitHub Secrets에 `HYENIMC_WORKER_URL` 설정됨
+- [ ] GitHub Secrets에 `AUTHORIZED_SERVER_DOMAINS` 설정됨
 - [ ] HyeniMC Worker가 정상 배포되어 있음
 - [ ] 워크플로우 파일이 최신 버전 (`v4` 사용)
 - [ ] 로컬에서 빌드 테스트 완료
