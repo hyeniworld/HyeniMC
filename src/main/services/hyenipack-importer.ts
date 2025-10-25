@@ -98,29 +98,24 @@ export class HyeniPackImporter {
       onProgress?.({
         stage: 'installing_mods',
         progress: 20,
-        message: '모드 설치 중...',
+        message: '모드 정보 수집 중...',
         totalMods: manifest.mods.length,
       });
       
-      let installedCount = 0;
+      // 1단계: 모든 모드의 다운로드 정보를 병렬로 수집
+      const downloadTasks: Array<{
+        modEntry: any;
+        finalFileName: string;
+        downloadUrl: string;
+        sha1?: string;
+      }> = [];
       
-      for (let i = 0; i < manifest.mods.length; i++) {
-        const modEntry = manifest.mods[i];
-        
-        onProgress?.({
-          stage: 'installing_mods',
-          progress: 20 + Math.floor((i / manifest.mods.length) * 50),
-          message: `모드 설치 중... (${i + 1}/${manifest.mods.length})`,
-          currentMod: modEntry.fileName,
-          totalMods: manifest.mods.length,
-        });
-        
-        // 메타데이터가 있는 모드는 다운로드
+      const localMods: any[] = [];
+      
+      // API 호출을 병렬로 처리
+      const apiPromises = manifest.mods.map(async (modEntry) => {
         if (modEntry.metadata && modEntry.metadata.source && modEntry.metadata.projectId) {
           try {
-            console.log(`[HyeniPackImporter] Downloading mod from ${modEntry.metadata.source}: ${modEntry.fileName}`);
-            
-            // 버전 정보 가져오기
             let version: any;
             if (modEntry.metadata.source === 'curseforge') {
               const versions = await getCurseForgeAPI().getModVersions(modEntry.metadata.projectId);
@@ -130,59 +125,108 @@ export class HyeniPackImporter {
               version = versions.find((v: any) => v.id === modEntry.metadata?.version);
             }
             
-            if (!version || !version.downloadUrl) {
+            if (version && version.downloadUrl) {
+              let finalFileName = version.fileName;
+              if (modEntry.fileName.endsWith('.disabled') && !finalFileName.endsWith('.disabled')) {
+                finalFileName = `${finalFileName}.disabled`;
+              }
+              
+              downloadTasks.push({
+                modEntry,
+                finalFileName,
+                downloadUrl: version.downloadUrl,
+                sha1: version.sha1,
+              });
+            } else {
               console.error(`[HyeniPackImporter] Version not found: ${modEntry.fileName}`);
-              continue;
             }
-            
-            // 다운로드 실행
-            // 원본 파일명이 .disabled로 끝나면 다운로드 파일도 .disabled로 저장
-            let finalFileName = version.fileName;
-            if (modEntry.fileName.endsWith('.disabled') && !finalFileName.endsWith('.disabled')) {
-              finalFileName = `${finalFileName}.disabled`;
-            }
-            
-            const destPath = path.join(modsDir, finalFileName);
-            const req: any = {
-              taskId: `hyenipack-${version.id}`,
-              url: version.downloadUrl,
-              destPath,
-              profileId,
-              type: 'mod',
-              name: finalFileName,
-              maxRetries: 3,
-              concurrency: 1,
-            };
-            if (version.sha1) {
-              req.checksum = { algo: 'sha1', value: version.sha1 };
-            }
-            
-            const started = await downloadRpc.startDownload(req);
-            await new Promise<void>((resolve, reject) => {
-              const cancel = downloadRpc.streamProgress(
-                { profileId } as any,
-                (ev) => {
-                  if (ev.taskId !== started.taskId) return;
-                  if (ev.status === 'completed') { cancel(); resolve(); }
-                  else if (ev.status === 'failed' || ev.status === 'cancelled') { 
-                    cancel(); 
-                    reject(new Error(ev.error || '다운로드 실패')); 
-                  }
-                },
-                (err) => {
-                  if (err && ('' + err).includes('CANCELLED')) return;
-                  if (err) reject(err);
-                }
-              );
-            });
-            
-            installedCount++;
-            console.log(`[HyeniPackImporter] Downloaded: ${finalFileName}`);
           } catch (error) {
-            console.error(`[HyeniPackImporter] Download error: ${modEntry.fileName}`, error);
+            console.error(`[HyeniPackImporter] API error for ${modEntry.fileName}:`, error);
           }
-          continue;
+        } else {
+          // 로컬 모드는 나중에 처리
+          localMods.push(modEntry);
         }
+      });
+      
+      await Promise.all(apiPromises);
+      
+      console.log(`[HyeniPackImporter] Collected ${downloadTasks.length} mods to download`);
+      
+      // 2단계: 수집된 정보로 다운로드 실행
+      onProgress?.({
+        stage: 'installing_mods',
+        progress: 30,
+        message: '모드 다운로드 중...',
+        totalMods: downloadTasks.length + localMods.length,
+      });
+      
+      let installedCount = 0;
+      
+      for (let i = 0; i < downloadTasks.length; i++) {
+        const task = downloadTasks[i];
+        
+        onProgress?.({
+          stage: 'installing_mods',
+          progress: 30 + Math.floor((i / (downloadTasks.length + localMods.length)) * 40),
+          message: `모드 다운로드 중... (${i + 1}/${downloadTasks.length + localMods.length})`,
+          currentMod: task.finalFileName,
+          totalMods: downloadTasks.length + localMods.length,
+        });
+        
+        try {
+          const destPath = path.join(modsDir, task.finalFileName);
+          const req: any = {
+            taskId: `hyenipack-${i}-${Date.now()}`,
+            url: task.downloadUrl,
+            destPath,
+            profileId,
+            type: 'mod',
+            name: task.finalFileName,
+            maxRetries: 3,
+            concurrency: 1,
+          };
+          if (task.sha1) {
+            req.checksum = { algo: 'sha1', value: task.sha1 };
+          }
+          
+          const started = await downloadRpc.startDownload(req);
+          await new Promise<void>((resolve, reject) => {
+            const cancel = downloadRpc.streamProgress(
+              { profileId } as any,
+              (ev) => {
+                if (ev.taskId !== started.taskId) return;
+                if (ev.status === 'completed') { cancel(); resolve(); }
+                else if (ev.status === 'failed' || ev.status === 'cancelled') { 
+                  cancel(); 
+                  reject(new Error(ev.error || '다운로드 실패')); 
+                }
+              },
+              (err) => {
+                if (err && ('' + err).includes('CANCELLED')) return;
+                if (err) reject(err);
+              }
+            );
+          });
+          
+          installedCount++;
+          console.log(`[HyeniPackImporter] Downloaded: ${task.finalFileName}`);
+        } catch (error) {
+          console.error(`[HyeniPackImporter] Download error: ${task.finalFileName}`, error);
+        }
+      }
+      
+      // 3단계: 로컬 모드 처리
+      for (let i = 0; i < localMods.length; i++) {
+        const modEntry = localMods[i];
+        
+        onProgress?.({
+          stage: 'installing_mods',
+          progress: 30 + Math.floor(((downloadTasks.length + i) / (downloadTasks.length + localMods.length)) * 40),
+          message: `모드 설치 중... (${downloadTasks.length + i + 1}/${downloadTasks.length + localMods.length})`,
+          currentMod: modEntry.fileName,
+          totalMods: downloadTasks.length + localMods.length,
+        });
         
         // 로컬 모드는 ZIP에서 추출
         const zipEntry = zip.getEntry(`mods/${modEntry.fileName}`);
