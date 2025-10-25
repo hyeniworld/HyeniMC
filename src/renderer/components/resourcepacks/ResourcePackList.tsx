@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 interface ResourcePack {
   name: string;
@@ -17,6 +17,20 @@ export const ResourcePackList: React.FC<ResourcePackListProps> = ({ profileId })
   const [packs, setPacks] = useState<ResourcePack[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // 포커스 복원 헬퍼 함수
+  const restoreFocus = () => {
+    const attempts = [0, 50, 100, 200, 300];
+    attempts.forEach(delay => {
+      setTimeout(() => {
+        window.focus();
+        if (searchInputRef.current) {
+          searchInputRef.current.focus();
+        }
+      }, delay);
+    });
+  };
 
   const renderDescription = (desc: any): string => {
     if (!desc) return '';
@@ -86,22 +100,29 @@ export const ResourcePackList: React.FC<ResourcePackListProps> = ({ profileId })
       setPacks(prev => prev.map(pack => 
         pack.fileName === fileName ? { ...pack, enabled: !enabled } : pack
       ));
+      restoreFocus();
     } catch (error) {
       console.error('Failed to toggle resource pack:', error);
       await loadPacks(); // Reload on error
+      restoreFocus();
     }
   };
 
   const deletePack = async (fileName: string) => {
-    if (!confirm('정말 이 리소스팩을 삭제하시겠습니까?')) return;
+    if (!confirm('정말 이 리소스팩을 삭제하시겠습니까?')) {
+      restoreFocus();
+      return;
+    }
 
     try {
       await window.electronAPI.resourcepack.delete(profileId, fileName);
       // Update state locally instead of reloading
       setPacks(prev => prev.filter(pack => pack.fileName !== fileName));
+      restoreFocus();
     } catch (error) {
       console.error('Failed to delete resource pack:', error);
       await loadPacks(); // Reload on error
+      restoreFocus();
     }
   };
 
@@ -144,6 +165,7 @@ export const ResourcePackList: React.FC<ResourcePackListProps> = ({ profileId })
       {/* Search */}
       <div className="p-4">
         <input
+          ref={searchInputRef}
           type="text"
           placeholder="리소스팩 검색..."
           value={filter}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useToast } from '../../contexts/ToastContext';
 
 interface ShaderPack {
@@ -17,6 +17,20 @@ export const ShaderPackList: React.FC<ShaderPackListProps> = ({ profileId }) => 
   const [packs, setPacks] = useState<ShaderPack[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // 포커스 복원 헬퍼 함수
+  const restoreFocus = () => {
+    const attempts = [0, 50, 100, 200, 300];
+    attempts.forEach(delay => {
+      setTimeout(() => {
+        window.focus();
+        if (searchInputRef.current) {
+          searchInputRef.current.focus();
+        }
+      }, delay);
+    });
+  };
 
   useEffect(() => {
     loadPacks();
@@ -70,6 +84,7 @@ export const ShaderPackList: React.FC<ShaderPackListProps> = ({ profileId }) => 
   const togglePack = async (fileName: string, enabled: boolean, isDirectory: boolean) => {
     if (isDirectory) {
       toast.warning('지원 안 함', '디렉토리 형태의 셰이더팩은 활성화/비활성화할 수 없습니다.');
+      restoreFocus();
       return;
     }
 
@@ -83,22 +98,29 @@ export const ShaderPackList: React.FC<ShaderPackListProps> = ({ profileId }) => 
       setPacks(prev => prev.map(pack => 
         pack.fileName === fileName ? { ...pack, enabled: !enabled } : pack
       ));
+      restoreFocus();
     } catch (error) {
       console.error('Failed to toggle shader pack:', error);
       await loadPacks(); // Reload on error
+      restoreFocus();
     }
   };
 
   const deletePack = async (fileName: string, isDirectory: boolean) => {
-    if (!confirm('정말 이 셰이더팩을 삭제하시겠습니까?')) return;
+    if (!confirm('정말 이 셰이더팩을 삭제하시겠습니까?')) {
+      restoreFocus();
+      return;
+    }
 
     try {
       await window.electronAPI.shaderpack.delete(profileId, fileName, isDirectory);
       // Update state locally instead of reloading
       setPacks(prev => prev.filter(pack => pack.fileName !== fileName));
+      restoreFocus();
     } catch (error) {
       console.error('Failed to delete shader pack:', error);
       await loadPacks(); // Reload on error
+      restoreFocus();
     }
   };
 
@@ -146,6 +168,7 @@ export const ShaderPackList: React.FC<ShaderPackListProps> = ({ profileId }) => 
       {/* Search */}
       <div className="p-4">
         <input
+          ref={searchInputRef}
           type="text"
           placeholder="셰이더팩 검색..."
           value={filter}

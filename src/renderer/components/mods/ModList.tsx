@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Plus, RefreshCw } from 'lucide-react';
 import { ModSearchModal } from './ModSearchModal';
 import { useToast } from '../../contexts/ToastContext';
+import { ConfirmDialog } from '../common/ConfirmDialog';
 
 interface ModUpdateInfo {
   modId: string;
@@ -49,6 +50,27 @@ export const ModList: React.FC<ModListProps> = ({ profileId }) => {
   const [updatingModIds, setUpdatingModIds] = useState<Set<string>>(new Set());
   const [checkingUpdates, setCheckingUpdates] = useState(false);
   const [updatingMods, setUpdatingMods] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
+
+  // 포커스 복원 헬퍼 함수
+  const restoreFocus = () => {
+    // 여러 번 재시도하여 포커스 복원 보장
+    const attempts = [0, 50, 100, 200, 300];
+    attempts.forEach(delay => {
+      setTimeout(() => {
+        window.focus();
+        if (searchInputRef.current) {
+          searchInputRef.current.focus();
+        }
+      }, delay);
+    });
+  };
 
   useEffect(() => {
     loadProfile();
@@ -119,22 +141,30 @@ export const ModList: React.FC<ModListProps> = ({ profileId }) => {
       setMods(prev => prev.map(mod => 
         mod.fileName === fileName ? { ...mod, enabled: newEnabled } : mod
       ));
+      restoreFocus();
     } catch (error) {
       console.error('Failed to toggle mod:', error);
       await loadMods(); // Reload on error
+      restoreFocus();
     }
   };
 
   const deleteMod = async (fileName: string) => {
-    if (!confirm('정말 이 모드를 삭제하시겠습니까?')) return;
-
-    try {
-      await window.electronAPI.mod.remove(profileId, fileName);
-      setMods(prev => prev.filter(mod => mod.fileName !== fileName));
-    } catch (error) {
-      console.error('Failed to delete mod:', error);
-      await loadMods();
-    }
+    setConfirmDialog({
+      isOpen: true,
+      title: '모드 삭제',
+      message: '정말 이 모드를 삭제하시겠습니까?',
+      onConfirm: async () => {
+        setConfirmDialog({ ...confirmDialog, isOpen: false });
+        try {
+          await window.electronAPI.mod.remove(profileId, fileName);
+          setMods(prev => prev.filter(mod => mod.fileName !== fileName));
+        } catch (error) {
+          console.error('Failed to delete mod:', error);
+          await loadMods();
+        }
+      },
+    });
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -206,10 +236,12 @@ export const ModList: React.FC<ModListProps> = ({ profileId }) => {
       
       // 모드 목록 새로고침
       await loadMods();
+      restoreFocus();
     } catch (error) {
       console.error('Failed to update mod:', error);
       const errorMsg = error instanceof Error ? error.message : '알 수 없는 오류';
       toast.error('업데이트 실패', `${mod.name}: ${errorMsg}`);
+      restoreFocus();
     } finally {
       setUpdatingModIds(prev => {
         const newSet = new Set(prev);
@@ -222,28 +254,32 @@ export const ModList: React.FC<ModListProps> = ({ profileId }) => {
   const handleUpdateAll = async () => {
     if (updates.length === 0) return;
 
-    if (!confirm(`${updates.length}개의 모드를 업데이트하시겠습니까?`)) {
-      return;
-    }
-
-    setUpdatingMods(true);
-    try {
-      const result = await window.electronAPI.mod.updateAll(profileId, updates);
-      
-      if (result.failed.length === 0) {
-        toast.success('전체 업데이트 완료', `${result.success.length}개의 모드가 업데이트되었습니다.`);
-      } else {
-        toast.warning('업데이트 완료', `성공: ${result.success.length}개, 실패: ${result.failed.length}개`);
-      }
-      
-      setUpdates([]);
-      await loadMods();
-    } catch (error) {
-      console.error('Failed to update mods:', error);
-      toast.error('업데이트 실패', '모드 업데이트에 실패했습니다.');
-    } finally {
-      setUpdatingMods(false);
-    }
+    setConfirmDialog({
+      isOpen: true,
+      title: '모드 업데이트',
+      message: `${updates.length}개의 모드를 업데이트하시겠습니까?`,
+      onConfirm: async () => {
+        setConfirmDialog({ ...confirmDialog, isOpen: false });
+        setUpdatingMods(true);
+        try {
+          const result = await window.electronAPI.mod.updateAll(profileId, updates);
+          
+          if (result.failed.length === 0) {
+            toast.success('전체 업데이트 완료', `${result.success.length}개의 모드가 업데이트되었습니다.`);
+          } else {
+            toast.warning('업데이트 완료', `성공: ${result.success.length}개, 실패: ${result.failed.length}개`);
+          }
+          
+          setUpdates([]);
+          await loadMods();
+        } catch (error) {
+          console.error('Failed to update mods:', error);
+          toast.error('업데이트 실패', '모드 업데이트에 실패했습니다.');
+        } finally {
+          setUpdatingMods(false);
+        }
+      },
+    });
   };
 
   const filteredMods = mods.filter(mod =>
@@ -313,6 +349,7 @@ export const ModList: React.FC<ModListProps> = ({ profileId }) => {
       {/* Search */}
       <div className="p-4">
         <input
+          ref={searchInputRef}
           type="text"
           placeholder="모드 검색..."
           value={filter}
@@ -439,6 +476,16 @@ export const ModList: React.FC<ModListProps> = ({ profileId }) => {
           }}
         />
       )}
+
+      {/* Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog({ ...confirmDialog, isOpen: false })}
+        variant="danger"
+      />
     </div>
   );
 };
