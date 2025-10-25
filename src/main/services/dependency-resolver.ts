@@ -37,7 +37,7 @@ export class DependencyResolver {
     versionId: string,
     gameVersion: string,
     loaderType: string,
-    installedMods: Array<{ id: string; name: string; fileName: string }>,
+    installedMods: Array<{ id: string; name: string; fileName: string; sourceModId?: string }>,
     source: 'modrinth' | 'curseforge' = 'modrinth'
   ): Promise<{
     dependencies: DependencyResolution[];
@@ -82,9 +82,9 @@ export class DependencyResolver {
 
         const isRequired = dep.type === 'required';
 
-        // Check if already installed
+        // Check if already installed (metadata-based only)
         const alreadyInstalled = installedMods.some(mod => 
-          mod.id === dep.modId || mod.fileName.includes(dep.modId)
+          mod.sourceModId === dep.modId
         );
 
         if (alreadyInstalled) {

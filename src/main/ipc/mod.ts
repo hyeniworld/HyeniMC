@@ -308,9 +308,9 @@ export function registerModHandlers(): void {
               continue;
             }
             
-            // Check if already installed
+            // Check if already installed (metadata-based only)
             const alreadyInstalled = installedMods.some(mod => 
-              mod.id === dep.modId || mod.fileName.includes(dep.modId)
+              mod.sourceModId === dep.modId
             );
             
             if (alreadyInstalled) {
