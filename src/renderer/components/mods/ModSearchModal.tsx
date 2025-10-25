@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useToast } from '../../contexts/ToastContext';
-import { X, Search, Download, Loader2, ExternalLink, ChevronDown, AlertCircle, CheckCircle, Check, ArrowUp, ArrowDown, RefreshCw, ArrowRight, AlertTriangle } from 'lucide-react';
+import { X, Search, Download, Loader2, ExternalLink, ChevronDown, AlertCircle, CheckCircle, Check, ArrowUp, ArrowDown, RefreshCw, ArrowRight, AlertTriangle, Trash2 } from 'lucide-react';
 import type { ModSearchResult, ModVersion, Mod, ModSearchSortOption } from '../../../shared/types/profile';
 import { compareVersions, parseVersion } from '../../utils/version';
 
@@ -289,9 +289,6 @@ export function ModSearchModal({ isOpen, onClose, profileId, profile, gameVersio
   const handleInstall = async () => {
     if (!selectedMod || !selectedVersion) return;
 
-    // 설치됨 상태는 버튼이 비활성화되므로 여기까지 오지 않음
-    if (buttonState.state === 'installed') return;
-
     // 다운그레이드 경고
     if (buttonState.state === 'downgrade') {
       const confirmed = window.confirm(
@@ -305,8 +302,8 @@ export function ModSearchModal({ isOpen, onClose, profileId, profile, gameVersio
 
     setIsInstalling(true);
     try {
-      // 기존 파일 삭제 (업데이트/다운그레이드/재설치)
-      if (['update', 'downgrade', 'reinstall'].includes(buttonState.state)) {
+      // 기존 파일 삭제 (업데이트/다운그레이드/재설치/설치됨)
+      if (['update', 'downgrade', 'reinstall', 'installed'].includes(buttonState.state)) {
         const installedMod = installedModMap.get(selectedMod.id);
         if (installedMod) {
           console.log(`[ModSearchModal] Removing old version: ${installedMod.fileName}`);
@@ -333,7 +330,7 @@ export function ModSearchModal({ isOpen, onClose, profileId, profile, gameVersio
       let actionText = '설치';
       if (buttonState.state === 'update') actionText = '업데이트';
       else if (buttonState.state === 'downgrade') actionText = '다운그레이드';
-      else if (buttonState.state === 'reinstall') actionText = '재설치';
+      else if (buttonState.state === 'reinstall' || buttonState.state === 'installed') actionText = '재설치';
       
       const message = requiredDeps.length > 0
         ? `${selectedMod.name} ${actionText} 및 ${requiredDeps.length}개 의존성 설치 완료!`
@@ -690,32 +687,75 @@ export function ModSearchModal({ isOpen, onClose, profileId, profile, gameVersio
 
                 {/* Install Button (하단 고정) */}
                 <div className="p-6 border-t border-gray-800 flex-shrink-0">
-                  <button
-                    onClick={handleInstall}
-                    disabled={!selectedVersion || isInstalling || buttonState.state === 'installed'}
-                    className={`w-full py-4 text-lg font-semibold flex items-center justify-center gap-2 rounded-lg transition-colors ${
-                      buttonState.state === 'installed'
-                        ? 'bg-gray-600 text-gray-300 cursor-not-allowed'
-                        : buttonState.state === 'update'
-                        ? 'bg-green-600 hover:bg-green-700 text-white'
-                        : buttonState.state === 'downgrade'
-                        ? 'bg-orange-600 hover:bg-orange-700 text-white'
-                        : buttonState.state === 'reinstall'
-                        ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                        : 'btn-primary'
-                    } ${(!selectedVersion || isInstalling) && 'opacity-50 cursor-not-allowed'}`}
-                  >
+                  {buttonState.state === 'installed' ? (
+                    /* 설치됨 상태: 재설치 + 삭제 버튼 */
+                    <div className="flex gap-3">
+                      <button
+                        onClick={handleInstall}
+                        disabled={!selectedVersion || isInstalling}
+                        className="flex-1 py-4 text-lg font-semibold flex items-center justify-center gap-2 rounded-lg transition-colors bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isInstalling ? (
+                          <>
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                            재설치 중...
+                          </>
+                        ) : (
+                          <>
+                            <RefreshCw className="w-5 h-5" />
+                            재설치
+                          </>
+                        )}
+                      </button>
+                      <button
+                        onClick={async () => {
+                          if (!selectedMod || isInstalling) return;
+                          const installedMod = installedModMap.get(selectedMod.id);
+                          if (!installedMod) return;
+                          
+                          const confirmed = window.confirm(
+                            `${selectedMod.name}을(를) 삭제하시겠습니까?\n\n` +
+                            `파일: ${installedMod.fileName}`
+                          );
+                          if (!confirmed) return;
+                          
+                          try {
+                            await window.electronAPI.mod.remove(profileId, installedMod.fileName);
+                            toast.success('삭제 완료', `${selectedMod.name}이(가) 삭제되었습니다.`);
+                            await loadInstalledMods();
+                          } catch (error) {
+                            console.error('Failed to delete mod:', error);
+                            toast.error('삭제 실패', `모드 삭제에 실패했습니다.`);
+                          }
+                        }}
+                        disabled={isInstalling}
+                        className="px-6 py-4 text-lg font-semibold flex items-center justify-center gap-2 rounded-lg transition-colors bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Trash2 className="w-5 h-5" />
+                        삭제
+                      </button>
+                    </div>
+                  ) : (
+                    /* 일반 상태: 설치/업데이트/다운그레이드/재설치 버튼 */
+                    <button
+                      onClick={handleInstall}
+                      disabled={!selectedVersion || isInstalling}
+                      className={`w-full py-4 text-lg font-semibold flex items-center justify-center gap-2 rounded-lg transition-colors ${
+                        buttonState.state === 'update'
+                          ? 'bg-green-600 hover:bg-green-700 text-white'
+                          : buttonState.state === 'downgrade'
+                          ? 'bg-orange-600 hover:bg-orange-700 text-white'
+                          : buttonState.state === 'reinstall'
+                          ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                          : 'btn-primary'
+                      } ${(!selectedVersion || isInstalling) && 'opacity-50 cursor-not-allowed'}`}
+                    >
                     {isInstalling ? (
                       <>
                         <Loader2 className="w-5 h-5 animate-spin" />
                         {buttonState.state === 'update' ? '업데이트 중...' :
                          buttonState.state === 'downgrade' ? '다운그레이드 중...' :
                          buttonState.state === 'reinstall' ? '재설치 중...' : '설치 중...'}
-                      </>
-                    ) : buttonState.state === 'installed' ? (
-                      <>
-                        <Check className="w-5 h-5" />
-                        설치됨
                       </>
                     ) : buttonState.state === 'update' ? (
                       <>
@@ -747,6 +787,7 @@ export function ModSearchModal({ isOpen, onClose, profileId, profile, gameVersio
                       </>
                     )}
                   </button>
+                  )}
                   
                   {/* 버전 정보 표시 */}
                   {buttonState.installedVersion && buttonState.state !== 'installed' && (
