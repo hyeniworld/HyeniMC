@@ -123,18 +123,31 @@ export function registerProfileHandlers(): void {
       if (!addr) {
         throw new Error('Backend server is not running');
       }
+      
+      // 1. Stop file watcher first to release file handles
+      try {
+        const { fileWatcher } = await import('../services/file-watcher');
+        await fileWatcher.unwatchProfile(id);
+        console.log(`[IPC Profile] Stopped file watcher for: ${id}`);
+      } catch (err) {
+        console.warn(`[IPC Profile] Failed to stop file watcher:`, err);
+      }
+      
+      // 2. Delete from backend DB
       await profileRpc.deleteProfile({ id });
       
-      // Delete profile instance directory (game files, saves, etc.)
+      // 3. Delete profile instance directory (game files, saves, etc.)
       const { getProfileInstanceDir } = await import('../utils/paths');
       const instanceDir = getProfileInstanceDir(id);
       
       const fs = await import('fs/promises');
       try {
+        // Wait a bit for file handles to be released
+        await new Promise(resolve => setTimeout(resolve, 100));
         await fs.rm(instanceDir, { recursive: true, force: true });
-        console.log(`[IPC Profile] Deleted instance directory: ${instanceDir}`);
+        console.log(`[IPC Profile] ✅ Deleted instance directory: ${instanceDir}`);
       } catch (err) {
-        console.warn(`[IPC Profile] Failed to delete instance directory:`, err);
+        console.error(`[IPC Profile] ❌ Failed to delete instance directory:`, err);
         // Don't throw - profile is already deleted from backend
       }
       
