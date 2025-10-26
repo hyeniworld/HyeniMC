@@ -59,7 +59,8 @@ export class HyeniPackImporter {
     packFilePath: string,
     profileId: string,
     instanceDir: string,
-    onProgress?: (progress: HyeniPackImportProgress) => void
+    onProgress?: (progress: HyeniPackImportProgress) => void,
+    checkCancelled?: () => boolean
   ): Promise<{
     success: boolean;
     installedMods: number;
@@ -69,6 +70,11 @@ export class HyeniPackImporter {
     error?: string;
   }> {
     try {
+      // 취소 체크
+      if (checkCancelled?.()) {
+        throw new Error('Installation cancelled by user');
+      }
+
       onProgress?.({
         stage: 'extracting',
         progress: 0,
@@ -82,6 +88,11 @@ export class HyeniPackImporter {
       console.log(`[HyeniPackImporter] Importing: ${manifest.name} v${manifest.version}`);
       console.log(`[HyeniPackImporter] Instance dir: ${instanceDir}`);
       
+      // 취소 체크
+      if (checkCancelled?.()) {
+        throw new Error('Installation cancelled by user');
+      }
+
       onProgress?.({
         stage: 'extracting',
         progress: 10,
@@ -164,6 +175,11 @@ export class HyeniPackImporter {
       let installedCount = 0;
       
       for (let i = 0; i < downloadTasks.length; i++) {
+        // 취소 체크
+        if (checkCancelled?.()) {
+          throw new Error('Installation cancelled by user');
+        }
+
         const task = downloadTasks[i];
         
         onProgress?.({

@@ -39,6 +39,23 @@ export function registerModpackHandlers(): void {
       console.log(`[IPC Modpack] Installing modpack version: ${versionId} to profile: ${profileId}`);
       const instanceDir = getProfileInstanceDir(profileId);
 
+      // 설치 시작 - 프로필을 'installing' 상태로 업데이트
+      try {
+        const { profileRpc } = await import('../grpc/clients');
+        console.log('[IPC Modpack] Marking profile as installing:', profileId);
+        const profile = await profileRpc.getProfile({ id: profileId });
+        await profileRpc.updateProfile({ 
+          id: profileId, 
+          patch: { 
+            ...profile,
+            installationStatus: 'installing',
+          } 
+        });
+        console.log('[IPC Modpack] ✅ Profile marked as installing');
+      } catch (e) {
+        console.error('[IPC Modpack] ❌ Failed to mark profile as installing:', e);
+      }
+
       const result = await modpackManager.installModpack(
         versionId,
         profileId,
@@ -49,24 +66,20 @@ export function registerModpackHandlers(): void {
         }
       );
 
-      // Patch profile with detected loader/gameVersion via gRPC
+      // Patch profile with detected loader/gameVersion and mark as complete via gRPC
       try {
         const { profileRpc } = await import('../grpc/clients');
+        const profile = await profileRpc.getProfile({ id: profileId });
         const patch: any = {
-          // repeated fields must be arrays (serializer iterates over them)
-          jvmArgs: [],
-          gameArgs: [],
-          // ensure int32 fields are valid numbers if marshaller inspects them
-          memoryMin: 0,
-          memoryMax: 0,
+          ...profile,
+          installationStatus: 'complete', // 설치 완료
         };
         if (result.gameVersion) patch.gameVersion = result.gameVersion;
         if (result.loaderType) patch.loaderType = result.loaderType;
         if (result.loaderVersion) patch.loaderVersion = result.loaderVersion;
-        if (patch.gameVersion || patch.loaderType || patch.loaderVersion) {
-          await profileRpc.updateProfile({ id: profileId, patch } as any);
-          console.log('[IPC Modpack] Profile patched with loader info (gRPC):', patch);
-        }
+        
+        await profileRpc.updateProfile({ id: profileId, patch });
+        console.log('[IPC Modpack] Profile patched with loader info and marked as complete (gRPC):', patch);
       } catch (e) {
         console.warn('[IPC Modpack] Failed to patch profile after install (gRPC):', e);
       }
@@ -75,6 +88,37 @@ export function registerModpackHandlers(): void {
       return { success: true };
     } catch (error) {
       console.error('[IPC Modpack] Failed to install modpack:', error);
+      
+      // 설치 실패 - 프로필을 'failed' 상태로 업데이트
+      try {
+        const { profileRpc } = await import('../grpc/clients');
+        const profile = await profileRpc.getProfile({ id: profileId });
+        await profileRpc.updateProfile({ 
+          id: profileId, 
+          patch: { 
+            ...profile,
+            installationStatus: 'failed',
+          } 
+        });
+        console.log('[IPC Modpack] Profile marked as failed');
+      } catch (e) {
+        console.warn('[IPC Modpack] Failed to mark profile as failed:', e);
+      }
+      
+      throw error;
+    }
+  });
+
+  // Cancel modpack installation
+  ipcMain.handle(IPC_CHANNELS.MODPACK_CANCEL_INSTALL, async (_event, profileId: string) => {
+    try {
+      console.log(`[IPC Modpack] Cancelling installation for profile: ${profileId}`);
+      // 취소 플래그만 설정 (프로필은 나중에 삭제)
+      await modpackManager.cancelInstall(profileId);
+      console.log('[IPC Modpack] Installation cancelled, profile will be cleaned up');
+      return { success: true };
+    } catch (error) {
+      console.error('[IPC Modpack] Failed to cancel installation:', error);
       throw error;
     }
   });
@@ -112,16 +156,82 @@ export function registerModpackHandlers(): void {
         const instanceDir = getProfileInstanceDir(profileId);
         console.log(`[IPC Modpack] Profile: ${profileId}, Instance: ${instanceDir}`);
 
+        // 설치 시작 - 프로필을 'installing' 상태로 업데이트
+        try {
+          const { profileRpc } = await import('../grpc/clients');
+          console.log('[IPC Modpack] [Import] Marking profile as installing:', profileId);
+          const profile = await profileRpc.getProfile({ id: profileId });
+          await profileRpc.updateProfile({ 
+            id: profileId, 
+            patch: { 
+              ...profile,
+              installationStatus: 'installing',
+            } 
+          });
+          console.log('[IPC Modpack] [Import] ✅ Profile marked as installing');
+        } catch (e) {
+          console.error('[IPC Modpack] [Import] ❌ Failed to mark profile as installing:', e);
+        }
+
         const loaderInfo = await modpackManager.importModpackFromFile(filePath, profileId, instanceDir, (progress) => {
           // Send progress updates to renderer
           event.sender.send('modpack:import-progress', progress);
         });
 
+        // 설치 완료 - 프로필을 'complete' 상태로 업데이트
+        try {
+          const { profileRpc } = await import('../grpc/clients');
+          console.log('[IPC Modpack] [Import] Marking profile as complete:', profileId);
+          const profile = await profileRpc.getProfile({ id: profileId });
+          await profileRpc.updateProfile({ 
+            id: profileId, 
+            patch: { 
+              ...profile,
+              installationStatus: 'complete',
+            } 
+          });
+          console.log('[IPC Modpack] [Import] ✅ Profile marked as complete');
+        } catch (e) {
+          console.error('[IPC Modpack] [Import] ❌ Failed to mark profile as complete:', e);
+        }
+
         console.log('[IPC Modpack] Modpack import complete', loaderInfo);
         return { success: true };
       } catch (error) {
         console.error('[IPC Modpack] Failed to import modpack:', error);
+        
+        // 설치 실패 - 프로필을 'failed' 상태로 업데이트
+        try {
+          const { profileRpc } = await import('../grpc/clients');
+          console.log('[IPC Modpack] [Import] Marking profile as failed:', profileId);
+          const profile = await profileRpc.getProfile({ id: profileId });
+          await profileRpc.updateProfile({ 
+            id: profileId, 
+            patch: { 
+              ...profile,
+              installationStatus: 'failed',
+            } 
+          });
+          console.log('[IPC Modpack] [Import] ✅ Profile marked as failed');
+        } catch (e) {
+          console.error('[IPC Modpack] [Import] ❌ Failed to mark profile as failed:', e);
+        }
+        
         throw error;
+      } finally {
+        // 취소되었는지 확인하여 프로필 삭제
+        if (modpackManager.isCancelled(profileId)) {
+          try {
+            const { profileRpc } = await import('../grpc/clients');
+            await profileRpc.deleteProfile({ id: profileId });
+            console.log('[IPC Modpack] [Import] Deleted cancelled profile:', profileId);
+          } catch (e) {
+            console.error('[IPC Modpack] [Import] Failed to delete cancelled profile:', e);
+          } finally {
+            // 취소 목록에서 제거
+            modpackManager.clearCancelled(profileId);
+          }
+        }
       }
     }
   );

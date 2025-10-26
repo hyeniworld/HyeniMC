@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Play, Settings, Trash2, Plus, FolderOpen, Clock, Loader2, Star, Sparkles, Package } from 'lucide-react';
+import { Play, Settings, Trash2, Plus, FolderOpen, Clock, Loader2, Star, Sparkles, Package, AlertTriangle } from 'lucide-react';
 import { CreateProfileModal } from './CreateProfileModal';
 import { ExportHyeniPackModal } from './ExportHyeniPackModal';
 import { useDownloadStore } from '../../store/downloadStore';
@@ -306,8 +306,20 @@ export function ProfileList() {
                 </div>
               )}
               
+              {/* Installation Status Badge */}
+              {profile.installationStatus && profile.installationStatus !== 'complete' && (
+                <div className="absolute top-2 left-2 px-2 py-1 bg-red-500/90 backdrop-blur-sm text-white text-xs font-semibold rounded-full flex items-center gap-1 shadow-lg z-20">
+                  <AlertTriangle className="w-3 h-3" />
+                  <span>
+                    {profile.installationStatus === 'installing' && '설치 중'}
+                    {profile.installationStatus === 'failed' && '설치 실패'}
+                    {profile.installationStatus === 'incomplete' && '설치 미완료'}
+                  </span>
+                </div>
+              )}
+              
               {/* Authorized Server Badge */}
-              {profile.serverAddress && isAuthorizedServer(profile.serverAddress) && (
+              {profile.serverAddress && isAuthorizedServer(profile.serverAddress) && !profile.installationStatus && (
                 <div className="absolute top-2 left-2 px-2 py-1 bg-gradient-to-r from-hyeni-pink-500/90 to-purple-500/90 backdrop-blur-sm text-white text-xs font-semibold rounded-full flex items-center gap-1 shadow-lg">
                   <Sparkles className="w-3 h-3" />
                   <span>필수 모드 자동 관리</span>
@@ -353,6 +365,25 @@ export function ProfileList() {
                 </p>
               )}
 
+              {/* Installation Status Warning */}
+              {profile.installationStatus && profile.installationStatus !== 'complete' && (
+                <div className="bg-red-900/20 border border-red-800 rounded-lg p-3 mb-4">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
+                    <div className="text-xs">
+                      <p className="text-red-300 font-semibold mb-1">
+                        {profile.installationStatus === 'installing' && '모드팩 설치가 진행 중이었습니다'}
+                        {profile.installationStatus === 'failed' && '모드팩 설치에 실패했습니다'}
+                        {profile.installationStatus === 'incomplete' && '모드팩이 정상적으로 설치되지 않았습니다'}
+                      </p>
+                      <p className="text-red-400">
+                        이 프로필은 플레이할 수 없습니다. 프로필을 삭제하고 다시 설치해주세요.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Stats */}
               <div className="flex items-center gap-4 text-xs text-gray-500 mb-4 pb-4 border-b border-gray-800">
                 <div className="flex items-center gap-1">
@@ -368,7 +399,16 @@ export function ProfileList() {
 
               {/* Actions */}
               <div className="flex items-center gap-2">
-                {launchingProfiles.has(profile.id) ? (
+                {profile.installationStatus && profile.installationStatus !== 'complete' ? (
+                  <button
+                    disabled
+                    className="flex-1 flex items-center justify-center gap-2 py-3 font-semibold bg-gray-700 text-gray-500 rounded-lg shadow-md cursor-not-allowed"
+                    title="설치가 완료되지 않은 프로필입니다"
+                  >
+                    <AlertTriangle className="w-4 h-4" />
+                    플레이 불가
+                  </button>
+                ) : launchingProfiles.has(profile.id) ? (
                   <button
                     disabled
                     className="flex-1 flex items-center justify-center gap-2 py-3 font-semibold bg-gray-700 text-gray-400 rounded-lg shadow-md cursor-not-allowed"

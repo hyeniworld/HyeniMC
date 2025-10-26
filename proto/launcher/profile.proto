@@ -35,6 +35,7 @@ message Profile {
   bool fullscreen = 22;
   bool favorite = 23;
   string server_address = 24;
+  string installation_status = 25; // complete|installing|failed|incomplete
 }
 
 message CreateProfileRequest {

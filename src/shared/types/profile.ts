@@ -4,6 +4,8 @@
 
 export type LoaderType = 'vanilla' | 'fabric' | 'forge' | 'neoforge' | 'quilt';
 
+export type InstallationStatus = 'complete' | 'installing' | 'failed' | 'incomplete';
+
 export interface Profile {
   id: string;
   name: string;
@@ -38,6 +40,9 @@ export interface Profile {
   mods: Mod[];
   modpackId?: string;
   modpackSource?: 'modrinth' | 'curseforge';
+  
+  // 설치 상태 (모드팩 설치 추적용)
+  installationStatus?: InstallationStatus;
   
   // 메타데이터
   createdAt: Date;

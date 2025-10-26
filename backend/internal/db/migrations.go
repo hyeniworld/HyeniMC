@@ -360,6 +360,17 @@ var migrations = []Migration{
 				('yet_another_config_lib', 'modrinth', '1eAoo2KR', 'YetAnotherConfigLib', 'known', 100, 0, strftime('%s', 'now'), strftime('%s', 'now'));
 		`,
 	},
+	{
+		Version: 18,
+		Name:    "add_installation_status_to_profiles",
+		SQL: `
+			-- Add installation_status column to profiles table
+			ALTER TABLE profiles ADD COLUMN installation_status TEXT DEFAULT 'complete';
+			
+			-- Create index for querying incomplete installations
+			CREATE INDEX IF NOT EXISTS idx_profiles_installation_status ON profiles(installation_status);
+		`,
+	},
 }
 
 func runMigrations(db *sql.DB) error {

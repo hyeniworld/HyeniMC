@@ -60,9 +60,57 @@ export interface ModpackMetadata {
 
 export class ModpackManager {
   private modrinthAPI: ModrinthAPI;
+  private activeInstalls: Map<string, { cancelled: boolean; tempDir?: string }>;
+  private cancelledProfiles: Set<string>;
 
   constructor() {
     this.modrinthAPI = new ModrinthAPI();
+    this.activeInstalls = new Map();
+    this.cancelledProfiles = new Set();
+  }
+
+  /**
+   * 모드팩 설치 취소
+   */
+  async cancelInstall(profileId: string): Promise<void> {
+    console.log(`[ModpackManager] Cancelling installation for profile: ${profileId}`);
+    
+    const installInfo = this.activeInstalls.get(profileId);
+    if (!installInfo) {
+      console.log(`[ModpackManager] No active installation found for profile: ${profileId}`);
+      return;
+    }
+
+    // 취소 플래그 설정 (activeInstalls는 삭제하지 않음 - checkCancelled가 확인할 수 있어야 함)
+    installInfo.cancelled = true;
+    this.cancelledProfiles.add(profileId);
+
+    // 임시 디렉토리 정리
+    if (installInfo.tempDir) {
+      try {
+        await fs.rm(installInfo.tempDir, { recursive: true, force: true });
+        console.log(`[ModpackManager] Cleaned up temp directory: ${installInfo.tempDir}`);
+      } catch (error) {
+        console.error(`[ModpackManager] Failed to cleanup temp directory:`, error);
+      }
+    }
+
+    // activeInstalls는 삭제하지 않음 - 설치 과정에서 checkCancelled가 확인할 수 있어야 함
+    console.log(`[ModpackManager] Installation cancelled for profile: ${profileId}`);
+  }
+
+  /**
+   * 프로필이 취소되었는지 확인
+   */
+  isCancelled(profileId: string): boolean {
+    return this.cancelledProfiles.has(profileId);
+  }
+
+  /**
+   * 취소된 프로필 목록에서 제거
+   */
+  clearCancelled(profileId: string): void {
+    this.cancelledProfiles.delete(profileId);
   }
 
   /**
@@ -159,9 +207,17 @@ export class ModpackManager {
   ): Promise<{ gameVersion?: string; loaderType?: 'vanilla' | 'fabric' | 'forge' | 'neoforge' | 'quilt'; loaderVersion?: string }> {
     const tempDir = path.join(instanceDir, '.temp_modpack');
     
+    // 설치 시작 - activeInstalls에 등록
+    this.activeInstalls.set(profileId, { cancelled: false, tempDir });
+    
     try {
       // Ensure instance directory exists (pre-create)
       await fs.mkdir(instanceDir, { recursive: true });
+
+      // 취소 체크
+      if (this.activeInstalls.get(profileId)?.cancelled) {
+        throw new Error('Installation cancelled by user');
+      }
 
       // 1. 모드팩 파일 다운로드
       onProgress?.({
@@ -244,6 +300,11 @@ export class ModpackManager {
 
       const files = manifest.files || [];
       for (let i = 0; i < files.length; i++) {
+        // 취소 체크
+        if (this.activeInstalls.get(profileId)?.cancelled) {
+          throw new Error('Installation cancelled by user');
+        }
+
         const file = files[i];
         const progress = Math.floor(((i + 1) / files.length) * 100);
         
@@ -356,6 +417,9 @@ export class ModpackManager {
       } catch (error) {
         console.error('[ModpackManager] Failed to cleanup temp directory:', error);
       }
+
+      // 설치 완료/취소/실패 후 activeInstalls에서 제거
+      this.activeInstalls.delete(profileId);
     }
   }
 
@@ -728,7 +792,7 @@ export class ModpackManager {
    */
   async importModpackFromFile(
     filePath: string,
-    profileName: string,
+    profileId: string,
     instanceDir: string,
     onProgress?: (progress: ModpackInstallProgress) => void
   ): Promise<{
@@ -738,7 +802,15 @@ export class ModpackManager {
   }> {
     const tempDir = path.join(instanceDir, '.temp_modpack_import');
 
+    // 설치 시작 - activeInstalls에 등록
+    this.activeInstalls.set(profileId, { cancelled: false, tempDir });
+
     try {
+      // 취소 체크
+      if (this.activeInstalls.get(profileId)?.cancelled) {
+        throw new Error('Installation cancelled by user');
+      }
+
       // 1. 파일 검증
       onProgress?.({
         stage: 'validating',
@@ -752,6 +824,11 @@ export class ModpackManager {
       }
 
       console.log(`[ModpackManager] Importing ${fileInfo.format} modpack from file`);
+
+      // 취소 체크
+      if (this.activeInstalls.get(profileId)?.cancelled) {
+        throw new Error('Installation cancelled by user');
+      }
 
       // 2. 메타데이터 추출
       const metadata = await this.extractModpackMetadata(filePath);
@@ -775,32 +852,39 @@ export class ModpackManager {
         case 'hyenipack':
           // HyeniPack importer 사용
           const { hyeniPackImporter } = await import('./hyenipack-importer');
-          const result = await hyeniPackImporter.importHyeniPack(filePath, '', instanceDir, onProgress ? (progress) => {
-            // HyeniPackImportProgress를 ModpackInstallProgress로 변환
-            let mappedStage: ModpackInstallProgress['stage'];
-            switch (progress.stage) {
-              case 'extracting':
-                mappedStage = 'extracting';
-                break;
-              case 'installing_mods':
-                mappedStage = 'installing_mods';
-                break;
-              case 'applying_overrides':
-                mappedStage = 'applying_overrides';
-                break;
-              case 'complete':
-                mappedStage = 'complete';
-                break;
-              default:
-                mappedStage = 'extracting';
-            }
-            
-            onProgress({
-              stage: mappedStage,
-              progress: progress.progress,
-              message: progress.message,
-            });
-          } : undefined);
+          const result = await hyeniPackImporter.importHyeniPack(
+            filePath,
+            profileId,
+            instanceDir,
+            onProgress ? (progress) => {
+              // HyeniPackImportProgress를 ModpackInstallProgress로 변환
+              let mappedStage: ModpackInstallProgress['stage'];
+              switch (progress.stage) {
+                case 'extracting':
+                  mappedStage = 'extracting';
+                  break;
+                case 'installing_mods':
+                  mappedStage = 'installing_mods';
+                  break;
+                case 'applying_overrides':
+                  mappedStage = 'applying_overrides';
+                  break;
+                case 'complete':
+                  mappedStage = 'complete';
+                  break;
+                default:
+                  mappedStage = 'extracting';
+              }
+              
+              onProgress({
+                stage: mappedStage,
+                progress: progress.progress,
+                message: progress.message,
+              });
+            } : undefined,
+            // 취소 체크 콜백
+            () => this.activeInstalls.get(profileId)?.cancelled || false
+          );
           
           // 로더 정보 저장
           loaderInfo = {
@@ -875,6 +959,9 @@ export class ModpackManager {
       } catch (error) {
         console.error('[ModpackManager] Failed to clean up temp directory:', error);
       }
+
+      // 설치 완료/취소/실패 후 activeInstalls에서 제거
+      this.activeInstalls.delete(profileId);
     }
   }
 

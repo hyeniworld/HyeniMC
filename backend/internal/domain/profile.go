@@ -4,30 +4,31 @@ import "time"
 
 // Profile represents a game instance configuration
 type Profile struct {
-	ID              string     `json:"id"`
-	Name            string     `json:"name"`
-	Description     string     `json:"description,omitempty"`
-	Icon            string     `json:"icon,omitempty"`
-	GameVersion     string     `json:"gameVersion"`
-	LoaderType      string     `json:"loaderType"`
-	LoaderVersion   string     `json:"loaderVersion,omitempty"`
-	GameDirectory   string     `json:"gameDirectory"`
-	JavaPath        string     `json:"javaPath,omitempty"`
-	JvmArgs         []string   `json:"jvmArgs"`
-	Memory          Memory     `json:"memory"`
-	GameArgs        []string   `json:"gameArgs"`
-	Resolution      Resolution `json:"resolution,omitempty"`
-	Fullscreen      bool       `json:"fullscreen,omitempty"`
-	ModpackID       string     `json:"modpackId,omitempty"`
-	ModpackSource   string     `json:"modpackSource,omitempty"`
-	CreatedAt       time.Time  `json:"createdAt"`
-	UpdatedAt       time.Time  `json:"updatedAt"`
-	LastPlayed      time.Time  `json:"lastPlayed,omitempty"`
-	TotalPlayTime   int64      `json:"totalPlayTime"`
-	AuthRequired    bool       `json:"authRequired,omitempty"`
-	SPAEnabled      bool       `json:"spaEnabled,omitempty"`
-	ServerAddress   string     `json:"serverAddress,omitempty"`
-	Favorite        bool       `json:"favorite"`
+	ID                  string     `json:"id"`
+	Name                string     `json:"name"`
+	Description         string     `json:"description,omitempty"`
+	Icon                string     `json:"icon,omitempty"`
+	GameVersion         string     `json:"gameVersion"`
+	LoaderType          string     `json:"loaderType"`
+	LoaderVersion       string     `json:"loaderVersion,omitempty"`
+	GameDirectory       string     `json:"gameDirectory"`
+	JavaPath            string     `json:"javaPath,omitempty"`
+	JvmArgs             []string   `json:"jvmArgs"`
+	Memory              Memory     `json:"memory"`
+	GameArgs            []string   `json:"gameArgs"`
+	Resolution          Resolution `json:"resolution,omitempty"`
+	Fullscreen          bool       `json:"fullscreen,omitempty"`
+	ModpackID           string     `json:"modpackId,omitempty"`
+	ModpackSource       string     `json:"modpackSource,omitempty"`
+	InstallationStatus  string     `json:"installationStatus,omitempty"` // "complete", "installing", "failed", "incomplete"
+	CreatedAt           time.Time  `json:"createdAt"`
+	UpdatedAt           time.Time  `json:"updatedAt"`
+	LastPlayed          time.Time  `json:"lastPlayed,omitempty"`
+	TotalPlayTime       int64      `json:"totalPlayTime"`
+	AuthRequired        bool       `json:"authRequired,omitempty"`
+	SPAEnabled          bool       `json:"spaEnabled,omitempty"`
+	ServerAddress       string     `json:"serverAddress,omitempty"`
+	Favorite            bool       `json:"favorite"`
 }
 
 // Memory represents JVM memory settings

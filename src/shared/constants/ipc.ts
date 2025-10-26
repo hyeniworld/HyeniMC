@@ -77,6 +77,7 @@ export const IPC_CHANNELS = {
   MODPACK_GET: 'modpack:get',
   MODPACK_GET_VERSIONS: 'modpack:get-versions',
   MODPACK_INSTALL: 'modpack:install',
+  MODPACK_CANCEL_INSTALL: 'modpack:cancel-install',
   MODPACK_CHECK_UPDATE: 'modpack:check-update',
   MODPACK_UPDATE: 'modpack:update',
   MODPACK_VALIDATE_FILE: 'modpack:validate-file',

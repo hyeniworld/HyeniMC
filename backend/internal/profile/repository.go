@@ -66,9 +66,9 @@ func (r *Repository) Save(profile *domain.Profile) error {
 			id, name, description, icon, game_version, loader_type, loader_version,
 			game_directory, java_path, memory_min, memory_max, resolution_width,
 			resolution_height, fullscreen, jvm_args, game_args, modpack_id,
-			modpack_source, created_at, updated_at, last_played, total_play_time,
+			modpack_source, installation_status, created_at, updated_at, last_played, total_play_time,
 			favorite, server_address
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			name = excluded.name,
 			description = excluded.description,
@@ -87,6 +87,7 @@ func (r *Repository) Save(profile *domain.Profile) error {
 			game_args = excluded.game_args,
 			modpack_id = excluded.modpack_id,
 			modpack_source = excluded.modpack_source,
+			installation_status = excluded.installation_status,
 			updated_at = excluded.updated_at,
 			last_played = excluded.last_played,
 			total_play_time = excluded.total_play_time,
@@ -97,7 +98,7 @@ func (r *Repository) Save(profile *domain.Profile) error {
 		profile.GameVersion, profile.LoaderType, profile.LoaderVersion,
 		profile.GameDirectory, javaPath, memoryMin, memoryMax, resWidth, resHeight,
 		fullscreenVal, jvmArgs, gameArgs, profile.ModpackID, profile.ModpackSource,
-		profile.CreatedAt.Unix(), profile.UpdatedAt.Unix(),
+		profile.InstallationStatus, profile.CreatedAt.Unix(), profile.UpdatedAt.Unix(),
 		nullTime(profile.LastPlayed), profile.TotalPlayTime,
 		profile.Favorite, serverAddr,
 	)
@@ -125,7 +126,7 @@ func (r *Repository) Get(id string) (*domain.Profile, error) {
 		SELECT id, name, description, icon, game_version, loader_type, loader_version,
 			game_directory, java_path, memory_min, memory_max, resolution_width,
 			resolution_height, fullscreen, jvm_args, game_args, modpack_id,
-			modpack_source, created_at, updated_at, last_played, total_play_time,
+			modpack_source, installation_status, created_at, updated_at, last_played, total_play_time,
 			favorite, server_address
 		FROM profiles WHERE id = ?
 	`, id).Scan(
@@ -133,7 +134,7 @@ func (r *Repository) Get(id string) (*domain.Profile, error) {
 		&profile.GameVersion, &profile.LoaderType, &profile.LoaderVersion,
 		&profile.GameDirectory, &javaPath, &memoryMin, &memoryMax, &resWidth, &resHeight,
 		&fullscreenVal, &jvmArgs, &gameArgs, &profile.ModpackID,
-		&profile.ModpackSource, &createdAt, &updatedAt, &lastPlayed, &profile.TotalPlayTime,
+		&profile.ModpackSource, &profile.InstallationStatus, &createdAt, &updatedAt, &lastPlayed, &profile.TotalPlayTime,
 		&profile.Favorite, &serverAddr,
 	)
 	
@@ -185,7 +186,7 @@ func (r *Repository) List() ([]*domain.Profile, error) {
 		SELECT id, name, description, icon, game_version, loader_type, loader_version,
 			game_directory, java_path, memory_min, memory_max, resolution_width,
 			resolution_height, fullscreen, jvm_args, game_args, modpack_id,
-			modpack_source, created_at, updated_at, last_played, total_play_time,
+			modpack_source, installation_status, created_at, updated_at, last_played, total_play_time,
 			favorite, server_address
 		FROM profiles
 		ORDER BY last_played DESC, created_at DESC
@@ -212,7 +213,7 @@ func (r *Repository) List() ([]*domain.Profile, error) {
 			&profile.GameVersion, &profile.LoaderType, &profile.LoaderVersion,
 			&profile.GameDirectory, &javaPath, &memoryMin, &memoryMax, &resWidth, &resHeight,
 			&fullscreenVal, &jvmArgs, &gameArgs, &profile.ModpackID,
-			&profile.ModpackSource, &createdAt, &updatedAt, &lastPlayed, &profile.TotalPlayTime,
+			&profile.ModpackSource, &profile.InstallationStatus, &createdAt, &updatedAt, &lastPlayed, &profile.TotalPlayTime,
 			&profile.Favorite, &serverAddr,
 		)
 		if err != nil {

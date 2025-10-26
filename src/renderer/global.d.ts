@@ -81,6 +81,7 @@ declare global {
         search: (query: string, gameVersion?: string) => Promise<any[]>;
         getVersions: (modpackId: string, gameVersion?: string) => Promise<any[]>;
         install: (profileId: string, versionId: string) => Promise<{ success: boolean }>;
+        cancelInstall: (profileId: string) => Promise<{ success: boolean }>;
         installUrl: (profileId: string, url: string) => Promise<{ success: boolean }>;
         validateFile: (filePath: string) => Promise<any>;
         extractMetadata: (filePath: string) => Promise<any>;

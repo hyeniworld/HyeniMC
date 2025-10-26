@@ -3,6 +3,8 @@ import { Upload, FileArchive, Loader2, CheckCircle2, XCircle, Package, Cpu, Hard
 
 interface ImportModpackTabProps {
   onSuccess: () => void;
+  onImportingChange?: (importing: boolean) => void;
+  onProfileIdChange?: (profileId: string | null) => void;
 }
 
 interface ModpackMetadata {
@@ -16,7 +18,7 @@ interface ModpackMetadata {
   fileSize: number;
 }
 
-export function ImportModpackTab({ onSuccess }: ImportModpackTabProps) {
+export function ImportModpackTab({ onSuccess, onImportingChange, onProfileIdChange }: ImportModpackTabProps) {
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [metadata, setMetadata] = useState<ModpackMetadata | null>(null);
   const [profileName, setProfileName] = useState('');
@@ -128,6 +130,7 @@ export function ImportModpackTab({ onSuccess }: ImportModpackTabProps) {
 
     try {
       setImporting(true);
+      onImportingChange?.(true);
       setError(null);
 
       // 1. Create profile first
@@ -142,7 +145,10 @@ export function ImportModpackTab({ onSuccess }: ImportModpackTabProps) {
 
       console.log('[ImportModpackTab] Creating profile:', profileData);
       const profile = await window.electronAPI.profile.create(profileData);
-      console.log('[ImportModpackTab] Profile created:', profile);
+      console.log('Created profile:', profile);
+      
+      // 부모에게 프로필 ID 전달
+      onProfileIdChange?.(profile.id);
 
       // 2. Listen for progress
       const cleanupProgress = window.electronAPI.on('modpack:import-progress', (data: any) => {
@@ -153,11 +159,15 @@ export function ImportModpackTab({ onSuccess }: ImportModpackTabProps) {
       await window.electronAPI.modpack.importFile(selectedFile, profile.id);
 
       cleanupProgress();
+      onImportingChange?.(false);
+      onProfileIdChange?.(null);
       onSuccess();
     } catch (err) {
       console.error('Failed to import modpack:', err);
       setError(err instanceof Error ? err.message : '모드팩 가져오기에 실패했습니다');
       setImporting(false);
+      onImportingChange?.(false);
+      onProfileIdChange?.(null);
       setProgress(null);
     }
   };

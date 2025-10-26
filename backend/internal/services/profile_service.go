@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -119,13 +120,28 @@ func (s *ProfileService) ListProfiles(ctx context.Context) ([]*domain.Profile, e
 	}
 	
 	// Auto-fix invalid memory settings from old data for all profiles
+	// Also clean up incomplete installations
 	for _, profile := range profiles {
+		needsUpdate := false
+		
+		// Fix memory settings
 		if profile.Memory.Min > 0 && profile.Memory.Max > 0 && profile.Memory.Min > profile.Memory.Max {
 			profile.Memory.Max = profile.Memory.Min
-			// Save the corrected values
+			needsUpdate = true
+		}
+		
+		// Mark interrupted installations as incomplete
+		if profile.InstallationStatus == "installing" {
+			log.Printf("[Profile] Profile %s (%s) was interrupted during installation, marking as incomplete", profile.ID, profile.Name)
+			profile.InstallationStatus = "incomplete"
+			needsUpdate = true
+		}
+		
+		// Save the corrected values if needed
+		if needsUpdate {
 			if updateErr := s.repo.Update(profile); updateErr != nil {
 				// Log but don't fail - return the corrected profile anyway
-				fmt.Printf("Warning: Failed to save corrected memory settings for profile %s: %v\n", profile.ID, updateErr)
+				log.Printf("[Profile] Warning: Failed to save corrected settings for profile %s: %v", profile.ID, updateErr)
 			}
 		}
 	}
@@ -170,6 +186,9 @@ func (s *ProfileService) UpdateProfile(ctx context.Context, id string, updates m
 	}
 	if gameDir, ok := updates["gameDirectory"].(string); ok {
 		profile.GameDirectory = gameDir
+	}
+	if installStatus, ok := updates["installationStatus"].(string); ok {
+		profile.InstallationStatus = installStatus
 	}
 	
 	// Handle JVM arguments

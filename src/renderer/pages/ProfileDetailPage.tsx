@@ -105,11 +105,12 @@ export const ProfileDetailPage: React.FC = () => {
   const loadProfile = async () => {
     setLoading(true);
     try {
-      const profiles = await window.electronAPI.profile.list();
-      const foundProfile = profiles.find((p: any) => p.id === profileId);
-      setProfile(foundProfile || null);
+      if (!profileId) return;
+      const loadedProfile = await window.electronAPI.profile.get(profileId);
+      setProfile(loadedProfile);
     } catch (error) {
       console.error('Failed to load profile:', error);
+      setProfile(null);
     } finally {
       setLoading(false);
     }
@@ -282,6 +283,14 @@ export const ProfileDetailPage: React.FC = () => {
             >
               ⏹ 게임 중단
             </button>
+          ) : profile?.installationStatus && profile.installationStatus !== 'complete' ? (
+            <button
+              disabled
+              className="px-6 py-3 rounded-lg font-semibold bg-gray-600 text-gray-300 cursor-not-allowed flex items-center gap-2"
+              title="설치가 완료되지 않은 프로필입니다"
+            >
+              ⚠️ 실행 불가
+            </button>
           ) : (
             <button
               onClick={handleLaunch}
@@ -309,6 +318,38 @@ export const ProfileDetailPage: React.FC = () => {
             </button>
           ))}
         </div>
+
+        {/* Installation Status Warning */}
+        {profile?.installationStatus && profile.installationStatus !== 'complete' && (
+          <div className={`mt-4 p-4 rounded-lg border-2 ${
+            profile.installationStatus === 'installing' ? 'bg-yellow-900/20 border-yellow-500/50' : 'bg-red-900/20 border-red-500/50'
+          }`}>
+            <div className="flex items-start gap-3">
+              <div className={`text-2xl ${
+                profile.installationStatus === 'installing' ? 'text-yellow-400' : 'text-red-400'
+              }`}>
+                ⚠️
+              </div>
+              <div className="flex-1">
+                <h3 className={`text-lg font-bold mb-2 ${
+                  profile.installationStatus === 'installing' ? 'text-yellow-300' : 'text-red-300'
+                }`}>
+                  {profile.installationStatus === 'installing' && '설치 진행 중'}
+                  {profile.installationStatus === 'incomplete' && '설치 미완료'}
+                  {profile.installationStatus === 'failed' && '설치 실패'}
+                </h3>
+                <p className="text-sm text-gray-300 mb-2">
+                  {profile.installationStatus === 'installing' && '이 프로필은 현재 모드팩 설치가 진행 중입니다. 설치가 완료될 때까지 기다려주세요.'}
+                  {profile.installationStatus === 'incomplete' && '이 프로필은 모드팩 설치가 완료되지 않았습니다. 런처를 닫는 등의 이유로 설치가 중단되었을 수 있습니다.'}
+                  {profile.installationStatus === 'failed' && '이 프로필의 모드팩 설치가 실패했습니다. 네트워크 연결을 확인하거나 다시 시도해주세요.'}
+                </p>
+                <p className="text-sm text-gray-400">
+                  이 프로필로는 게임을 실행할 수 없습니다. 프로필을 삭제하고 다시 생성해주세요.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Content */}

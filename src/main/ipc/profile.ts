@@ -105,6 +105,7 @@ export function registerProfileHandlers(): void {
         fullscreen: data.fullscreen ?? false,
         favorite: data.favorite ?? false,
         serverAddress: data.serverAddress ?? '',
+        installationStatus: (data as any).installationStatus ?? 'complete',
       };
       const res = await profileRpc.updateProfile({ id, patch });
       console.log(`[IPC Profile] Profile updated successfully:`);
@@ -711,5 +712,6 @@ function fromPbProfile(p: pb.Profile): Profile {
     spaEnabled: false,
     serverAddress: p.serverAddress ?? '',
     favorite: p.favorite ?? false,
+    installationStatus: p.installationStatus || 'complete',
   } as any;
 }

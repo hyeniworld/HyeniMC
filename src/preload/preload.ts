@@ -232,6 +232,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke(IPC_CHANNELS.MODPACK_GET_VERSIONS, modpackId, gameVersion),
     install: (profileId: string, versionId: string): Promise<{ success: boolean }> =>
       ipcRenderer.invoke(IPC_CHANNELS.MODPACK_INSTALL, profileId, versionId),
+    cancelInstall: (profileId: string): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.MODPACK_CANCEL_INSTALL, profileId),
     installUrl: (profileId: string, url: string): Promise<{ success: boolean }> =>
       ipcRenderer.invoke(IPC_CHANNELS.MODPACK_IMPORT_URL, profileId, url),
     validateFile: (filePath: string): Promise<any> =>

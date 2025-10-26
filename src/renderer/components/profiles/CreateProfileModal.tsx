@@ -25,6 +25,7 @@ export function CreateProfileModal({ isOpen, onClose, onSuccess, initialModpackI
   const [tab, setTab] = useState<'custom' | 'modpack' | 'import'>('custom');
   const [step, setStep] = useState<'basic' | 'modpack' | 'installing'>('basic');
   const [showModpackSearch, setShowModpackSearch] = useState(false);
+  const [importing, setImporting] = useState(false);
   
   const [versions, setVersions] = useState<string[]>([]);
   const [loadingVersions, setLoadingVersions] = useState(true);
@@ -43,6 +44,7 @@ export function CreateProfileModal({ isOpen, onClose, onSuccess, initialModpackI
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [modpackProgress, setModpackProgress] = useState<{ stage: string; progress: number; message: string } | null>(null);
+  const [installingProfileId, setInstallingProfileId] = useState<string | null>(null);
   
   // Loader versions
   const [loaderVersions, setLoaderVersions] = useState<Array<{ version: string; stable: boolean }>>([]);
@@ -180,7 +182,43 @@ export function CreateProfileModal({ isOpen, onClose, onSuccess, initialModpackI
     setFormData((prev: any) => ({ ...prev, [field]: value }));
   };
 
+  const handleClose = async () => {
+    // 설치 중이면 확인 다이얼로그 표시
+    if (loading || importing) {
+      const confirmed = window.confirm(
+        '모드팩 설치가 진행 중입니다.\n' +
+        '지금 닫으면 설치가 취소되고 프로필이 삭제됩니다.\n' +
+        '정말 닫으시겠습니까?'
+      );
+      
+      if (!confirmed) {
+        return;
+      }
+      
+      // 설치 취소 API 호출
+      if (installingProfileId) {
+        try {
+          await window.electronAPI.modpack.cancelInstall(installingProfileId);
+          console.log('[CreateProfileModal] Installation cancelled for profile:', installingProfileId);
+          
+          // 프로필 목록 갱신
+          onSuccess();
+        } catch (err) {
+          console.error('[CreateProfileModal] Failed to cancel installation:', err);
+        }
+      }
+    }
+    
+    // 상태 초기화
+    setLoading(false);
+    setImporting(false);
+    setModpackProgress(null);
+    setInstallingProfileId(null);
+    onClose();
+  };
+
   const handleModpackSelect = async (modpackId: string, versionId: string, gameVersion: string, loaderType: string) => {
+    let profileId: string | null = null;
     try {
       setLoading(true);
       setError(null);
@@ -196,17 +234,35 @@ export function CreateProfileModal({ isOpen, onClose, onSuccess, initialModpackI
       };
 
       const profile = await window.electronAPI.profile.create(profileData);
+      profileId = profile.id;
+      
+      if (!profileId) {
+        throw new Error('프로필 생성에 실패했습니다: 프로필 ID를 받지 못했습니다.');
+      }
+      
+      setInstallingProfileId(profileId);
       
       // Install modpack
-      await window.electronAPI.modpack.install(profile.id, versionId);
+      await window.electronAPI.modpack.install(profileId, versionId);
       
       toast.success('설치 성공', '모드팩이 성공적으로 설치되었습니다!');
+      setInstallingProfileId(null);
       onSuccess();
     } catch (err) {
       console.error('Failed to install modpack:', err);
       setError(err instanceof Error ? err.message : '모드팩 설치에 실패했습니다.');
       setLoading(false);
       setModpackProgress(null);
+      
+      // 실패 시 프로필 삭제 시도
+      if (profileId) {
+        try {
+          await window.electronAPI.profile.delete(profileId);
+        } catch (deleteErr) {
+          console.error('Failed to delete profile after installation failure:', deleteErr);
+        }
+      }
+      setInstallingProfileId(null);
     }
   };
 
@@ -238,8 +294,7 @@ export function CreateProfileModal({ isOpen, onClose, onSuccess, initialModpackI
               새 프로필 만들기
             </h2>
             <button
-              onClick={onClose}
-              disabled={loading}
+              onClick={handleClose}
               className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-gray-800 rounded-lg"
             >
               <X className="w-5 h-5" />
@@ -251,7 +306,8 @@ export function CreateProfileModal({ isOpen, onClose, onSuccess, initialModpackI
             <button
               type="button"
               onClick={() => setTab('custom')}
-              className={`flex-1 py-2 px-3 rounded-md font-medium transition-all flex items-center justify-center gap-2 text-sm ${
+              disabled={loading || importing}
+              className={`flex-1 py-2 px-3 rounded-md font-medium transition-all flex items-center justify-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed ${
                 tab === 'custom'
                   ? 'bg-purple-600 text-white shadow-lg'
                   : 'text-gray-400 hover:text-white hover:bg-gray-700'
@@ -263,7 +319,8 @@ export function CreateProfileModal({ isOpen, onClose, onSuccess, initialModpackI
             <button
               type="button"
               onClick={() => setTab('modpack')}
-              className={`flex-1 py-2 px-3 rounded-md font-medium transition-all flex items-center justify-center gap-2 text-sm ${
+              disabled={loading || importing}
+              className={`flex-1 py-2 px-3 rounded-md font-medium transition-all flex items-center justify-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed ${
                 tab === 'modpack'
                   ? 'bg-purple-600 text-white shadow-lg'
                   : 'text-gray-400 hover:text-white hover:bg-gray-700'
@@ -275,7 +332,8 @@ export function CreateProfileModal({ isOpen, onClose, onSuccess, initialModpackI
             <button
               type="button"
               onClick={() => setTab('import')}
-              className={`flex-1 py-2 px-3 rounded-md font-medium transition-all flex items-center justify-center gap-2 text-sm ${
+              disabled={loading || importing}
+              className={`flex-1 py-2 px-3 rounded-md font-medium transition-all flex items-center justify-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed ${
                 tab === 'import'
                   ? 'bg-purple-600 text-white shadow-lg'
                   : 'text-gray-400 hover:text-white hover:bg-gray-700'
@@ -549,7 +607,7 @@ export function CreateProfileModal({ isOpen, onClose, onSuccess, initialModpackI
             </button>
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleClose}
               disabled={loading}
               className="flex-1 btn-secondary disabled:opacity-50 py-3 text-base font-semibold"
             >
@@ -591,9 +649,9 @@ export function CreateProfileModal({ isOpen, onClose, onSuccess, initialModpackI
 
               <button
                 type="button"
-                onClick={onClose}
+                onClick={handleClose}
                 disabled={loading}
-                className="w-full btn-secondary py-3 text-base font-semibold"
+                className="w-full btn-secondary py-3 text-base font-semibold disabled:opacity-50"
               >
                 취소
               </button>
@@ -602,7 +660,11 @@ export function CreateProfileModal({ isOpen, onClose, onSuccess, initialModpackI
 
           {/* Import Tab */}
           {tab === 'import' && (
-            <ImportModpackTab onSuccess={onSuccess} />
+            <ImportModpackTab 
+              onSuccess={onSuccess}
+              onImportingChange={setImporting}
+              onProfileIdChange={setInstallingProfileId}
+            />
           )}
         </div>
       </div>

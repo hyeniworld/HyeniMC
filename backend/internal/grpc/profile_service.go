@@ -133,6 +133,9 @@ func (s *profileServiceServer) UpdateProfile(ctx context.Context, req *pb.Update
 			updates["fullscreen"] = patch.Fullscreen
 			updates["favorite"] = patch.Favorite
 			updates["serverAddress"] = patch.ServerAddress
+			if patch.InstallationStatus != "" {
+				updates["installationStatus"] = patch.InstallationStatus
+			}
 		}
 	}
 
@@ -177,8 +180,9 @@ func toPbProfile(p *domain.Profile) *pb.Profile {
 		JavaPath:         p.JavaPath,
 		ResolutionWidth:  p.Resolution.Width,
 		ResolutionHeight: p.Resolution.Height,
-		Fullscreen:       p.Fullscreen,
-		Favorite:         p.Favorite,
-		ServerAddress:    p.ServerAddress,
+		Fullscreen:         p.Fullscreen,
+		Favorite:           p.Favorite,
+		ServerAddress:      p.ServerAddress,
+		InstallationStatus: p.InstallationStatus,
 	}
 }

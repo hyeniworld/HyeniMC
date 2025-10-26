@@ -60,7 +60,10 @@ export class TimeoutManager {
       startTime: Date.now(),
     });
 
-    console.log(`[Timeout] Set: ${key} (${type}ms)`);
+    // GRPC 하트비트는 로그 생략 (너무 자주 발생)
+    if (type !== TimeoutType.GRPC_STREAM_HEARTBEAT) {
+      console.log(`[Timeout] Set: ${key} (${type}ms)`);
+    }
   }
 
   /**
@@ -73,8 +76,11 @@ export class TimeoutManager {
       clearTimeout(info.timeout);
       this.activeTimeouts.delete(key);
       
-      const elapsed = Date.now() - info.startTime;
-      console.log(`[Timeout] Cleared: ${key} (elapsed: ${elapsed}ms)`);
+      // GRPC 하트비트는 로그 생략
+      if (info.type !== TimeoutType.GRPC_STREAM_HEARTBEAT) {
+        const elapsed = Date.now() - info.startTime;
+        console.log(`[Timeout] Cleared: ${key} (elapsed: ${elapsed}ms)`);
+      }
     }
   }
 
@@ -88,7 +94,8 @@ export class TimeoutManager {
     const wasActive = this.activeTimeouts.has(key);
     this.set(key, type, callback);
     
-    if (wasActive) {
+    // GRPC 하트비트는 로그 생략
+    if (wasActive && type !== TimeoutType.GRPC_STREAM_HEARTBEAT) {
       console.log(`[Timeout] Extended: ${key}`);
     }
   }
