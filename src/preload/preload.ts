@@ -63,6 +63,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     
     remove: (id: string): Promise<void> =>
       ipcRenderer.invoke(IPC_CHANNELS.ACCOUNT_REMOVE, id),
+    
+    refresh: (id: string): Promise<any> =>
+      ipcRenderer.invoke(IPC_CHANNELS.ACCOUNT_REFRESH, id),
   },
   
   // Version APIs

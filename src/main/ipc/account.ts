@@ -146,6 +146,69 @@ export function registerAccountHandlers() {
       throw error;
     }
   });
+
+  // Refresh account info from Microsoft/Minecraft API
+  ipcMain.handle(IPC_CHANNELS.ACCOUNT_REFRESH, async (event, accountId: string) => {
+    try {
+      console.log('[IPC Account] Refreshing account info:', accountId);
+      
+      const account = await accountManager.getAccount(accountId);
+      if (!account) {
+        throw new Error('계정을 찾을 수 없습니다');
+      }
+
+      if (account.type === 'offline') {
+        throw new Error('오프라인 계정은 새로고침할 수 없습니다');
+      }
+
+      // Get current tokens
+      const tokens = await accountManager.getAccountTokens(accountId);
+      if (!tokens) {
+        throw new Error('토큰을 가져올 수 없습니다');
+      }
+
+      // Refresh tokens to get latest
+      console.log('[IPC Account] Refreshing tokens from Microsoft...');
+      const newTokens = await authService.refreshToken(tokens.refreshToken);
+      const newExpiresAt = Date.now() + newTokens.expiresIn * 1000;
+
+      // Get fresh profile from Microsoft/Minecraft API
+      console.log('[IPC Account] Fetching latest profile from Minecraft API...');
+      const profile = await authService.getProfileFromToken(newTokens.accessToken);
+
+      // Update account with new tokens and profile info
+      await accountManager.updateAccountTokens(
+        accountId,
+        newTokens.accessToken,
+        newTokens.refreshToken,
+        newExpiresAt
+      );
+
+      // Update account info in database
+      await accountManager.saveMicrosoftAccount({
+        id: accountId,
+        name: profile.name,
+        uuid: profile.uuid,
+        accessToken: newTokens.accessToken,
+        refreshToken: newTokens.refreshToken,
+        expiresAt: newExpiresAt,
+        skin: profile.skin,
+      });
+
+      console.log('[IPC Account] Account refreshed successfully');
+
+      return {
+        id: accountId,
+        name: profile.name,
+        uuid: profile.uuid,
+        type: 'microsoft' as const,
+        skin: profile.skin,
+      };
+    } catch (error: any) {
+      console.error('[IPC Account] Failed to refresh account:', error);
+      throw error;
+    }
+  });
 }
 
 export function getAccountManager(): AccountManager {

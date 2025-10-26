@@ -29,6 +29,7 @@ declare global {
         addOffline: (username: string) => Promise<any>;
         list: () => Promise<any[]>;
         remove: (id: string) => Promise<void>;
+        refresh: (id: string) => Promise<any>;
       };
       version: {
         list: (releaseOnly?: boolean) => Promise<string[]>;

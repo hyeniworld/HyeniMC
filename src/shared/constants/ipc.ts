@@ -27,6 +27,7 @@ export const IPC_CHANNELS = {
   ACCOUNT_LIST: 'account:list',
   ACCOUNT_REMOVE: 'account:remove',
   ACCOUNT_GET_FOR_LAUNCH: 'account:get:for:launch',
+  ACCOUNT_REFRESH: 'account:refresh',
   
   // Game download channels
   GAME_DOWNLOAD_VERSION: 'game:download-version',

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useToast } from '../../contexts/ToastContext';
-import { User, UserPlus, Trash2, LogIn, ChevronDown } from 'lucide-react';
+import { User, UserPlus, Trash2, LogIn, ChevronDown, RefreshCw } from 'lucide-react';
 
 interface Account {
   id: string;
@@ -94,6 +94,21 @@ export function AccountManager({ selectedAccountId, onAccountChange }: AccountMa
     }
   };
 
+  const handleRefreshAccount = async (accountId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setLoading(true);
+    
+    try {
+      await window.electronAPI.account.refresh(accountId);
+      await loadAccounts();
+      toast.success('계정 갱신 완료', 'Microsoft에서 최신 정보를 가져왔습니다');
+    } catch (error: any) {
+      toast.error('갱신 실패', error.message || '계정 갱신에 실패했습니다');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const selectedAccount = accounts.find(acc => acc.id === selectedAccountId);
 
   return (
@@ -108,7 +123,7 @@ export function AccountManager({ selectedAccountId, onAccountChange }: AccountMa
             <>
               {selectedAccount.uuid ? (
                 <img
-                  src={`https://crafatar.com/avatars/${selectedAccount.uuid}?size=32&overlay`}
+                  src={`https://crafatar.com/avatars/${selectedAccount.uuid}?size=32&overlay&t=${Math.floor(Date.now() / 3600000)}`}
                   alt={selectedAccount.name}
                   className="w-6 h-6 rounded"
                   onError={(e) => {
@@ -179,7 +194,7 @@ export function AccountManager({ selectedAccountId, onAccountChange }: AccountMa
                     <div className="flex items-center gap-2">
                       {account.uuid ? (
                         <img
-                          src={`https://crafatar.com/avatars/${account.uuid}?size=32&overlay`}
+                          src={`https://crafatar.com/avatars/${account.uuid}?size=32&overlay&t=${Math.floor(Date.now() / 3600000)}`}
                           alt={account.name}
                           className="w-8 h-8 rounded"
                           onError={(e) => {
@@ -189,13 +204,13 @@ export function AccountManager({ selectedAccountId, onAccountChange }: AccountMa
                             if (fallback) fallback.style.display = 'flex';
                           }}
                         />
-                      ) : (
-                        <div 
-                          className="w-8 h-8 rounded bg-gray-700 flex items-center justify-center text-white text-sm font-bold"
-                        >
-                          {account.name[0]?.toUpperCase() || '?'}
-                        </div>
-                      )}
+                      ) : null}
+                      <div 
+                        className="w-8 h-8 rounded bg-gray-700 flex items-center justify-center text-white text-sm font-bold"
+                        style={{ display: account.uuid ? 'none' : 'flex' }}
+                      >
+                        {account.name[0]?.toUpperCase() || '?'}
+                      </div>
                       <div>
                         <div className="font-medium text-sm">{account.name}</div>
                         <div className="text-xs text-gray-400">
@@ -207,12 +222,24 @@ export function AccountManager({ selectedAccountId, onAccountChange }: AccountMa
                         </div>
                       </div>
                     </div>
-                    <button
-                      onClick={(e) => handleRemoveAccount(account.id, e)}
-                      className="p-1 hover:bg-red-600/20 rounded text-red-400 hover:text-red-300"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex gap-1">
+                      {account.type === 'microsoft' && (
+                        <button
+                          onClick={(e) => handleRefreshAccount(account.id, e)}
+                          className="p-1 hover:bg-blue-600/20 rounded text-blue-400 hover:text-blue-300"
+                          title="계정 정보 갱신"
+                        >
+                          <RefreshCw className="w-4 h-4" />
+                        </button>
+                      )}
+                      <button
+                        onClick={(e) => handleRemoveAccount(account.id, e)}
+                        className="p-1 hover:bg-red-600/20 rounded text-red-400 hover:text-red-300"
+                        title="계정 삭제"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}

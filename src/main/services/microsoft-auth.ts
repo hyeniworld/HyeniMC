@@ -574,6 +574,13 @@ export class MicrosoftAuthService {
   }
 
   /**
+   * Get Minecraft profile from existing access token
+   */
+  async getProfileFromToken(mcAccessToken: string): Promise<{ uuid: string; name: string; skin?: string }> {
+    return await this.getMinecraftProfile(mcAccessToken);
+  }
+
+  /**
    * Validate if user owns Minecraft
    */
   async checkGameOwnership(mcAccessToken: string): Promise<boolean> {
