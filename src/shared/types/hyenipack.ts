@@ -278,3 +278,41 @@ export interface HyeniPackDetectionResult {
   name?: string;
   version?: string;
 }
+
+/**
+ * 실패한 모드 정보
+ */
+export interface FailedMod {
+  fileName: string;
+  reason: string;
+  category: 'api_error' | 'download_failed' | 'checksum_mismatch' | 'not_found' | 'timeout';
+  retryable: boolean;
+  attempts: number;
+  lastError?: string;
+}
+
+/**
+ * Import 결과 (확장)
+ */
+export interface HyeniPackImportResult {
+  success: boolean;
+  expectedMods: number;
+  installedMods: number;
+  failedMods: FailedMod[];
+  partialSuccess: boolean;
+  minecraftVersion?: string;
+  loaderType?: string;
+  loaderVersion?: string;
+  warning?: string;
+  error?: string;
+}
+
+/**
+ * 상세 진행률 정보
+ */
+export interface DetailedImportProgress extends HyeniPackImportProgress {
+  installedMods?: number;
+  failedMods?: number;
+  retryingMods?: string[];
+  estimatedTimeRemaining?: number;
+}

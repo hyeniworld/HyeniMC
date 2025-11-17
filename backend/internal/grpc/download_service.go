@@ -212,56 +212,92 @@ func (s *downloadServiceServer) StartDownload(ctx context.Context, req *pb.Downl
 				}
 				s.broadcast(&pb.ProgressEvent{TaskId: taskID, Status: "downloading", Type: evBase.Type, Name: evBase.Name, ProfileId: evBase.ProfileId, FileName: evBase.FileName, Total: total, Downloaded: downloaded, Progress: percent})
 			})
-			if err == nil {
-				break
+			if err != nil {
+				// Check if error is retryable
+				if !isRetryableError(err) {
+					// Permanent error (404, 403, etc) - fail immediately
+					break
+				}
+				
+				// Last attempt - no need to wait
+				if attempt >= maxRetries {
+					break
+				}
+				
+				// Exponential backoff: 1s, 2s, 4s, 8s, 16s, max 30s
+				backoffDelay := time.Duration(1<<uint(attempt)) * time.Second
+				maxBackoff := 30 * time.Second
+				if backoffDelay > maxBackoff {
+					backoffDelay = maxBackoff
+				}
+				
+				s.broadcast(&pb.ProgressEvent{
+					TaskId:    taskID,
+					Status:    "retrying",
+					Error:     fmt.Sprintf("Attempt %d/%d failed: %v. Retrying in %v...", attempt+1, maxRetries+1, err, backoffDelay),
+					Type:      evBase.Type,
+					Name:      evBase.Name,
+					ProfileId: evBase.ProfileId,
+					FileName:  evBase.FileName,
+				})
+				
+				select {
+				case <-dlCtx.Done():
+					err = context.Canceled
+					attempt = maxRetries + 1 // Force exit from retry loop
+				case <-time.After(backoffDelay):
+				}
+				continue
 			}
 			
-			// Check if error is retryable
-			if !isRetryableError(err) {
-				// Permanent error (404, 403, etc) - fail immediately
-				break
+			// verify checksum if provided (inside retry loop)
+			if c := req.GetChecksum(); c != nil && c.GetValue() != "" {
+				if verr := verifyChecksum(tmp, c.GetAlgo(), c.GetValue()); verr != nil {
+					_ = os.Remove(tmp) // Remove corrupted file
+					
+					if attempt < maxRetries {
+						err = verr // Set error for retry
+						s.broadcast(&pb.ProgressEvent{
+							TaskId:    taskID,
+							Status:    "retrying",
+							Error:     fmt.Sprintf("Checksum mismatch (attempt %d/%d). Retrying...", attempt+1, maxRetries+1),
+							Type:      evBase.Type,
+							Name:      evBase.Name,
+							ProfileId: evBase.ProfileId,
+							FileName:  evBase.FileName,
+						})
+						
+						// Backoff before retry
+						backoffDelay := time.Duration(1<<uint(attempt)) * time.Second
+						select {
+						case <-dlCtx.Done():
+							err = context.Canceled
+							attempt = maxRetries + 1
+						case <-time.After(backoffDelay):
+						}
+						continue
+					}
+					
+					// Final checksum failure
+					s.broadcast(&pb.ProgressEvent{
+						TaskId:    taskID,
+						Status:    "failed",
+						Error:     fmt.Sprintf("Checksum verification failed after all retries: %v", verr),
+						Type:      evBase.Type,
+						Name:      evBase.Name,
+						ProfileId: evBase.ProfileId,
+						FileName:  evBase.FileName,
+					})
+					return
+				}
 			}
 			
-			// Last attempt - no need to wait
-			if attempt >= maxRetries {
-				break
-			}
-			
-			// Exponential backoff: 1s, 2s, 4s, 8s, 16s, max 30s
-			backoffDelay := time.Duration(1<<uint(attempt)) * time.Second
-			maxBackoff := 30 * time.Second
-			if backoffDelay > maxBackoff {
-				backoffDelay = maxBackoff
-			}
-			
-			s.broadcast(&pb.ProgressEvent{
-				TaskId:    taskID,
-				Status:    "retrying",
-				Error:     fmt.Sprintf("Attempt %d/%d failed: %v. Retrying in %v...", attempt+1, maxRetries+1, err, backoffDelay),
-				Type:      evBase.Type,
-				Name:      evBase.Name,
-				ProfileId: evBase.ProfileId,
-				FileName:  evBase.FileName,
-			})
-			
-			select {
-			case <-dlCtx.Done():
-				err = context.Canceled
-				attempt = maxRetries + 1 // Force exit from retry loop
-			case <-time.After(backoffDelay):
-			}
+			// Success
+			break
 		}
 		if err != nil {
 			s.broadcast(&pb.ProgressEvent{TaskId: taskID, Status: "failed", Error: err.Error(), Type: evBase.Type, Name: evBase.Name, ProfileId: evBase.ProfileId, FileName: evBase.FileName})
 			return
-		}
-		// verify checksum if provided
-		if c := req.GetChecksum(); c != nil && c.GetValue() != "" {
-			if verr := verifyChecksum(tmp, c.GetAlgo(), c.GetValue()); verr != nil {
-				_ = os.Remove(tmp)
-				s.broadcast(&pb.ProgressEvent{TaskId: taskID, Status: "failed", Error: fmt.Sprintf("checksum mismatch: %v", verr), Type: evBase.Type, Name: evBase.Name, ProfileId: evBase.ProfileId, FileName: evBase.FileName})
-				return
-			}
 		}
 		// atomic rename
 		if err := os.Rename(tmp, dest); err != nil {

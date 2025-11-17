@@ -86,7 +86,7 @@ declare global {
         installUrl: (profileId: string, url: string) => Promise<{ success: boolean }>;
         validateFile: (filePath: string) => Promise<any>;
         extractMetadata: (filePath: string) => Promise<any>;
-        importFile: (filePath: string, profileId: string) => Promise<{ success: boolean }>;
+        importFile: (filePath: string, profileId: string) => Promise<{ success: boolean; result?: any }>;
         selectFile: () => Promise<string | null>;
       };
       resourcepack: {

@@ -36,6 +36,10 @@ export interface ModpackInstallProgress {
   stage: 'validating' | 'downloading' | 'extracting' | 'installing_loader' | 'installing_mods' | 'applying_overrides' | 'complete';
   progress: number;
   message: string;
+  installedMods?: number;
+  failedMods?: number;
+  currentMod?: string;
+  totalMods?: number;
 }
 
 export interface ModpackFileInfo {
@@ -799,6 +803,7 @@ export class ModpackManager {
     minecraftVersion?: string;
     loaderType?: string;
     loaderVersion?: string;
+    importResult?: any;
   }> {
     const tempDir = path.join(instanceDir, '.temp_modpack_import');
 
@@ -846,7 +851,7 @@ export class ModpackManager {
       zip.extractAllTo(tempDir, true);
 
       // 4. 형식별 처리
-      let loaderInfo: { minecraftVersion?: string; loaderType?: string; loaderVersion?: string } = {};
+      let loaderInfo: { minecraftVersion?: string; loaderType?: string; loaderVersion?: string; importResult?: any } = {};
       
       switch (fileInfo.format) {
         case 'hyenipack':
@@ -880,17 +885,22 @@ export class ModpackManager {
                 stage: mappedStage,
                 progress: progress.progress,
                 message: progress.message,
+                installedMods: progress.installedMods,
+                failedMods: progress.failedMods,
+                currentMod: progress.currentMod,
+                totalMods: progress.totalMods,
               });
             } : undefined,
             // 취소 체크 콜백
             () => this.activeInstalls.get(profileId)?.cancelled || false
           );
           
-          // 로더 정보 저장
+          // 로더 정보 및 importResult 저장
           loaderInfo = {
             minecraftVersion: result.minecraftVersion,
             loaderType: result.loaderType,
             loaderVersion: result.loaderVersion,
+            importResult: result, // 전체 result 포함
           };
           break;
           /* // 이전 코드 (삭제됨)

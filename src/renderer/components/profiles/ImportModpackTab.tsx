@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Upload, FileArchive, Loader2, CheckCircle2, XCircle, Package, Cpu, HardDrive } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Upload, FileArchive, Loader2, CheckCircle2, XCircle, Package, Cpu, HardDrive, AlertTriangle, X } from 'lucide-react';
 
 interface ImportModpackTabProps {
   onSuccess: () => void;
@@ -18,6 +18,25 @@ interface ModpackMetadata {
   fileSize: number;
 }
 
+interface FailedMod {
+  fileName: string;
+  reason: string;
+  category: 'api_error' | 'download_failed' | 'checksum_mismatch' | 'not_found' | 'timeout';
+  retryable: boolean;
+  attempts: number;
+  lastError?: string;
+}
+
+interface ImportResult {
+  success: boolean;
+  expectedMods: number;
+  installedMods: number;
+  failedMods: FailedMod[];
+  partialSuccess: boolean;
+  warning?: string;
+  error?: string;
+}
+
 export function ImportModpackTab({ onSuccess, onImportingChange, onProfileIdChange }: ImportModpackTabProps) {
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [metadata, setMetadata] = useState<ModpackMetadata | null>(null);
@@ -27,6 +46,9 @@ export function ImportModpackTab({ onSuccess, onImportingChange, onProfileIdChan
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<any>(null);
   const [dragActive, setDragActive] = useState(false);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [currentProfileId, setCurrentProfileId] = useState<string | null>(null);
+  const [showFailedMods, setShowFailedMods] = useState(false);
 
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 Bytes';
@@ -122,6 +144,30 @@ export function ImportModpackTab({ onSuccess, onImportingChange, onProfileIdChan
     }
   };
 
+  const handleCancel = async () => {
+    if (!currentProfileId) return;
+    
+    if (confirm('설치를 취소하시겠습니까? 진행 중인 다운로드가 중단됩니다.')) {
+      try {
+        await window.electronAPI.modpack.cancelInstall(currentProfileId);
+        console.log('[ImportModpackTab] Installation cancelled');
+        
+        setImporting(false);
+        onImportingChange?.(false);
+        onProfileIdChange?.(null);
+        setCurrentProfileId(null);
+        setProgress(null);
+        setSelectedFile(null);
+        setMetadata(null);
+        setProfileName('');
+        setError('사용자가 설치를 취소했습니다');
+      } catch (err) {
+        console.error('Failed to cancel installation:', err);
+        setError('취소 실패: ' + (err instanceof Error ? err.message : '알 수 없는 오류'));
+      }
+    }
+  };
+
   const handleImport = async () => {
     if (!selectedFile || !profileName.trim() || !metadata) {
       setError('프로필 이름을 입력해주세요');
@@ -132,6 +178,7 @@ export function ImportModpackTab({ onSuccess, onImportingChange, onProfileIdChan
       setImporting(true);
       onImportingChange?.(true);
       setError(null);
+      setImportResult(null);
 
       // 1. Create profile first
       const profileData = {
@@ -147,7 +194,8 @@ export function ImportModpackTab({ onSuccess, onImportingChange, onProfileIdChan
       const profile = await window.electronAPI.profile.create(profileData);
       console.log('Created profile:', profile);
       
-      // 부모에게 프로필 ID 전달
+      // 프로필 ID 저장 (취소용)
+      setCurrentProfileId(profile.id);
       onProfileIdChange?.(profile.id);
 
       // 2. Listen for progress
@@ -155,19 +203,39 @@ export function ImportModpackTab({ onSuccess, onImportingChange, onProfileIdChan
         setProgress(data);
       });
 
-      // 3. Import modpack into profile (instanceDir is computed on main by profileId)
-      await window.electronAPI.modpack.importFile(selectedFile, profile.id);
+      // 3. Import modpack into profile
+      const result = await window.electronAPI.modpack.importFile(selectedFile, profile.id);
+      
+      // 4. 결과 처리
+      if (result?.result) {
+        setImportResult(result.result);
+        
+        if (result.result.partialSuccess) {
+          // 부분 성공 - 경고 표시
+          setError(`경고: ${result.result.failedMods.length}개 모드 설치 실패 (${result.result.installedMods}/${result.result.expectedMods} 설치 완료)`);
+        } else if (!result.result.success) {
+          // 완전 실패
+          throw new Error(result.result.error || '모드팩 가져오기에 실패했습니다');
+        }
+      }
 
       cleanupProgress();
+      setImporting(false);
       onImportingChange?.(false);
       onProfileIdChange?.(null);
-      onSuccess();
+      setCurrentProfileId(null);
+      
+      // 성공 또는 부분 성공시 성공 핸들러 호출
+      if (!result?.result || result.result.success || result.result.partialSuccess) {
+        onSuccess();
+      }
     } catch (err) {
       console.error('Failed to import modpack:', err);
       setError(err instanceof Error ? err.message : '모드팩 가져오기에 실패했습니다');
       setImporting(false);
       onImportingChange?.(false);
       onProfileIdChange?.(null);
+      setCurrentProfileId(null);
       setProgress(null);
     }
   };
@@ -319,7 +387,7 @@ export function ImportModpackTab({ onSuccess, onImportingChange, onProfileIdChan
           {/* Progress */}
           {importing && progress && (
             <div className="card bg-gray-900/50 border-purple-500/30">
-              <div className="mb-3">
+              <div className="mb-4">
                 <div className="flex items-center justify-between text-sm mb-2">
                   <span className="text-gray-300 font-medium">{progress.message}</span>
                   <span className="text-purple-400 font-bold">{progress.progress}%</span>
@@ -331,9 +399,39 @@ export function ImportModpackTab({ onSuccess, onImportingChange, onProfileIdChan
                   />
                 </div>
               </div>
-              <div className="flex items-center gap-2 text-xs text-gray-400">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>모드팩을 가져오는 중입니다...</span>
+              
+              {/* 상세 정보 */}
+              {(progress.installedMods !== undefined || progress.failedMods !== undefined) && (
+                <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-green-400" />
+                    <span className="text-gray-300">
+                      성공: <strong className="text-green-400">{progress.installedMods || 0}</strong>
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <XCircle className="w-4 h-4 text-red-400" />
+                    <span className="text-gray-300">
+                      실패: <strong className="text-red-400">{progress.failedMods || 0}</strong>
+                    </span>
+                  </div>
+                </div>
+              )}
+              
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs text-gray-400">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>모드팩을 가져오는 중입니다...</span>
+                </div>
+                
+                {/* 취소 버튼 */}
+                <button
+                  onClick={handleCancel}
+                  className="btn-secondary px-3 py-1.5 text-xs flex items-center gap-1.5 hover:bg-red-500/20 hover:border-red-500/30"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  취소
+                </button>
               </div>
             </div>
           )}
@@ -352,15 +450,75 @@ export function ImportModpackTab({ onSuccess, onImportingChange, onProfileIdChan
         </div>
       )}
 
-      {/* Error Message */}
+      {/* Error/Warning Message */}
       {error && (
-        <div className="p-4 bg-red-900/20 border border-red-500/30 rounded-lg text-red-300 text-sm">
+        <div className={`p-4 border rounded-lg text-sm ${
+          importResult?.partialSuccess 
+            ? 'bg-yellow-900/20 border-yellow-500/30 text-yellow-300' 
+            : 'bg-red-900/20 border-red-500/30 text-red-300'
+        }`}>
           <div className="flex items-start gap-2">
-            <XCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="font-semibold mb-1">오류</p>
+            {importResult?.partialSuccess ? (
+              <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+            ) : (
+              <XCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+            )}
+            <div className="flex-1">
+              <p className="font-semibold mb-1">
+                {importResult?.partialSuccess ? '경고' : '오류'}
+              </p>
               <p>{error}</p>
+              
+              {importResult?.partialSuccess && (
+                <button
+                  onClick={() => setShowFailedMods(!showFailedMods)}
+                  className="mt-2 text-xs underline hover:text-yellow-200"
+                >
+                  {showFailedMods ? '실패 목록 숨기기' : '실패 목록 보기'}
+                </button>
+              )}
             </div>
+          </div>
+        </div>
+      )}
+      
+      {/* 실패한 모드 리스트 */}
+      {showFailedMods && importResult?.failedMods && importResult.failedMods.length > 0 && (
+        <div className="card bg-gray-900/50 border-red-500/30">
+          <h4 className="text-sm font-semibold text-gray-200 mb-3 flex items-center gap-2">
+            <XCircle className="w-4 h-4 text-red-400" />
+            설치 실패한 모드 ({importResult.failedMods.length}개)
+          </h4>
+          <div className="space-y-2 max-h-60 overflow-y-auto">
+            {importResult.failedMods.map((mod, idx) => (
+              <div key={idx} className="p-3 bg-gray-800/50 rounded border border-gray-700 text-xs">
+                <div className="flex items-start justify-between gap-2 mb-1">
+                  <span className="font-mono text-gray-300 break-all">{mod.fileName}</span>
+                  <span className={`px-2 py-0.5 rounded text-xs font-semibold flex-shrink-0 ${
+                    mod.category === 'api_error' ? 'bg-orange-500/20 text-orange-300' :
+                    mod.category === 'download_failed' ? 'bg-red-500/20 text-red-300' :
+                    mod.category === 'checksum_mismatch' ? 'bg-purple-500/20 text-purple-300' :
+                    mod.category === 'not_found' ? 'bg-gray-500/20 text-gray-300' :
+                    'bg-yellow-500/20 text-yellow-300'
+                  }`}>
+                    {mod.category === 'api_error' ? 'API' :
+                     mod.category === 'download_failed' ? '다운로드' :
+                     mod.category === 'checksum_mismatch' ? '체크섬' :
+                     mod.category === 'not_found' ? '누락' :
+                     '타임아웃'}
+                  </span>
+                </div>
+                <p className="text-gray-400 mb-1">{mod.reason}</p>
+                <div className="flex items-center gap-3 text-gray-500">
+                  <span>시도: {mod.attempts}회</span>
+                  {mod.lastError && (
+                    <span className="text-xs truncate" title={mod.lastError}>
+                      {mod.lastError}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}

@@ -9,11 +9,19 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import { app } from 'electron';
 import AdmZip from 'adm-zip';
-import { HyeniPackManifest, HyeniPackImportProgress } from '../../shared/types/hyenipack';
+import { 
+  HyeniPackManifest, 
+  HyeniPackImportProgress,
+  FailedMod,
+  HyeniPackImportResult,
+  DetailedImportProgress
+} from '../../shared/types/hyenipack';
 import { metadataManager } from './metadata-manager';
 import { downloadRpc } from '../grpc/clients';
 import { ModrinthAPI } from './modrinth-api';
 import { CurseForgeAPI } from './curseforge-api';
+import { retryManager } from '../utils/retry-manager';
+import { TimeoutManager, withTimeout } from '../utils/timeout-manager';
 
 // Lazy initialization
 let modrinthAPI: ModrinthAPI;
@@ -29,7 +37,18 @@ function getCurseForgeAPI(): CurseForgeAPI {
   return curseforgeAPI;
 }
 
+// 타임아웃 설정 (밀리초)
+const TIMEOUTS = {
+  GLOBAL: 30 * 60 * 1000,        // 30분 (전체)
+  API_BATCH: 5 * 60 * 1000,      // 5분 (API 수집)
+  PER_DOWNLOAD: 10 * 60 * 1000,  // 10분 (모드당)
+  STUCK_THRESHOLD: 3 * 60 * 1000, // 3분 (stuck 감지)
+};
+
 export class HyeniPackImporter {
+  private failedMods: FailedMod[] = [];
+  private installedCount: number = 0;
+  private timeoutManager: TimeoutManager | null = null;
   /**
    * 혜니팩 파일 미리보기 (manifest만 읽기)
    */
@@ -59,30 +78,34 @@ export class HyeniPackImporter {
     packFilePath: string,
     profileId: string,
     instanceDir: string,
-    onProgress?: (progress: HyeniPackImportProgress) => void,
+    onProgress?: (progress: DetailedImportProgress) => void,
     checkCancelled?: () => boolean
-  ): Promise<{
-    success: boolean;
-    installedMods: number;
-    minecraftVersion?: string;
-    loaderType?: string;
-    loaderVersion?: string;
-    error?: string;
-  }> {
+  ): Promise<HyeniPackImportResult> {
+    // 초기화
+    this.failedMods = [];
+    this.installedCount = 0;
+    this.timeoutManager = new TimeoutManager({
+      globalTimeoutMs: TIMEOUTS.GLOBAL,
+      stuckThresholdMs: TIMEOUTS.STUCK_THRESHOLD,
+    });
+    this.timeoutManager.start();
+
+    let manifest: HyeniPackManifest | null = null;
+
     try {
       // 취소 체크
       if (checkCancelled?.()) {
         throw new Error('Installation cancelled by user');
       }
 
-      onProgress?.({
+      this.updateProgress(onProgress, {
         stage: 'extracting',
         progress: 0,
         message: '혜니팩 파일 읽는 중...',
       });
       
       // 1. manifest 읽기
-      const manifest = await this.previewHyeniPack(packFilePath);
+      manifest = await this.previewHyeniPack(packFilePath);
       const zip = new AdmZip(packFilePath);
       
       console.log(`[HyeniPackImporter] Importing: ${manifest.name} v${manifest.version}`);
@@ -106,7 +129,7 @@ export class HyeniPackImporter {
       const modsDir = path.join(instanceDir, 'mods');
       await fs.mkdir(modsDir, { recursive: true });
       
-      onProgress?.({
+      this.updateProgress(onProgress, {
         stage: 'installing_mods',
         progress: 20,
         message: '모드 정보 수집 중...',
@@ -123,18 +146,39 @@ export class HyeniPackImporter {
       
       const localMods: any[] = [];
       
-      // API 호출을 병렬로 처리
+      // API 호출을 병렬로 처리 (재시도 + 타임아웃)
       const apiPromises = manifest.mods.map(async (modEntry) => {
         if (modEntry.metadata && modEntry.metadata.source && modEntry.metadata.projectId) {
+          let attempts = 0;
           try {
-            let version: any;
-            if (modEntry.metadata.source === 'curseforge') {
-              const versions = await getCurseForgeAPI().getModVersions(modEntry.metadata.projectId);
-              version = versions.find((v: any) => v.id === modEntry.metadata?.version);
-            } else if (modEntry.metadata.source === 'modrinth') {
-              const versions = await getModrinthAPI().getModVersions(modEntry.metadata.projectId);
-              version = versions.find((v: any) => v.id === modEntry.metadata?.version);
-            }
+            // API 호출을 재시도와 함께 실행 (최대 3회)
+            const version = await retryManager.retryWithBackoff(
+              async () => {
+                attempts++;
+                // 개별 API 호출에 30초 타임아웃
+                return await withTimeout(
+                  (async () => {
+                    let ver: any;
+                    if (modEntry.metadata!.source === 'curseforge') {
+                      const versions = await getCurseForgeAPI().getModVersions(modEntry.metadata!.projectId!);
+                      ver = versions.find((v: any) => v.id === modEntry.metadata!.version);
+                    } else if (modEntry.metadata!.source === 'modrinth') {
+                      const versions = await getModrinthAPI().getModVersions(modEntry.metadata!.projectId!);
+                      ver = versions.find((v: any) => v.id === modEntry.metadata!.version);
+                    }
+                    return ver;
+                  })(),
+                  30000,
+                  `API timeout: ${modEntry.fileName}`
+                );
+              },
+              `API call for ${modEntry.fileName}`,
+              { 
+                maxRetries: 3,
+                initialDelayMs: 1000,
+                maxDelayMs: 10000,
+              }
+            );
             
             if (version && version.downloadUrl) {
               let finalFileName = version.fileName;
@@ -149,10 +193,27 @@ export class HyeniPackImporter {
                 sha1: version.sha1,
               });
             } else {
-              console.error(`[HyeniPackImporter] Version not found: ${modEntry.fileName}`);
+              console.error(`[HyeniPackImporter] Version not found after ${attempts} attempts: ${modEntry.fileName}`);
+              // 3회 재시도 후에도 버전을 찾을 수 없는 경우
+              this.failedMods.push({
+                fileName: modEntry.fileName,
+                reason: 'API에서 버전 정보를 찾을 수 없음 (3회 재시도 완료)',
+                category: 'api_error',
+                retryable: false, // 더 이상 재시도 불가
+                attempts,
+              });
             }
-          } catch (error) {
-            console.error(`[HyeniPackImporter] API error for ${modEntry.fileName}:`, error);
+          } catch (error: any) {
+            console.error(`[HyeniPackImporter] API error after ${attempts} attempts for ${modEntry.fileName}:`, error);
+            // 3회 재시도 후 최종 실패
+            this.failedMods.push({
+              fileName: modEntry.fileName,
+              reason: error.message || 'API 호출 실패 (3회 재시도 완료)',
+              category: error.message?.includes('timeout') ? 'timeout' : 'api_error',
+              retryable: false, // 모든 재시도 소진
+              attempts,
+              lastError: error.message,
+            });
           }
         } else {
           // 로컬 모드는 나중에 처리
@@ -160,29 +221,54 @@ export class HyeniPackImporter {
         }
       });
       
-      await Promise.all(apiPromises);
+      // 전체 API 배치에 5분 타임아웃 + 취소 체크
+      const cancelPromise = new Promise<never>((_, reject) => {
+        const checkInterval = setInterval(() => {
+          if (checkCancelled?.()) {
+            clearInterval(checkInterval);
+            reject(new Error('Installation cancelled by user'));
+          }
+        }, 500); // 0.5초마다 취소 체크
+        
+        // API 배치 완료 시 인터벌 정리
+        Promise.all(apiPromises).finally(() => clearInterval(checkInterval));
+      });
+      
+      await withTimeout(
+        Promise.race([Promise.all(apiPromises), cancelPromise]),
+        TIMEOUTS.API_BATCH,
+        'API 수집 시간 초과 (5분)'
+      );
       
       console.log(`[HyeniPackImporter] Collected ${downloadTasks.length} mods to download`);
       
       // 2단계: 수집된 정보로 다운로드 실행
-      onProgress?.({
+      this.updateProgress(onProgress, {
         stage: 'installing_mods',
         progress: 30,
         message: '모드 다운로드 중...',
         totalMods: downloadTasks.length + localMods.length,
       });
       
-      let installedCount = 0;
+      // installedCount는 클래스 멤버 변수 사용
       
       for (let i = 0; i < downloadTasks.length; i++) {
         // 취소 체크
         if (checkCancelled?.()) {
           throw new Error('Installation cancelled by user');
         }
+        
+        // 타임아웃 체크
+        if (this.timeoutManager?.isGlobalTimeout()) {
+          throw new Error('전역 타임아웃 초과 (30분)');
+        }
+        if (this.timeoutManager?.isStuck()) {
+          throw new Error('설치가 3분 이상 진행되지 않았습니다');
+        }
 
         const task = downloadTasks[i];
         
-        onProgress?.({
+        this.updateProgress(onProgress, {
           stage: 'installing_mods',
           progress: 30 + Math.floor((i / (downloadTasks.length + localMods.length)) * 40),
           message: `모드 다운로드 중... (${i + 1}/${downloadTasks.length + localMods.length})`,
@@ -225,18 +311,36 @@ export class HyeniPackImporter {
             );
           });
           
-          installedCount++;
+          this.installedCount++;
           console.log(`[HyeniPackImporter] Downloaded: ${task.finalFileName}`);
-        } catch (error) {
+        } catch (error: any) {
           console.error(`[HyeniPackImporter] Download error: ${task.finalFileName}`, error);
+          
+          // 실패 모드 추적
+          this.failedMods.push({
+            fileName: task.finalFileName,
+            reason: error.message || 'Download failed',
+            category: error.message?.includes('checksum') ? 'checksum_mismatch' : 'download_failed',
+            retryable: true,
+            attempts: 1,
+            lastError: error.message,
+          });
         }
       }
       
       // 3단계: 로컬 모드 처리
       for (let i = 0; i < localMods.length; i++) {
+        // 취소 & 타임아웃 체크
+        if (checkCancelled?.()) {
+          throw new Error('Installation cancelled by user');
+        }
+        if (this.timeoutManager?.isGlobalTimeout()) {
+          throw new Error('전역 타임아웃 초과 (30분)');
+        }
+        
         const modEntry = localMods[i];
         
-        onProgress?.({
+        this.updateProgress(onProgress, {
           stage: 'installing_mods',
           progress: 30 + Math.floor(((downloadTasks.length + i) / (downloadTasks.length + localMods.length)) * 40),
           message: `모드 설치 중... (${downloadTasks.length + i + 1}/${downloadTasks.length + localMods.length})`,
@@ -249,33 +353,52 @@ export class HyeniPackImporter {
         
         if (!zipEntry) {
           console.warn(`[HyeniPackImporter] Mod not found in pack: ${modEntry.fileName}`);
+          this.failedMods.push({
+            fileName: modEntry.fileName,
+            reason: 'ZIP 파일에 모드가 없음',
+            category: 'not_found',
+            retryable: false,
+            attempts: 1,
+          });
           continue;
         }
         
-        const destPath = path.join(modsDir, modEntry.fileName);
-        
-        // 파일 추출
-        const buffer = zipEntry.getData();
-        await fs.writeFile(destPath, buffer);
-        
-        // SHA256 검증
-        const actualSha256 = await this.calculateSHA256(destPath);
-        if (actualSha256 !== modEntry.sha256) {
-          console.error(`[HyeniPackImporter] Checksum mismatch: ${modEntry.fileName}`);
-          console.error(`[HyeniPackImporter] Expected: ${modEntry.sha256}`);
-          console.error(`[HyeniPackImporter] Got: ${actualSha256}`);
+        try {
+          const destPath = path.join(modsDir, modEntry.fileName);
           
-          // 손상된 파일 삭제
-          await fs.unlink(destPath);
-          throw new Error(`파일 손상: ${modEntry.fileName}`);
+          // 파일 추출
+          const buffer = zipEntry.getData();
+          await fs.writeFile(destPath, buffer);
+          
+          // SHA256 검증
+          const actualSha256 = await this.calculateSHA256(destPath);
+          if (actualSha256 !== modEntry.sha256) {
+            console.error(`[HyeniPackImporter] Checksum mismatch: ${modEntry.fileName}`);
+            console.error(`[HyeniPackImporter] Expected: ${modEntry.sha256}`);
+            console.error(`[HyeniPackImporter] Got: ${actualSha256}`);
+            
+            // 손상된 파일 삭제
+            await fs.unlink(destPath);
+            throw new Error(`파일 손상: ${modEntry.fileName}`);
+          }
+          
+          this.installedCount++;
+          console.log(`[HyeniPackImporter] Installed local mod: ${modEntry.fileName}`);
+        } catch (error: any) {
+          console.error(`[HyeniPackImporter] Local mod error: ${modEntry.fileName}`, error);
+          this.failedMods.push({
+            fileName: modEntry.fileName,
+            reason: error.message || '로컬 모드 설치 실패',
+            category: error.message?.includes('손상') ? 'checksum_mismatch' : 'download_failed',
+            retryable: false,
+            attempts: 1,
+            lastError: error.message,
+          });
         }
-        
-        installedCount++;
-        console.log(`[HyeniPackImporter] Installed local mod: ${modEntry.fileName}`);
       }
       
       // 4. overrides 적용
-      onProgress?.({
+      this.updateProgress(onProgress, {
         stage: 'applying_overrides',
         progress: 70,
         message: '설정 파일 적용 중...',
@@ -300,7 +423,7 @@ export class HyeniPackImporter {
       }
       
       // 5. 통합 메타데이터 생성
-      onProgress?.({
+      this.updateProgress(onProgress, {
         stage: 'applying_overrides',
         progress: 90,
         message: '메타데이터 생성 중...',
@@ -317,7 +440,7 @@ export class HyeniPackImporter {
         console.log('[HyeniPackImporter] Icon extracted');
       }
       
-      onProgress?.({
+      this.updateProgress(onProgress, {
         stage: 'complete',
         progress: 100,
         message: '가져오기 완료!',
@@ -325,22 +448,68 @@ export class HyeniPackImporter {
       
       console.log(`[HyeniPackImporter] Successfully imported: ${manifest.name}`);
       
-      return {
-        success: true,
-        installedMods: installedCount,
-        minecraftVersion: manifest.minecraft.version,
-        loaderType: manifest.minecraft.loaderType,
-        loaderVersion: manifest.minecraft.loaderVersion,
-      };
+      return this.buildResult(manifest);
       
     } catch (error: any) {
       console.error('[HyeniPackImporter] Import failed:', error);
-      return {
-        success: false,
-        installedMods: 0,
-        error: error.message || 'Unknown error',
-      };
+      return this.buildErrorResult(manifest?.mods?.length || 0, error);
+    } finally {
+      this.timeoutManager?.stop();
     }
+  }
+
+  /**
+   * 진행 상태 업데이트 헬퍼
+   */
+  private updateProgress(
+    onProgress: ((progress: DetailedImportProgress) => void) | undefined,
+    progress: HyeniPackImportProgress
+  ) {
+    this.timeoutManager?.updateProgress();
+    
+    const detailedProgress: DetailedImportProgress = {
+      ...progress,
+      installedMods: this.installedCount,
+      failedMods: this.failedMods.length,
+    };
+    
+    onProgress?.(detailedProgress);
+  }
+
+  /**
+   * 최종 결과 구축
+   */
+  private buildResult(manifest: HyeniPackManifest): HyeniPackImportResult {
+    const expectedMods = manifest.mods.length;
+    const partialSuccess = this.installedCount > 0 && this.failedMods.length > 0;
+    
+    return {
+      success: this.failedMods.length === 0,
+      expectedMods,
+      installedMods: this.installedCount,
+      failedMods: this.failedMods,
+      partialSuccess,
+      minecraftVersion: manifest.minecraft.version,
+      loaderType: manifest.minecraft.loaderType,
+      loaderVersion: manifest.minecraft.loaderVersion,
+      warning: this.failedMods.length > 0 
+        ? `${this.failedMods.length}개 모드 설치 실패` 
+        : undefined,
+    };
+  }
+
+  /**
+   * 에러 결과 구축
+   */
+  private buildErrorResult(expectedMods: number, error: any): HyeniPackImportResult {
+    return {
+      success: false,
+      expectedMods,
+      installedMods: this.installedCount,
+      failedMods: this.failedMods,
+      partialSuccess: false,
+      error: error.message || 'Unknown error',
+    };
   }
   
   /**

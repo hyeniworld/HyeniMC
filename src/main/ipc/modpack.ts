@@ -1,6 +1,9 @@
-import { ipcMain, dialog } from 'electron';
+import { ipcMain, dialog, app } from 'electron';
 import { IPC_CHANNELS } from '../../shared/constants';
 import { ModpackManager } from '../services/modpack-manager';
+import * as path from 'path';
+import { classifyFailure, FailureType } from '../utils/failure-classifier';
+import type { HyeniPackImportResult } from '../../shared/types/hyenipack';
 import { getProfileInstanceDir } from '../utils/paths';
 
 const modpackManager = new ModpackManager();
@@ -173,48 +176,88 @@ export function registerModpackHandlers(): void {
           console.error('[IPC Modpack] [Import] ❌ Failed to mark profile as installing:', e);
         }
 
-        const loaderInfo = await modpackManager.importModpackFromFile(filePath, profileId, instanceDir, (progress) => {
+        const result = await modpackManager.importModpackFromFile(filePath, profileId, instanceDir, (progress) => {
           // Send progress updates to renderer
           event.sender.send('modpack:import-progress', progress);
         });
 
-        // 설치 완료 - 프로필을 'complete' 상태로 업데이트
+        // result는 loaderInfo와 importResult를 포함할 수 있음
+        const importResult = (result as any).importResult as HyeniPackImportResult | undefined;
+        
+        // 결과 분석 및 프로필 상태 업데이트
         try {
           const { profileRpc } = await import('../grpc/clients');
-          console.log('[IPC Modpack] [Import] Marking profile as complete:', profileId);
           const profile = await profileRpc.getProfile({ id: profileId });
-          await profileRpc.updateProfile({ 
-            id: profileId, 
-            patch: { 
-              ...profile,
-              installationStatus: 'complete',
-            } 
-          });
-          console.log('[IPC Modpack] [Import] ✅ Profile marked as complete');
+          
+          if (importResult) {
+            if (importResult.success) {
+              // 완전 성공
+              console.log('[IPC Modpack] [Import] Marking profile as complete:', profileId);
+              await profileRpc.updateProfile({ 
+                id: profileId, 
+                patch: { 
+                  ...profile,
+                  installationStatus: 'complete',
+                } 
+              });
+            } else if (importResult.partialSuccess) {
+              // 부분 성공 - 프로필 유지하고 경고 표시
+              console.log('[IPC Modpack] [Import] Partial success, keeping profile:', profileId);
+              await profileRpc.updateProfile({ 
+                id: profileId, 
+                patch: { 
+                  ...profile,
+                  installationStatus: 'complete', // 사용 가능하게 함
+                } 
+              });
+            }
+          } else {
+            // importResult가 없으면 기존 방식
+            await profileRpc.updateProfile({ 
+              id: profileId, 
+              patch: { 
+                ...profile,
+                installationStatus: 'complete',
+              } 
+            });
+          }
+          console.log('[IPC Modpack] [Import] ✅ Profile updated');
         } catch (e) {
-          console.error('[IPC Modpack] [Import] ❌ Failed to mark profile as complete:', e);
+          console.error('[IPC Modpack] [Import] ❌ Failed to update profile:', e);
         }
 
-        console.log('[IPC Modpack] Modpack import complete', loaderInfo);
-        return { success: true };
+        console.log('[IPC Modpack] Modpack import complete', result);
+        return { success: true, result: importResult };
       } catch (error) {
         console.error('[IPC Modpack] Failed to import modpack:', error);
         
-        // 설치 실패 - 프로필을 'failed' 상태로 업데이트
+        // 실패 유형 분류
+        const failure = classifyFailure(error);
+        console.log('[IPC Modpack] Failure classified:', failure.type);
+        
+        // 프로필 처리
         try {
           const { profileRpc } = await import('../grpc/clients');
-          console.log('[IPC Modpack] [Import] Marking profile as failed:', profileId);
-          const profile = await profileRpc.getProfile({ id: profileId });
-          await profileRpc.updateProfile({ 
-            id: profileId, 
-            patch: { 
-              ...profile,
-              installationStatus: 'failed',
-            } 
-          });
-          console.log('[IPC Modpack] [Import] ✅ Profile marked as failed');
+          
+          if (failure.shouldDeleteProfile) {
+            // 치명적 실패 또는 취소 - 프로필 삭제
+            console.log('[IPC Modpack] [Import] Deleting profile due to fatal failure:', profileId);
+            await profileRpc.deleteProfile({ id: profileId });
+          } else {
+            // 복구 가능한 실패 - failed 상태로 유지
+            console.log('[IPC Modpack] [Import] Marking profile as failed:', profileId);
+            const profile = await profileRpc.getProfile({ id: profileId });
+            await profileRpc.updateProfile({ 
+              id: profileId, 
+              patch: { 
+                ...profile,
+                installationStatus: 'failed',
+              } 
+            });
+          }
+          console.log('[IPC Modpack] [Import] ✅ Profile handled');
         } catch (e) {
-          console.error('[IPC Modpack] [Import] ❌ Failed to mark profile as failed:', e);
+          console.error('[IPC Modpack] [Import] ❌ Failed to handle profile:', e);
         }
         
         throw error;
