@@ -1,0 +1,19 @@
+{
+  "modId": "hyeniadditionalfunctions",
+  "name": "HyeniAdditionalFunctions",
+  "version": "1.0.2",
+  "category": "required",
+  "changelog": "reversion",
+  "releaseDate": "2025-11-12T21:00:00Z",
+  
+  "files": [
+    {
+      "loader": "neoforge",
+      "gameVersion": "1.21.1",
+      "file": "./releases/HyeniAdditionalFunctions-neoforge-1.0.2.jar",
+      "minLoaderVersion": "21.1.200",
+      "maxLoaderVersion": null,
+      "dependencies": {}
+    }
+  ]
+}

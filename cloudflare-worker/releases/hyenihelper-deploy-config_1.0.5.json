@@ -1,0 +1,19 @@
+{
+  "modId": "hyenihelper",
+  "name": "HyeniHelper",
+  "version": "1.0.5",
+  "category": "required",
+  "changelog": "그룹 랜덤 TP 시 나 자신을 대상으로 하는 문제",
+  "releaseDate": "2025-11-14T19:40:00+09:00",
+  
+  "files": [
+    {
+      "loader": "neoforge",
+      "gameVersion": "1.21.1",
+      "file": "./releases/hyenihelper-neoforge-1.21.1-1.0.5.jar",
+      "minLoaderVersion": "21.1.200",
+      "maxLoaderVersion": null,
+      "dependencies": {}
+    }
+  ]
+}

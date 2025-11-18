@@ -1,0 +1,19 @@
+{
+  "modId": "hyeniadditionalfunctions",
+  "name": "HyeniAdditionalFunctions",
+  "version": "1.0.3",
+  "category": "required",
+  "changelog": "스타터팩 추가 및 각종 버그 수정",
+  "releaseDate": "2025-11-14T19:40:00Z",
+  
+  "files": [
+    {
+      "loader": "neoforge",
+      "gameVersion": "1.21.1",
+      "file": "./releases/HyeniAdditionalFunctions-neoforge-1.0.3.jar",
+      "minLoaderVersion": "21.1.200",
+      "maxLoaderVersion": null,
+      "dependencies": {}
+    }
+  ]
+}
