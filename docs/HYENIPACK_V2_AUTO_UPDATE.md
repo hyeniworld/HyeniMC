@@ -87,14 +87,55 @@ hyenimc-releases/modpacks/
 ```json
 {
   "hyenipackId": "hyenipack-hyeniworld",
-  "version": "1.2.0",
+  "version": "1.0.4",
+  "minVersion": "1.0.0",
   "changelog": "- Sodium 업데이트\n- Iris 추가",
-  "downloadUrl": "/modpacks/hyenipack-hyeniworld/versions/1.2.0/hyenipack.hyenipack",
   "fileSize": 52428800,
-  "sha256": "abc123...",
-  "requiredToken": true
+  "sha256": "abc123..."
 }
 ```
+
+**changes/ 디렉토리 (변경점 추적):**
+```
+modpacks/hyenipack-hyeniworld/changes/
+├── 1.0.0-to-1.0.1.json  # 순차 업데이트
+├── 1.0.1-to-1.0.2.json
+├── 1.0.2-to-1.0.3.json
+├── 1.0.3-to-1.0.4.json
+├── 1.0.0-to-1.0.4.json  # 직행 업데이트
+├── 1.0.1-to-1.0.4.json
+└── 1.0.2-to-1.0.4.json
+```
+
+**changes.json 예시:**
+```json
+{
+  "fromVersion": "1.0.0",
+  "toVersion": "1.0.4",
+  "changes": [
+    {
+      "type": "mod",
+      "action": "update",
+      "path": "mods/sodium-0.6.0.jar",
+      "previousPath": "mods/sodium-0.5.8.jar"
+    },
+    {
+      "type": "config",
+      "action": "replace",
+      "path": "config/sodium-options.json"
+    },
+    {
+      "type": "shaderpack",
+      "action": "add",
+      "path": "shaderpacks/BSL_v8.2.09.zip"
+    }
+  ]
+}
+```
+
+**버전 정책:**
+- ✅ 업데이트 가능: 같은 메이저.마이너 내 (1.0.x → 1.0.y)
+- ❌ 업데이트 불가: 메이저/마이너 변경 시 (1.0.x → 1.1.x)
 
 ### 3. Export 기능 (프로필 상세보기)
 
@@ -114,8 +155,8 @@ export interface HyeniPackExportOptionsV2 {
 // Export 시:
 // 1. Manifest v2 생성 (hyenipackId 포함)
 // 2. .hyenipack 파일 생성
-// 3. latest.json 생성 (로컬에)
-// 4. 사용자가 수동으로 R2 업로드
+// 3. 사용자가 수동으로 R2 업로드
+// (latest.json, changes/*.json은 R2 관리 도구로 별도 생성)
 ```
 
 ### 4. Import 기능 (핵심)
@@ -211,32 +252,83 @@ interface ImportTarget {
 }
 
 async updateExistingProfile(profile, manifest): Promise {
+  // 0. loaderType 변경 확인
+  if (profile.loaderType !== manifest.minecraft.loaderType) {
+    // 경고: "로더가 Fabric → Forge로 변경됩니다. 기존 모드가 모두 제거됩니다."
+    const confirmed = await showLoaderChangeWarning(profile, manifest);
+    if (!confirmed) return { success: false, cancelled: true };
+  }
+  
   // 1. 변경사항 계산
   const changes = await calculateChanges(profile, manifest);
-  // - 마인크래프트 버전 (gameVersion)
-  // - 모드로더 버전 (loaderVersion)
-  // - 모드 추가/제거/업데이트
-  // - 파일 업데이트 (config, 리소스팩, 셰이더팩 등)
   
   // 2. 프로필 버전 정보 업데이트
   // ✅ 검증 완료: 게임 시작 시 자동으로 로더 재설치됨
   await updateProfile({ 
     gameVersion: manifest.minecraft.version,
+    loaderType: manifest.minecraft.loaderType,
     loaderVersion: manifest.minecraft.loaderVersion 
   });
-  // → 다음 게임 시작 시 PROFILE_PLAY_GAME 핸들러가
-  //   loaderManager.installLoader() 자동 호출
   
   // 3. 모드/파일 업데이트
-  await updateMods(changes.mods);
-  await updateFiles(changes.files);
+  await applyChanges(changes);
   await updateMetadata(manifest);
   
   return { success: true, updated: true, changes };
 }
+
+/**
+ * 변경사항 계산 (Import 시 - 파일 기반)
+ */
+function calculateChanges(profile, manifest): Changes {
+  return {
+    // config: 보존 (기존 유지, 새 파일만 추가)
+    configs: diffFiles(profile.configs, manifest.configs, 'preserve'),
+    
+    // mods: 교체 (출처+버전 비교)
+    mods: diffMods(profile.mods, manifest.mods),
+    
+    // shaderpacks: 병합 (기존 유지 + 새 파일 추가)
+    shaderpacks: diffFiles(profile.shaderpacks, manifest.shaderpacks, 'merge'),
+    
+    // resourcepacks: 병합
+    resourcepacks: diffFiles(profile.resourcepacks, manifest.resourcepacks, 'merge'),
+    
+    // 기타: 추가만 (기존 유지, 새 파일만 추가)
+    others: diffFiles(profile.others, manifest.others, 'addOnly')
+  };
+}
+
+/**
+ * 모드 비교 알고리즘
+ */
+function diffMods(existing, incoming): ModChanges {
+  const changes = { add: [], remove: [], update: [] };
+  
+  for (const newMod of incoming) {
+    const match = existing.find(m => 
+      m.source === newMod.source && m.sourceModId === newMod.sourceModId
+    );
+    
+    if (!match) {
+      changes.add.push(newMod);
+    } else if (match.version !== newMod.version) {
+      changes.update.push({ old: match, new: newMod });
+    }
+    // 동일 버전 → 스킵
+  }
+  
+  // 새 manifest에 없는 기존 모드는 유지 (Import 시)
+  return changes;
+}
 ```
 
 ### 5. 자동 업데이트 체크
+
+**업데이트 타이밍:**
+1. 게임 시작 전 혜니팩 업데이트 확인 (먼저)
+2. HyeniHelper 등 필수 모드 업데이트 확인 (후)
+3. 게임 실행
 
 ```typescript
 export class HyeniPackUpdater {
@@ -248,14 +340,22 @@ export class HyeniPackUpdater {
     // 2. R2에서 latest.json 조회
     const latest = await fetchLatestInfo(metadata.hyenipackId);
     
-    // 3. 버전 비교
-    if (isNewerVersion(latest.version, metadata.hyenipackVersion)) {
+    // 3. 버전 정책 확인 (SemVer)
+    const current = semver.parse(metadata.hyenipackVersion);
+    const target = semver.parse(latest.version);
+    
+    // 메이저/마이너 다르면 업데이트 불가
+    if (current.major !== target.major || current.minor !== target.minor) {
+      return null;  // 또는 "새 버전 설치 필요" 안내
+    }
+    
+    // 4. 버전 비교
+    if (semver.gt(latest.version, metadata.hyenipackVersion)) {
       return {
         hyenipackId: metadata.hyenipackId,
-        currentVersion: metadata.modpackVersion,
+        currentVersion: metadata.hyenipackVersion,
         latestVersion: latest.version,
-        changelog: latest.changelog,
-        downloadUrl: latest.downloadUrl
+        changelog: latest.changelog
       };
     }
     
@@ -263,23 +363,94 @@ export class HyeniPackUpdater {
   }
   
   async downloadAndUpdate(profileId, updateInfo, token): Promise {
-    // 1. 다운로드 (토큰 검증)
-    const tempPath = await download(updateInfo.downloadUrl, token);
+    // 1. changes.json 가져오기
+    const changesUrl = `changes/${updateInfo.currentVersion}-to-${updateInfo.latestVersion}.json`;
+    const changes = await fetchChanges(updateInfo.hyenipackId, changesUrl);
     
-    // 2. Import 로직으로 업데이트
-    await importer.updateExistingProfile(profileId, tempPath);
+    // 2. 변경사항 적용 (R2 업데이트 정책)
+    await applyR2Changes(profileId, changes, token);
     
-    // 3. 정리
-    await fs.remove(tempPath);
+    // 3. 메타데이터 업데이트
+    await updateMetadata(profileId, updateInfo.latestVersion);
+  }
+}
+
+/**
+ * R2 업데이트 시 변경 적용 (메타데이터 기반)
+ * Import와 다르게 config 등도 메타데이터에 따라 덮어쓰기 가능
+ */
+async function applyR2Changes(profileId, changes, token) {
+  for (const change of changes.changes) {
+    switch (change.action) {
+      case 'add':
+        await downloadAndAdd(change.path, token);
+        break;
+      case 'remove':
+        await removeFile(change.path);
+        break;
+      case 'replace':
+        await downloadAndReplace(change.path, token);
+        break;
+      case 'update':  // 모드 버전 업데이트
+        await removeFile(change.previousPath);
+        await downloadAndAdd(change.path, token);
+        break;
+      case 'skip':
+        // 건드리지 않음
+        break;
+    }
   }
 }
 ```
 
+### 5.1 에러 복구
+
+```typescript
+async downloadAndUpdate(profileId, updateInfo, token): Promise {
+  try {
+    // ... 업데이트 로직
+  } catch (error) {
+    if (error instanceof NetworkError) {
+      // 네트워크 오류: 재시도 안내
+      return { success: false, retryable: true, error };
+    }
+    if (error instanceof ChecksumError) {
+      // 체크섬 불일치: 재다운로드
+      await cleanupPartialDownload();
+      return { success: false, retryable: true, error };
+    }
+    // 기타 오류: 수동 복구 안내
+    return { success: false, retryable: false, error };
+  }
+}
+```
+
+### 5.2 다운그레이드 (제한적 지원)
+
+```typescript
+// 버전 목록 조회
+async listVersions(hyenipackId): Promise<VersionInfo[]> {
+  const registry = await fetchRegistry(hyenipackId);
+  return registry.versions;  // ["1.0.0", "1.0.1", "1.0.2", ...]
+}
+
+// UI에서 버전 선택 후 수동 다운로드 가능
+// 자동 다운그레이드는 지원하지 않음
+```
+
 ### 6. Worker API
+
+> ⚠️ **보안 개선 필요**: 현재 URL 파라미터로 토큰 전달 → Authorization 헤더로 변경 필요
+> 이 개선은 혜니팩 v2와 무관하게 HyeniMC 버전 업그레이드 시 별도 진행
 
 ```javascript
 // GET /api/v2/modpacks/{hyenipackId}/latest.json
 async function getLatestInfo(hyenipackId, env) {
+  // 입력 검증
+  if (!isValidHyenipackId(hyenipackId)) {
+    return new Response('Invalid ID', { status: 400 });
+  }
+  
   const latest = await env.RELEASES.get(
     `modpacks/${hyenipackId}/latest.json`
   );
@@ -288,9 +459,28 @@ async function getLatestInfo(hyenipackId, env) {
   });
 }
 
-// GET /modpacks/{hyenipackId}/versions/{version}/hyenipack.hyenipack?token=xxx
-async function download(hyenipackId, version, token, env) {
-  // 토큰 검증
+// GET /api/v2/modpacks/{hyenipackId}/changes/{from}-to-{to}.json
+async function getChanges(hyenipackId, from, to, env) {
+  if (!isValidHyenipackId(hyenipackId)) {
+    return new Response('Invalid ID', { status: 400 });
+  }
+  
+  const changes = await env.RELEASES.get(
+    `modpacks/${hyenipackId}/changes/${from}-to-${to}.json`
+  );
+  return new Response(changes);
+}
+
+// GET /api/v2/modpacks/{hyenipackId}/download/{version}
+// Authorization: Bearer {token}
+async function download(hyenipackId, version, request, env) {
+  // 입력 검증
+  if (!isValidHyenipackId(hyenipackId)) {
+    return new Response('Invalid ID', { status: 400 });
+  }
+  
+  // 토큰 검증 (헤더에서)
+  const token = request.headers.get('Authorization')?.replace('Bearer ', '');
   if (!await validateToken(token, env)) {
     return new Response('Unauthorized', { status: 401 });
   }
@@ -299,6 +489,12 @@ async function download(hyenipackId, version, token, env) {
     `modpacks/${hyenipackId}/versions/${version}/hyenipack.hyenipack`
   );
   return new Response(file.body);
+}
+
+// 입력 검증 함수
+function isValidHyenipackId(id) {
+  const pattern = /^[a-z0-9\-]+$/;
+  return pattern.test(id) && id.length <= 64 && !id.includes('..');
 }
 ```
 
@@ -457,15 +653,54 @@ if (profile.loaderType !== 'vanilla') {
 - **파일 Import**: 토큰 불필요 (수동)
 - 자연스럽게 구분됨 → 별도 플래그 불필요
 
+### 버전 정책
+- **업데이트 가능**: 같은 메이저.마이너 내 (1.0.x → 1.0.y)
+- **업데이트 불가**: 메이저/마이너 변경 시 (1.0.x → 1.1.x)
+- **다운그레이드**: 제한적 지원 (버전 목록 표시, 수동 다운로드)
+
+### loaderType 변경 처리
+- Fabric → Forge 등 로더 변경 시 경고 표시
+- "기존 모드가 모두 제거됩니다" 안내 후 사용자 확인
+
+### 업데이트 정책 차이 (Import vs R2)
+
+| 타입 | Import (파일) | R2 업데이트 |
+|------|------------|-------------|
+| config | 보존 (새 파일만 추가) | 메타데이터 기반 |
+| mods | 교체 (출처+버전 비교) | 메타데이터 기반 |
+| shaderpacks | 병합 | 메타데이터 기반 |
+| resourcepacks | 병합 | 메타데이터 기반 |
+| 기타 | 추가만 | 메타데이터 기반 |
+
+**R2 매타데이터 action:**
+- `skip`: 건드리지 않음
+- `add`: 새로 추가
+- `replace`: 덮어쓰기
+- `remove`: 삭제
+- `update`: 모드 버전 업데이트 (기존 삭제 + 새 파일)
+
 ### 보안
 - 토큰 검증 (기존 시스템 활용)
 - SHA256 체크섬
 - HTTPS 전송
+- hyenipackId 입력 검증 (path traversal 방지)
+
+> ⚠️ **별도 개선 필요** (HyeniMC 버전 업 시):
+> - URL 파라미터 토큰 → Authorization 헤더로 변경
+> - latest.json에서 downloadUrl 제거 (직접 경로 노출 방지)
 
 ### 성능
 - latest.json: 5분 캐시
 - 버전 체크: < 1초
 - 다운로드: 네트워크 속도 의존
+
+### 진행률 UI
+- 기존 모드팩 설치 UI 재사용
+- 별도 구현 불필요
+
+### 동시성
+- 게임 실행 중 업데이트 시도 차단
+- 런처 다중 인스턴스 실행은 의도하지 않음 (고려 대상 외)
 
 ---
 
