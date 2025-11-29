@@ -178,12 +178,23 @@ export class GameLauncher {
       console.log(`[Game Launcher] Play time tracker started for profile ${options.profileId}`);
     }
 
-    // Handle stdout (only send to UI, don't log to file)
+    // ✨ Buffer for capturing process output (for crash analysis)
+    const outputBuffer: string[] = [];
+    const MAX_BUFFER_LINES = 500; // Keep last 500 lines
+    
+    const addToBuffer = (line: string) => {
+      outputBuffer.push(line);
+      if (outputBuffer.length > MAX_BUFFER_LINES) {
+        outputBuffer.shift();
+      }
+    };
+
+    // Handle stdout
     childProcess.stdout?.on('data', (data) => {
       const lines = data.toString().split('\n');
       lines.forEach((line: string) => {
         if (line.trim()) {
-          // Only send to UI callback, don't write to log file
+          addToBuffer(`[STDOUT] ${line}`);
           if (onLog) {
             onLog(line);
           }
@@ -191,18 +202,21 @@ export class GameLauncher {
       });
     });
 
-    // Handle stderr (only send to UI, don't log to file)
+    // Handle stderr
     childProcess.stderr?.on('data', (data) => {
       const lines = data.toString().split('\n');
       lines.forEach((line: string) => {
         if (line.trim()) {
-          // Only send to UI callback, don't write to log file
+          addToBuffer(`[STDERR] ${line}`);
           if (onLog) {
             onLog(`[ERROR] ${line}`);
           }
         }
       });
     });
+    
+    // Store buffer reference in gameProcess for crash analysis
+    (gameProcess as any).outputBuffer = outputBuffer;
 
     // Handle exit
     childProcess.on('exit', async (code) => {
@@ -246,15 +260,19 @@ export class GameLauncher {
             const analyzer = new CrashAnalyzer();
             const latestCrashLog = await analyzer.findLatestCrashLog(options.gameDir);
             
+            // showErrorDialog를 통해 UI에 표시
+            const { BrowserWindow } = await import('electron');
+            const { showErrorDialog } = await import('../ipc/error-dialog');
+            const windows = BrowserWindow.getAllWindows();
+            const mainWindow = windows.length > 0 ? windows[0] : null;
+            
+            // Get buffered output
+            const bufferedOutput = (gameProcess as any).outputBuffer as string[] || [];
+            const elapsedMs = Date.now() - gameProcess.startTime.getTime();
+            
             if (latestCrashLog) {
               console.log(`[Game Launcher] Analyzing crash log: ${latestCrashLog}`);
               const analysis = await analyzer.analyzeCrashLog(latestCrashLog);
-              
-              // showErrorDialog를 통해 UI에 표시
-              const { BrowserWindow } = await import('electron');
-              const { showErrorDialog } = await import('../ipc/error-dialog');
-              const windows = BrowserWindow.getAllWindows();
-              const mainWindow = windows.length > 0 ? windows[0] : null;
               
               if (mainWindow) {
                 showErrorDialog(mainWindow, {
@@ -270,6 +288,38 @@ export class GameLauncher {
                       type: 'primary' as const,
                       action: f.action!,
                     })),
+                });
+              }
+            } else {
+              // ✨ 크래시 로그가 없는 경우 - 버퍼된 출력으로 분석
+              console.warn(`[Game Launcher] No crash log found. Process ran for ${elapsedMs}ms`);
+              
+              // 버퍼된 출력을 로그에 기록
+              if (bufferedOutput.length > 0) {
+                console.log(`[Game Launcher] === Process Output (last ${bufferedOutput.length} lines) ===`);
+                // 마지막 50줄만 콘솔에 출력
+                const lastLines = bufferedOutput.slice(-50);
+                lastLines.forEach(line => console.log(`  ${line}`));
+                console.log(`[Game Launcher] === End of Process Output ===`);
+              } else {
+                console.warn(`[Game Launcher] No output was captured from the process`);
+              }
+              
+              // 빠른 크래시인지 확인 (10초 이내)
+              const isQuickCrash = elapsedMs < 10000;
+              
+              // 에러 분석
+              const errorAnalysis = this.analyzeProcessOutput(bufferedOutput, code, elapsedMs);
+              
+              if (mainWindow) {
+                showErrorDialog(mainWindow, {
+                  type: 'error',
+                  title: errorAnalysis.title,
+                  message: errorAnalysis.message,
+                  details: bufferedOutput.length > 0 
+                    ? bufferedOutput.slice(-100).join('\n') 
+                    : `프로세스가 ${elapsedMs}ms 만에 종료됨 (exit code: ${code})\n\n출력이 캡처되지 않았습니다.`,
+                  suggestions: errorAnalysis.suggestions,
                 });
               }
             }
@@ -490,8 +540,12 @@ export class GameLauncher {
     const sharedLibrariesDir = getSharedLibrariesDir();
     const instanceLibrariesDir = path.join(gameDir, 'libraries');
     
+    const missingLibraries: string[] = [];
+    const skippedByRules: string[] = [];
+    
     for (const library of versionJson.libraries || []) {
       if (!this.shouldUseLibrary(library)) {
+        skippedByRules.push(library.name || 'unknown');
         continue;
       }
 
@@ -521,16 +575,38 @@ export class GameLauncher {
       const instanceLibPath = path.join(instanceLibrariesDir, relativePath);
       const sharedLibPath = path.join(sharedLibrariesDir, relativePath);
       
+      let foundPath: string | null = null;
+      
       try {
         await fs.access(instanceLibPath);
-        classpathParts.push(instanceLibPath);
+        foundPath = instanceLibPath;
       } catch {
-        // Instance library doesn't exist, use shared library
-        classpathParts.push(sharedLibPath);
+        try {
+          await fs.access(sharedLibPath);
+          foundPath = sharedLibPath;
+        } catch {
+          // Library not found in either location
+          missingLibraries.push(library.name || relativePath);
+          // Still add to classpath (might cause error but at least we log it)
+          foundPath = sharedLibPath;
+        }
+      }
+      
+      if (foundPath) {
+        classpathParts.push(foundPath);
       }
     }
 
     console.log(`[Game Launcher] Built classpath with ${classpathParts.length} libraries`);
+    
+    if (skippedByRules.length > 0) {
+      console.log(`[Game Launcher] Skipped ${skippedByRules.length} libraries by platform rules`);
+    }
+    
+    if (missingLibraries.length > 0) {
+      console.error(`[Game Launcher] ⚠️ Missing ${missingLibraries.length} libraries:`);
+      missingLibraries.forEach(lib => console.error(`  - ${lib}`));
+    }
 
     // Add client JAR (except for NeoForge, which uses its own client JAR)
     // NeoForge installer creates client-X.X.X-srg.jar which is loaded automatically
@@ -886,5 +962,170 @@ export class GameLauncher {
    */
   isGameRunning(versionId: string): boolean {
     return this.isProfileRunning(versionId);
+  }
+
+  /**
+   * Analyze process output to determine crash cause
+   */
+  private analyzeProcessOutput(
+    output: string[],
+    exitCode: number | null,
+    elapsedMs: number
+  ): { title: string; message: string; suggestions: string[] } {
+    const outputText = output.join('\n').toLowerCase();
+    const suggestions: string[] = [];
+    
+    // Java 관련 에러 패턴
+    const javaErrors = {
+      'unsupportedclassversionerror': {
+        title: 'Java 버전 호환성 문제',
+        message: '현재 Java 버전이 이 마인크래프트 버전과 호환되지 않습니다.',
+        suggestions: ['프로필 설정에서 Java 버전을 변경해보세요', 'Java 21 이상을 설치해보세요'],
+      },
+      'java.lang.noclassdeffounderror': {
+        title: '클래스를 찾을 수 없음',
+        message: '필요한 라이브러리나 클래스가 누락되었습니다.',
+        suggestions: ['게임 파일을 다시 다운로드해보세요', '모드 충돌 여부를 확인해보세요'],
+      },
+      'java.lang.outofmemoryerror': {
+        title: '메모리 부족',
+        message: 'Java 힙 메모리가 부족합니다.',
+        suggestions: ['프로필 설정에서 최대 메모리를 늘려보세요', '다른 프로그램을 종료해보세요'],
+      },
+      'could not create the java virtual machine': {
+        title: 'JVM 생성 실패',
+        message: 'Java Virtual Machine을 생성할 수 없습니다.',
+        suggestions: ['할당된 메모리가 시스템 메모리보다 큰지 확인해보세요', 'Java를 다시 설치해보세요'],
+      },
+      'error: could not find or load main class': {
+        title: '메인 클래스를 찾을 수 없음',
+        message: '마인크래프트 실행 파일이 손상되었거나 누락되었습니다.',
+        suggestions: ['게임 파일을 다시 다운로드해보세요', '버전 파일을 확인해보세요'],
+      },
+      'access is denied': {
+        title: '접근 거부됨',
+        message: '파일이나 폴더에 대한 접근이 거부되었습니다.',
+        suggestions: ['관리자 권한으로 런처를 실행해보세요', '안티바이러스가 차단하는지 확인해보세요'],
+      },
+      'unable to access jarfile': {
+        title: 'JAR 파일 접근 불가',
+        message: '마인크래프트 JAR 파일을 찾을 수 없거나 접근할 수 없습니다.',
+        suggestions: ['게임 파일을 다시 다운로드해보세요', '파일 경로에 특수문자가 있는지 확인해보세요'],
+      },
+    };
+
+    // LWJGL/OpenGL 관련 에러
+    const graphicsErrors = {
+      'lwjgl': {
+        title: 'LWJGL 에러',
+        message: '그래픽 라이브러리에서 문제가 발생했습니다.',
+        suggestions: ['그래픽 드라이버를 업데이트해보세요', 'Java 버전을 변경해보세요'],
+      },
+      'opengl': {
+        title: 'OpenGL 에러',
+        message: 'OpenGL 그래픽 에러가 발생했습니다.',
+        suggestions: ['그래픽 드라이버를 업데이트해보세요', '호환성 모드로 실행해보세요'],
+      },
+      'no lwjgl': {
+        title: 'LWJGL 누락',
+        message: 'LWJGL 네이티브 라이브러리를 찾을 수 없습니다.',
+        suggestions: ['게임 파일을 다시 다운로드해보세요', '64비트 Java를 사용하고 있는지 확인해보세요'],
+      },
+    };
+
+    // 모드 관련 에러
+    const modErrors = {
+      'mixin': {
+        title: 'Mixin 에러',
+        message: '모드 로딩 중 에러가 발생했습니다.',
+        suggestions: ['호환되지 않는 모드를 제거해보세요', '모드 버전을 확인해보세요'],
+      },
+      'fabric': {
+        title: 'Fabric 에러',
+        message: 'Fabric 모드 로더에서 에러가 발생했습니다.',
+        suggestions: ['Fabric 버전을 업데이트해보세요', '모드 호환성을 확인해보세요'],
+      },
+      'forge': {
+        title: 'Forge 에러',
+        message: 'Forge 모드 로더에서 에러가 발생했습니다.',
+        suggestions: ['Forge 버전을 업데이트해보세요', '모드 호환성을 확인해보세요'],
+      },
+    };
+
+    // 에러 패턴 검색
+    for (const [pattern, info] of Object.entries(javaErrors)) {
+      if (outputText.includes(pattern)) {
+        return { title: info.title, message: info.message, suggestions: info.suggestions };
+      }
+    }
+
+    for (const [pattern, info] of Object.entries(graphicsErrors)) {
+      if (outputText.includes(pattern)) {
+        return { title: info.title, message: info.message, suggestions: info.suggestions };
+      }
+    }
+
+    for (const [pattern, info] of Object.entries(modErrors)) {
+      if (outputText.includes(pattern)) {
+        return { title: info.title, message: info.message, suggestions: info.suggestions };
+      }
+    }
+
+    // 일반적인 에러 메시지 찾기
+    const errorLines = output.filter(line => 
+      line.toLowerCase().includes('error') || 
+      line.toLowerCase().includes('exception') ||
+      line.toLowerCase().includes('failed')
+    );
+
+    if (errorLines.length > 0) {
+      // 첫 번째 에러 라인에서 정보 추출
+      const firstError = errorLines[0];
+      return {
+        title: '게임 실행 오류',
+        message: firstError.replace('[STDOUT] ', '').replace('[STDERR] ', ''),
+        suggestions: [
+          '로그 내용을 확인하여 원인을 파악해보세요',
+          '게임 파일을 다시 다운로드해보세요',
+          '모드나 리소스팩을 제거하고 다시 시도해보세요',
+        ],
+      };
+    }
+
+    // 빠른 종료 (10초 이내)
+    if (elapsedMs < 10000) {
+      if (output.length === 0) {
+        return {
+          title: '게임이 즉시 종료됨',
+          message: `프로세스가 ${elapsedMs}ms 만에 종료되었습니다. (exit code: ${exitCode})`,
+          suggestions: [
+            'Java 경로가 올바른지 확인해보세요',
+            'Java 버전이 이 마인크래프트 버전과 호환되는지 확인해보세요',
+            '게임 디렉토리 경로에 특수문자가 있는지 확인해보세요',
+            '안티바이러스 프로그램이 차단하는지 확인해보세요',
+          ],
+        };
+      }
+      return {
+        title: '게임이 빠르게 종료됨',
+        message: `프로세스가 ${(elapsedMs / 1000).toFixed(1)}초 만에 종료되었습니다. (exit code: ${exitCode})`,
+        suggestions: [
+          '아래 로그 내용을 확인해보세요',
+          'Java 버전이 호환되는지 확인해보세요',
+          '모드 충돌 여부를 확인해보세요',
+        ],
+      };
+    }
+
+    // 기본 메시지
+    return {
+      title: '알 수 없는 오류',
+      message: `게임이 비정상 종료되었습니다. (exit code: ${exitCode})`,
+      suggestions: [
+        '로그 내용을 확인해보세요',
+        '마인크래프트 커뮤니티에서 도움을 구해보세요',
+        '게임 파일을 다시 다운로드해보세요',
+      ],
+    };
   }
 }
