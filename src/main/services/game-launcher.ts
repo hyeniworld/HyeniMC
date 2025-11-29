@@ -585,10 +585,20 @@ export class GameLauncher {
           await fs.access(sharedLibPath);
           foundPath = sharedLibPath;
         } catch {
-          // Library not found in either location
-          missingLibraries.push(library.name || relativePath);
-          // Still add to classpath (might cause error but at least we log it)
-          foundPath = sharedLibPath;
+          // Library not found - try to download it
+          const downloaded = await this.tryDownloadMissingLibrary(
+            library.name || relativePath,
+            relativePath,
+            sharedLibPath,
+            (library as any).url
+          );
+          
+          if (downloaded) {
+            foundPath = sharedLibPath;
+          } else {
+            missingLibraries.push(library.name || relativePath);
+            foundPath = sharedLibPath; // Still add to classpath for error clarity
+          }
         }
       }
       
@@ -624,6 +634,63 @@ export class GameLauncher {
     // Join with platform-specific separator
     const separator = process.platform === 'win32' ? ';' : ':';
     return classpathParts.join(separator);
+  }
+
+  /**
+   * Try to download a missing library from Maven repositories
+   */
+  private async tryDownloadMissingLibrary(
+    libraryName: string,
+    relativePath: string,
+    targetPath: string,
+    libraryUrl?: string
+  ): Promise<boolean> {
+    const axios = (await import('axios')).default;
+    
+    // Maven 저장소 목록 (순서대로 시도)
+    const mavenRepositories = [
+      'https://maven.fabricmc.net/',
+      'https://repo1.maven.org/maven2/',  // Maven Central
+      'https://maven.neoforged.net/releases/',  // NeoForge Maven
+    ];
+
+    // URL 목록 생성
+    const urlsToTry: string[] = [];
+    const artifactPath = relativePath.replace(/\\/g, '/'); // Windows path를 URL 경로로 변환
+    
+    if (libraryUrl && libraryUrl.trim()) {
+      const baseUrl = libraryUrl.endsWith('/') ? libraryUrl : `${libraryUrl}/`;
+      urlsToTry.push(`${baseUrl}${artifactPath}`);
+    }
+    
+    for (const repo of mavenRepositories) {
+      const url = `${repo}${artifactPath}`;
+      if (!urlsToTry.includes(url)) {
+        urlsToTry.push(url);
+      }
+    }
+
+    for (const url of urlsToTry) {
+      try {
+        console.log(`[Game Launcher] Downloading missing library: ${libraryName} from ${url}`);
+        const response = await axios.get(url, { 
+          responseType: 'arraybuffer',
+          timeout: 30000,
+          validateStatus: (status) => status === 200,
+        });
+        
+        await fs.mkdir(path.dirname(targetPath), { recursive: true });
+        await fs.writeFile(targetPath, response.data);
+        
+        console.log(`[Game Launcher] ✅ Downloaded missing library: ${libraryName}`);
+        return true;
+      } catch (error) {
+        // 다음 URL 시도
+      }
+    }
+
+    console.warn(`[Game Launcher] ❌ Failed to download library: ${libraryName}`);
+    return false;
   }
 
   /**
@@ -711,18 +778,36 @@ export class GameLauncher {
       const parentJson = await this.loadVersionJson(versionJson.inheritsFrom, gameDir, visited);
       
       // Merge libraries and remove duplicates (child libraries take precedence)
+      // Compare by group:artifact (without version) to handle version conflicts
       const childLibs = versionJson.libraries || [];
       const parentLibs = parentJson.libraries || [];
-      const childLibNames = new Set(childLibs.map((lib: Library) => lib.name));
       
-      // Filter out parent libraries that are already in child libraries
-      const uniqueParentLibs = parentLibs.filter((lib: Library) => !childLibNames.has(lib.name));
+      // Extract group:artifact from library name (e.g., "org.ow2.asm:asm:9.9" -> "org.ow2.asm:asm")
+      const getLibraryKey = (name: string): string => {
+        const parts = name.split(':');
+        if (parts.length >= 2) {
+          return `${parts[0]}:${parts[1]}`; // group:artifact
+        }
+        return name;
+      };
+      
+      const childLibKeys = new Set(childLibs.map((lib: Library) => getLibraryKey(lib.name)));
+      
+      // Filter out parent libraries that have the same group:artifact as child libraries
+      const uniqueParentLibs = parentLibs.filter((lib: Library) => {
+        const key = getLibraryKey(lib.name);
+        if (childLibKeys.has(key)) {
+          console.log(`[Game Launcher] Using child version: ${childLibs.find((c: Library) => getLibraryKey(c.name) === key)?.name} (overrides ${lib.name})`);
+          return false;
+        }
+        return true;
+      });
       
       const mergedLibraries = [...childLibs, ...uniqueParentLibs];
       const duplicatesRemoved = parentLibs.length - uniqueParentLibs.length;
       
       if (duplicatesRemoved > 0) {
-        console.log(`[Game Launcher] Removed ${duplicatesRemoved} duplicate libraries`);
+        console.log(`[Game Launcher] Removed ${duplicatesRemoved} duplicate libraries (version conflicts resolved)`);
       }
       
       // Merge parent and child

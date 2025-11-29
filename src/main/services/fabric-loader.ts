@@ -171,6 +171,13 @@ export class FabricLoaderService {
   ): Promise<void> {
     console.log(`[Fabric] Downloading ${profile.libraries.length} libraries...`);
 
+    // Maven 저장소 목록 (순서대로 시도)
+    const mavenRepositories = [
+      'https://maven.fabricmc.net/',
+      'https://repo1.maven.org/maven2/',  // Maven Central
+      'https://repo.maven.apache.org/maven2/',  // Maven Central mirror
+    ];
+
     const downloadPromises = profile.libraries.map(async (lib, index) => {
       const parts = lib.name.split(':');
       const [group, artifact, version] = parts;
@@ -189,23 +196,54 @@ export class FabricLoaderService {
         // 파일이 없으면 다운로드
       }
 
-      const url = lib.url
-        ? `${lib.url}${groupPath}/${artifact}/${version}/${fileName}`
-        : `https://maven.fabricmc.net/${groupPath}/${artifact}/${version}/${fileName}`;
+      // URL 목록 생성 (lib.url이 있으면 먼저 시도, 그 다음 다른 저장소들)
+      const urlsToTry: string[] = [];
+      const artifactPath = `${groupPath}/${artifact}/${version}/${fileName}`;
+      
+      if (lib.url && lib.url.trim()) {
+        // lib.url이 슬래시로 끝나지 않으면 추가
+        const baseUrl = lib.url.endsWith('/') ? lib.url : `${lib.url}/`;
+        urlsToTry.push(`${baseUrl}${artifactPath}`);
+      }
+      
+      // 다른 Maven 저장소도 추가
+      for (const repo of mavenRepositories) {
+        const url = `${repo}${artifactPath}`;
+        if (!urlsToTry.includes(url)) {
+          urlsToTry.push(url);
+        }
+      }
 
-      try {
-        console.log(`[Fabric] Downloading library: ${lib.name}`);
-        const response = await axios.get(url, { responseType: 'arraybuffer' });
-        
-        await fs.mkdir(path.dirname(libPath), { recursive: true });
-        await fs.writeFile(libPath, response.data);
-        
-        console.log(`[Fabric] Downloaded: ${lib.name}`);
-        if (onProgress) onProgress(index + 1, profile.libraries.length);
-      } catch (error) {
-        console.error(`[Fabric] Failed to download library ${lib.name}:`, error);
+      let downloaded = false;
+      let lastError: Error | null = null;
+
+      for (const url of urlsToTry) {
+        try {
+          console.log(`[Fabric] Downloading library: ${lib.name} from ${url}`);
+          const response = await axios.get(url, { 
+            responseType: 'arraybuffer',
+            timeout: 30000,
+            validateStatus: (status) => status === 200,
+          });
+          
+          await fs.mkdir(path.dirname(libPath), { recursive: true });
+          await fs.writeFile(libPath, response.data);
+          
+          console.log(`[Fabric] Downloaded: ${lib.name}`);
+          downloaded = true;
+          break;
+        } catch (error) {
+          lastError = error as Error;
+          // 다음 URL 시도
+        }
+      }
+
+      if (!downloaded) {
+        console.error(`[Fabric] Failed to download library ${lib.name} from all sources`);
         throw new Error(`Failed to download Fabric library: ${lib.name}`);
       }
+
+      if (onProgress) onProgress(index + 1, profile.libraries.length);
     });
 
     await Promise.all(downloadPromises);
