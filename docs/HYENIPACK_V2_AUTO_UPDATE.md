@@ -1,62 +1,64 @@
-# 혜니팩 v2: 자동 업데이트 시스템
+# 혜니팩 v2: 자동 업데이트 시스템 (하이브리드 아키텍처)
 
 **작성일:** 2025년 11월 24일  
-**최종 수정:** 2025년 11월 24일  
+**최종 수정:** 2025년 12월 2일 (Phase 3 - Hybrid Design)  
 **버전:** 2.0
 
 ---
 
 ## 📋 핵심 아이디어
 
-혜니팩에 **혜니팩 ID** 추가 → hyenihelper처럼 R2에서 버전 관리 → 자동 업데이트
+혜니팩에 **혜니팩 ID** 추가 → R2에서 버전 관리 → 하이브리드 방식으로 자동 업데이트
 
 ```
-혜니팩 Export (혜니팩 ID 포함)
+혜니팩 Export (혜니팩 ID + 내장 정책 포함)
   → 수동으로 R2 업로드 (버전별 저장)
   → 런처가 자동 체크
-  → 새 버전 감지 시 업데이트
+  → 새 버전 감지 시 하이브리드 업데이트
+    - Mods: 선언형 동기화 (자가 치유)
+    - Configs: 내장 정책 기반 처리
 ```
 
 ---
 
-## 🎯 가치 평가
+## 🎯 설계 철학 (Phase 3 개선)
+
+### 하이브리드 아키텍처
+
+| 대상 | 방식 | 특징 |
+|------|------|------|
+| **Mods** | 선언형 (Declarative) | Manifest 비교 → 자동 동기화/자가 치유 |
+| **Configs/기타** | 명령형 (Imperative) | 내장 정책(Embedded Policy) 기반 처리<br/>keep/replace/merge 선택 가능 |
+
+### 핵심 철학
+1. **로컬 중심 (Local-First)**: 중앙 서버(DB) 없이 R2 정적 호스팅만으로 작동
+2. **단일 진실 공급원 (SSOT)**: 모든 정책은 `.hyenipack` 파일(Manifest) 안에 내장
+3. **로직 통합**: Import와 Auto-Update가 동일한 정책 엔진 사용
+4. **사용자 보호**: 사용자가 추가한 파일은 메타데이터로 구분하여 보호
+
+---
+
+## ✅ 가치 평가
 
 | 장점 | 설명 |
 |------|------|
-| **단순함** | hyenihelper 시스템 100% 재사용 |
-| **직관성** | "모드처럼 혜니팩도 업데이트" |
-| **유연성** | 업데이트 or 새 프로필 선택 가능 |
-| **저비용** | R2만 사용 (추가 비용 없음) |
-
-### 기존 계획 vs 새 방식
-
-| 항목 | 토큰 기반 서버 결정 | 혜니팩 v2 자동 업데이트 |
-|------|-------------------|----------------------|
-| 복잡도 | 높음 (D1, 서버 로직) | 낮음 (R2만) |
-| 개발 시간 | 3-4주 | 2-3주 |
-| 유지보수 | 복잡 | 단순 |
-
----
-
-## ✅ 실현 가능성: 매우 높음 (90%+)
-
-**이유:**
-- WorkerModUpdater 패턴 그대로 적용
-- hyenipack-importer 로직 재사용
-- R2 구조 동일
+| **단순함** | changes/ 디렉토리 불필요, R2 구조 단순화 |
+| **안정성** | 선언형 동기화로 자가 치유 가능 |
+| **정밀함** | 내장 정책으로 Config 파일 정교한 제어 |
+| **일관성** | Import = Update (동일한 결과 보장) |
 
 ---
 
 ## 📐 설계
 
-### 1. 혜니팩 포맷 v2
+### 1. 혜니팩 포맷 v2 (Embedded Policy)
 
 ```typescript
 export interface HyeniPackManifestV2 {
   formatVersion: 2;
   hyenipackId: string;         // "hyenipack-hyeniworld" (신규)
   name: string;
-  version: string;
+  version: string;             // SemVer (예: "1.2.0")
   author: string;
   description?: string;
   changelog?: string;          // 신규
@@ -65,12 +67,93 @@ export interface HyeniPackManifestV2 {
     loaderType: LoaderType;
     loaderVersion: string;
   };
+  
+  // 모드 목록 (선언형 관리)
   mods: HyeniPackModEntry[];
+  
+  // 파일 업데이트 정책 (명령형 관리) - 신규
+  // mods, shaderpacks, resourcepacks를 제외한 파일들에 적용
+  overrides: OverridePolicy[];
+  
   createdAt: string;
+}
+
+export interface OverridePolicy {
+  path: string;                // 파일 또는 폴더 경로 (예: "config", "config/sodium-options.json")
+  policy: 'keep' | 'replace' | 'merge';
 }
 ```
 
-### 2. R2 구조
+**정책 우선순위 (Cascading Rule):**
+- "가장 구체적인 규칙(Most Specific Match = Longest Prefix Match)" 우선 적용
+
+**예시:**
+```json
+{
+  "overrides": [
+    { "path": "config", "policy": "keep" },                        // 기본: config 폴더 전체 유지
+    { "path": "config/sodium-options.json", "policy": "replace" }  // 예외: 소듐 설정은 강제 교체
+  ]
+}
+```
+- `config/options.txt` → **Keep** (폴더 규칙)
+- `config/sodium-options.json` → **Replace** (파일 규칙, 더 구체적이므로 우선)
+
+---
+
+### 정책별 동작 상세
+
+#### 파일 단위 정책
+
+| 정책 | 로컬에 파일 있음 | 로컬에 파일 없음 |
+|------|----------------|----------------|
+| **keep** | 건드리지 않음 (기존 유지) | 새 파일 설치 |
+| **replace** | 덮어쓰기 | 새 파일 설치 |
+| **merge** | 병합 시도* → 실패 시 덮어쓰기 | 새 파일 설치 |
+
+*병합 가능 조건: JSON, Properties 등 구조화된 파일
+
+#### 폴더 단위 정책
+
+| 정책 | 동작 | 예시 |
+|------|------|------|
+| **keep** | 기존 파일 유지 + 새 파일만 추가 | `config/` 폴더에 keep 적용 시:<br/>- 기존: `a.json`, `b.json`<br/>- 신규: `b.json`, `c.json`<br/>→ 결과: `a.json`(유지), `b.json`(유지), `c.json`(추가) |
+| **replace** | 폴더 통째로 교체<br/>(기존 파일 전체 삭제 후 재설치) | `config/` 폴더에 replace 적용 시:<br/>- 기존: `a.json`, `b.json`<br/>- 신규: `b.json`, `c.json`<br/>→ 결과: `a.json`(삭제), `b.json`(새로 설치), `c.json`(새로 설치) |
+| **merge** | keep과 동일<br/>(기존 유지 + 신규 추가) | 폴더 병합 = 파일 additive 방식 |
+
+#### 실전 예시
+
+```json
+{
+  "overrides": [
+    { "path": "config", "policy": "keep" },
+    { "path": "config/sodium-options.json", "policy": "replace" },
+    { "path": "scripts", "policy": "replace" }
+  ]
+}
+```
+
+**시나리오:**
+- 로컬에 `config/options.txt`, `config/sodium-options.json`, `config/old-mod.json` 존재
+- 혜니팩에 `config/sodium-options.json`, `config/new-mod.json` 포함
+- 로컬에 `scripts/old-script.zs` 존재
+- 혜니팩에 `scripts/new-script.zs` 포함
+
+**결과:**
+1. `config/`:
+   - `options.txt` → 유지 (keep 정책)
+   - `old-mod.json` → 유지 (keep 정책)
+   - `sodium-options.json` → **덮어쓰기** (파일별 replace 정책이 더 구체적)
+   - `new-mod.json` → 추가 (keep 정책)
+2. `scripts/`:
+   - `old-script.zs` → **삭제** (replace 정책)
+   - `new-script.zs` → 설치 (replace 정책)
+
+---
+
+### 2. R2 구조 (단순화)
+
+복잡한 `changes/` 디렉토리 없이, **버전별 파일**과 **최신 정보**만 유지합니다.
 
 ```
 hyenimc-releases/modpacks/
@@ -87,59 +170,38 @@ hyenimc-releases/modpacks/
 ```json
 {
   "hyenipackId": "hyenipack-hyeniworld",
-  "version": "1.0.4",
-  "minVersion": "1.0.0",
-  "changelog": "- Sodium 업데이트\n- Iris 추가",
+  "version": "1.2.0",
+  "minLauncherVersion": "2.1.0",
+  "changelog": "- Sodium 업데이트\n- Iris 추가\n- Config 최적화",
   "fileSize": 52428800,
   "sha256": "abc123..."
 }
 ```
 
-**changes/ 디렉토리 (변경점 추적):**
-```
-modpacks/hyenipack-hyeniworld/changes/
-├── 1.0.0-to-1.0.1.json  # 순차 업데이트
-├── 1.0.1-to-1.0.2.json
-├── 1.0.2-to-1.0.3.json
-├── 1.0.3-to-1.0.4.json
-├── 1.0.0-to-1.0.4.json  # 직행 업데이트
-├── 1.0.1-to-1.0.4.json
-└── 1.0.2-to-1.0.4.json
-```
-
-**changes.json 예시:**
-```json
-{
-  "fromVersion": "1.0.0",
-  "toVersion": "1.0.4",
-  "changes": [
-    {
-      "type": "mod",
-      "action": "update",
-      "path": "mods/sodium-0.6.0.jar",
-      "previousPath": "mods/sodium-0.5.8.jar"
-    },
-    {
-      "type": "config",
-      "action": "replace",
-      "path": "config/sodium-options.json"
-    },
-    {
-      "type": "shaderpack",
-      "action": "add",
-      "path": "shaderpacks/BSL_v8.2.09.zip"
-    }
-  ]
-}
-```
+**변경점:**
+- ❌ **삭제됨**: `changes/` 디렉토리 (더 이상 불필요)
+- ✅ **추가됨**: Manifest에 `overrides` 필드 (내장 정책)
 
 **버전 정책:**
 - ✅ 업데이트 가능: 같은 메이저.마이너 내 (1.0.x → 1.0.y)
 - ❌ 업데이트 불가: 메이저/마이너 변경 시 (1.0.x → 1.1.x)
 
-### 3. Export 기능 (프로필 상세보기)
+---
+
+### 3. Export 기능 (정책 내장)
 
 **위치:** 프로필 상세보기 페이지 → "혜니팩 내보내기" 버튼
+
+#### Export UI 플로우
+
+1. **파일 선택**: 포함할 파일들을 체크
+2. **정책 설정 (신규)**:
+   - `mods`, `resourcepacks`, `shaderpacks`: 자동 관리 (정책 설정 불필요)
+   - `config/`, `scripts/` 등 기타 파일: 정책 선택 가능
+     - 기본값: **Keep** (사용자 설정 보존)
+     - 우클릭 메뉴: "Change Policy to Replace"
+     - 폴더 단위 설정 + 개별 파일 예외 처리
+3. **생성**: 정책 정보가 포함된 `.hyenipack` 파일 생성
 
 ```typescript
 export interface HyeniPackExportOptionsV2 {
@@ -150,16 +212,26 @@ export interface HyeniPackExportOptionsV2 {
   description: string;
   changelog?: string;          // 신규
   selectedFiles: string[];
+  overridePolicies: OverridePolicy[];  // 신규
 }
 
 // Export 시:
-// 1. Manifest v2 생성 (hyenipackId 포함)
+// 1. Manifest v2 생성 (hyenipackId + overrides 포함)
 // 2. .hyenipack 파일 생성
 // 3. 사용자가 수동으로 R2 업로드
-// (latest.json, changes/*.json은 R2 관리 도구로 별도 생성)
 ```
 
+#### R2 업로드 플로우
+
+1. `.hyenipack` 파일을 그대로 업로드 (`versions/1.2.0/hyenipack.hyenipack`)
+2. `.hyenipack` 내부의 `hyenipack.json`만 추출하여 `latest.json`으로 업로드
+3. **끝!** (changes.json 생성 불필요)
+
+---
+
 ### 4. Import 기능 (핵심)
+
+Import와 Update는 **완전히 동일한 로직**을 사용합니다.
 
 #### UI 설계: 2-Column Selection Layout
 
@@ -183,7 +255,7 @@ export interface HyeniPackExportOptionsV2 {
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
-**케이스 2: hyenipackId 없거나 불일치 + 강제 업데이트**
+**케이스 2: 강제 업데이트 (hyenipackId 불일치)**
 ```
 ┌───────────────────────────────────────────────────────────────────────────┐
 │  [✓] 프로필 강제 업데이트 (체크박스)                                       │
@@ -230,10 +302,164 @@ export interface HyeniPackExportOptionsV2 {
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
-#### 로직
+#### 프로필 정보 표시 (Tooltip)
+
+**Lv1 (항상 표시)**:
+```
+● 혜니월드 생존
+  1.21.1 • Fabric 0.16.7
+```
+
+**Lv2 (호버 툴팁)**:
+```
+┌──────────────────────┐
+│ 📦 모드: 52개          │
+│ 🕐 마지막: 2시간 전     │
+│ ⏱️ 총 플레이: 15시간    │
+│ ──────────────────── │
+│ 혜니월드 서버용       │
+└──────────────────────┘
+```
+
+---
+
+### 5. 동기화 로직 (하이브리드)
+
+Import(수동 설치)와 Auto-Update(자동 업데이트)는 **완전히 동일한 로직**을 사용합니다.
+
+####  5.1 Mods 동기화 (선언형)
+
+**원칙**: "Manifest에 있는 건 설치하고, 없는 건 삭제한다. 단, 사용자가 추가한 건 건드리지 않는다."
 
 ```typescript
-async importV2(packFilePath: string, selectedTarget: ImportTarget): Promise<ImportResult> {
+async function syncMods(profileDir: string, manifest: HyeniPackManifestV2) {
+  const existingMods = await scanModsDirectory(profileDir);
+  const targetMods = manifest.mods;
+  
+  // 1. 삭제 대상 결정
+  for (const localMod of existingMods) {
+    const metadata = await metadataManager.getModMetadata(profileDir, localMod.fileName);
+    
+    // Manifest에 없는 모드 발견
+    if (!targetMods.find(m => matchesMod(m, localMod))) {
+      // 사용자가 추가한 모드는 보존
+      if (metadata.found && metadata.metadata.installedFrom === 'manual') {
+        console.log(`[Keep] User-added mod: ${localMod.fileName}`);
+        continue;
+      }
+      
+      // 혜니팩이 설치한 모드는 삭제
+      if (metadata.found && metadata.metadata.installedFrom === 'hyenipack') {
+        console.log(`[Remove] Managed mod no longer in manifest: ${localMod.fileName}`);
+        await fs.unlink(path.join(profileDir, 'mods', localMod.fileName));
+        await metadataManager.removeModMetadata(profileDir, localMod.fileName);
+      }
+    }
+  }
+  
+  // 2. 추가/업데이트 대상 처리
+  for (const targetMod of targetMods) {
+    const existing = existingMods.find(m => matchesMod(targetMod, m));
+    
+    if (!existing) {
+      // 신규 설치
+      await downloadAndInstall(targetMod, profileDir);
+    } else if (needsUpdate(targetMod, existing)) {
+      // 버전 업데이트
+      await removeOldVersion(existing);
+      await downloadAndInstall(targetMod, profileDir);
+    }
+  }
+}
+
+function matchesMod(targetMod, localMod) {
+  return targetMod.metadata?.source === localMod.source && 
+         targetMod.metadata?.projectId === localMod.sourceModId;
+}
+```
+
+**핵심 메타데이터 구조 (기존 활용):**
+```typescript
+export interface InstalledModMeta {
+  source: 'modrinth' | 'curseforge' | 'url' | 'local';
+  sourceModId?: string;
+  versionNumber: string;
+  installedAt: string;
+  
+  // 설치 출처 (핵심!)
+  installedFrom?: 'hyenipack' | 'manual' | 'update' | 'dependency';
+  
+  // 모드팩 정보
+  modpackId?: string;
+  modpackVersion?: string;
+}
+```
+
+#### 5.2 Configs/Others 동기화 (명령형)
+
+**원칙**: "Manifest의 `overrides` 정책에 따라 처리한다."
+
+```typescript
+async function syncOverrides(profileDir: string, manifest: HyeniPackManifestV2) {
+  const overrideFiles = await extractOverridesFromPack(manifest);
+  
+  for (const file of overrideFiles) {
+    const targetPath = path.join(profileDir, file.relativePath);
+    const policy = findPolicy(file.relativePath, manifest.overrides);
+    
+    switch (policy) {
+      case 'keep':
+        // 로컬 파일이 있으면 건너뜀
+        if (await fs.pathExists(targetPath)) {
+          console.log(`[Keep] Preserving existing: ${file.relativePath}`);
+        } else {
+          console.log(`[Keep/Add] Installing new file: ${file.relativePath}`);
+          await fs.copy(file.sourcePath, targetPath);
+        }
+        break;
+        
+      case 'replace':
+        // 무조건 덮어쓰기
+        console.log(`[Replace] Overwriting: ${file.relativePath}`);
+        await fs.copy(file.sourcePath, targetPath);
+        break;
+        
+      case 'merge':
+        // 가능한 경우 병합
+        if (await isMergeable(targetPath, file.sourcePath)) {
+          console.log(`[Merge] Merging: ${file.relativePath}`);
+          await mergeFiles(targetPath, file.sourcePath);
+        } else {
+          console.log(`[Merge->Replace] Cannot merge, replacing: ${file.relativePath}`);
+          await fs.copy(file.sourcePath, targetPath);
+        }
+        break;
+    }
+  }
+}
+
+/**
+ * Cascading Rule: 가장 구체적인 정책 선택
+ */
+function findPolicy(filePath: string, policies: OverridePolicy[]): 'keep' | 'replace' | 'merge' {
+  const matches = policies.filter(p => filePath.startsWith(p.path));
+  
+  if (matches.length === 0) {
+    return 'keep';  // 기본값
+  }
+  
+  // 가장 긴 경로(가장 구체적인 규칙) 선택
+  matches.sort((a, b) => b.path.length - a.path.length);
+  return matches[0].policy;
+}
+```
+
+---
+
+### 6. Import/Update 로직 (통합)
+
+```typescript
+async function importV2(packFilePath: string, selectedTarget: ImportTarget): Promise<ImportResult> {
   const manifest = await readManifest(packFilePath);
   
   if (selectedTarget.type === 'new') {
@@ -251,18 +477,14 @@ interface ImportTarget {
   profile?: Profile;     // type='update'일 때 필수
 }
 
-async updateExistingProfile(profile, manifest): Promise {
+async function updateExistingProfile(profile: Profile, manifest: HyeniPackManifestV2): Promise<ImportResult> {
   // 0. loaderType 변경 확인
   if (profile.loaderType !== manifest.minecraft.loaderType) {
-    // 경고: "로더가 Fabric → Forge로 변경됩니다. 기존 모드가 모두 제거됩니다."
     const confirmed = await showLoaderChangeWarning(profile, manifest);
     if (!confirmed) return { success: false, cancelled: true };
   }
   
-  // 1. 변경사항 계산
-  const changes = await calculateChanges(profile, manifest);
-  
-  // 2. 프로필 버전 정보 업데이트
+  // 1. 프로필 버전 정보 업데이트
   // ✅ 검증 완료: 게임 시작 시 자동으로 로더 재설치됨
   await updateProfile({ 
     gameVersion: manifest.minecraft.version,
@@ -270,60 +492,23 @@ async updateExistingProfile(profile, manifest): Promise {
     loaderVersion: manifest.minecraft.loaderVersion 
   });
   
-  // 3. 모드/파일 업데이트
-  await applyChanges(changes);
-  await updateMetadata(manifest);
+  // 2. 하이브리드 동기화 (Import = Update 동일 로직)
+  await syncMods(profile.path, manifest);           // 선언형
+  await syncOverrides(profile.path, manifest);      // 명령형 (내장 정책)
   
-  return { success: true, updated: true, changes };
-}
-
-/**
- * 변경사항 계산 (Import 시 - 파일 기반)
- */
-function calculateChanges(profile, manifest): Changes {
-  return {
-    // config: 보존 (기존 유지, 새 파일만 추가)
-    configs: diffFiles(profile.configs, manifest.configs, 'preserve'),
-    
-    // mods: 교체 (출처+버전 비교)
-    mods: diffMods(profile.mods, manifest.mods),
-    
-    // shaderpacks: 병합 (기존 유지 + 새 파일 추가)
-    shaderpacks: diffFiles(profile.shaderpacks, manifest.shaderpacks, 'merge'),
-    
-    // resourcepacks: 병합
-    resourcepacks: diffFiles(profile.resourcepacks, manifest.resourcepacks, 'merge'),
-    
-    // 기타: 추가만 (기존 유지, 새 파일만 추가)
-    others: diffFiles(profile.others, manifest.others, 'addOnly')
-  };
-}
-
-/**
- * 모드 비교 알고리즘
- */
-function diffMods(existing, incoming): ModChanges {
-  const changes = { add: [], remove: [], update: [] };
+  // 3. 메타데이터 업데이트
+  await updateProfileMetadata(profile.id, {
+    hyenipackId: manifest.hyenipackId,
+    hyenipackVersion: manifest.version
+  });
   
-  for (const newMod of incoming) {
-    const match = existing.find(m => 
-      m.source === newMod.source && m.sourceModId === newMod.sourceModId
-    );
-    
-    if (!match) {
-      changes.add.push(newMod);
-    } else if (match.version !== newMod.version) {
-      changes.update.push({ old: match, new: newMod });
-    }
-    // 동일 버전 → 스킵
-  }
-  
-  // 새 manifest에 없는 기존 모드는 유지 (Import 시)
-  return changes;
+  return { success: true, updated: true };
 }
 ```
 
-### 5. 자동 업데이트 체크
+---
+
+### 7. 자동 업데이트 체크
 
 **업데이트 타이밍:**
 1. 게임 시작 전 혜니팩 업데이트 확인 (먼저)
@@ -346,7 +531,7 @@ export class HyeniPackUpdater {
     
     // 메이저/마이너 다르면 업데이트 불가
     if (current.major !== target.major || current.minor !== target.minor) {
-      return null;  // 또는 "새 버전 설치 필요" 안내
+      return null;
     }
     
     // 4. 버전 비교
@@ -362,83 +547,53 @@ export class HyeniPackUpdater {
     return null;
   }
   
-  async downloadAndUpdate(profileId, updateInfo, token): Promise {
-    // 1. changes.json 가져오기
-    const changesUrl = `changes/${updateInfo.currentVersion}-to-${updateInfo.latestVersion}.json`;
-    const changes = await fetchChanges(updateInfo.hyenipackId, changesUrl);
+  async downloadAndUpdate(profileId, updateInfo, token): Promise<UpdateResult> {
+    // 1. 새 혜니팩 파일 다운로드
+    const packPath = await downloadHyeniPack(
+      updateInfo.hyenipackId,
+      updateInfo.latestVersion,
+      token
+    );
     
-    // 2. 변경사항 적용 (R2 업데이트 정책)
-    await applyR2Changes(profileId, changes, token);
-    
-    // 3. 메타데이터 업데이트
-    await updateMetadata(profileId, updateInfo.latestVersion);
-  }
-}
-
-/**
- * R2 업데이트 시 변경 적용 (메타데이터 기반)
- * Import와 다르게 config 등도 메타데이터에 따라 덮어쓰기 가능
- */
-async function applyR2Changes(profileId, changes, token) {
-  for (const change of changes.changes) {
-    switch (change.action) {
-      case 'add':
-        await downloadAndAdd(change.path, token);
-        break;
-      case 'remove':
-        await removeFile(change.path);
-        break;
-      case 'replace':
-        await downloadAndReplace(change.path, token);
-        break;
-      case 'update':  // 모드 버전 업데이트
-        await removeFile(change.previousPath);
-        await downloadAndAdd(change.path, token);
-        break;
-      case 'skip':
-        // 건드리지 않음
-        break;
-    }
+    // 2. Import 로직 재사용 (동일한 정책 엔진)
+    const profile = await getProfile(profileId);
+    return await importV2(packPath, { type: 'update', profile });
   }
 }
 ```
 
-### 5.1 에러 복구
+### 7.1 에러 복구
 
 ```typescript
-async downloadAndUpdate(profileId, updateInfo, token): Promise {
+async downloadAndUpdate(profileId, updateInfo, token): Promise<UpdateResult> {
   try {
     // ... 업데이트 로직
   } catch (error) {
     if (error instanceof NetworkError) {
-      // 네트워크 오류: 재시도 안내
       return { success: false, retryable: true, error };
     }
     if (error instanceof ChecksumError) {
-      // 체크섬 불일치: 재다운로드
       await cleanupPartialDownload();
       return { success: false, retryable: true, error };
     }
-    // 기타 오류: 수동 복구 안내
     return { success: false, retryable: false, error };
   }
 }
 ```
 
-### 5.2 다운그레이드 (제한적 지원)
+### 7.2 다운그레이드 (제한적 지원)
 
 ```typescript
-// 버전 목록 조회
 async listVersions(hyenipackId): Promise<VersionInfo[]> {
   const registry = await fetchRegistry(hyenipackId);
   return registry.versions;  // ["1.0.0", "1.0.1", "1.0.2", ...]
 }
-
 // UI에서 버전 선택 후 수동 다운로드 가능
-// 자동 다운그레이드는 지원하지 않음
 ```
 
-### 6. Worker API
+---
+
+### 8. Worker API
 
 > ⚠️ **보안 개선 필요**: 현재 URL 파라미터로 토큰 전달 → Authorization 헤더로 변경 필요
 > 이 개선은 혜니팩 v2와 무관하게 HyeniMC 버전 업그레이드 시 별도 진행
@@ -446,40 +601,23 @@ async listVersions(hyenipackId): Promise<VersionInfo[]> {
 ```javascript
 // GET /api/v2/modpacks/{hyenipackId}/latest.json
 async function getLatestInfo(hyenipackId, env) {
-  // 입력 검증
   if (!isValidHyenipackId(hyenipackId)) {
     return new Response('Invalid ID', { status: 400 });
   }
   
-  const latest = await env.RELEASES.get(
-    `modpacks/${hyenipackId}/latest.json`
-  );
+  const latest = await env.RELEASES.get(`modpacks/${hyenipackId}/latest.json`);
   return new Response(latest, { 
     headers: { 'Cache-Control': 'public, max-age=300' }
   });
 }
 
-// GET /api/v2/modpacks/{hyenipackId}/changes/{from}-to-{to}.json
-async function getChanges(hyenipackId, from, to, env) {
-  if (!isValidHyenipackId(hyenipackId)) {
-    return new Response('Invalid ID', { status: 400 });
-  }
-  
-  const changes = await env.RELEASES.get(
-    `modpacks/${hyenipackId}/changes/${from}-to-${to}.json`
-  );
-  return new Response(changes);
-}
-
 // GET /api/v2/modpacks/{hyenipackId}/download/{version}
 // Authorization: Bearer {token}
 async function download(hyenipackId, version, request, env) {
-  // 입력 검증
   if (!isValidHyenipackId(hyenipackId)) {
     return new Response('Invalid ID', { status: 400 });
   }
   
-  // 토큰 검증 (헤더에서)
   const token = request.headers.get('Authorization')?.replace('Bearer ', '');
   if (!await validateToken(token, env)) {
     return new Response('Unauthorized', { status: 401 });
@@ -491,7 +629,6 @@ async function download(hyenipackId, version, request, env) {
   return new Response(file.body);
 }
 
-// 입력 검증 함수
 function isValidHyenipackId(id) {
   const pattern = /^[a-z0-9\-]+$/;
   return pattern.test(id) && id.length <= 64 && !id.includes('..');
@@ -504,45 +641,36 @@ function isValidHyenipackId(id) {
 
 ### Phase 1: 포맷 업그레이드 (3일)
 - `HyeniPackManifestV2` 타입 정의
+- `OverridePolicy` 추가
 - Export UI에 hyenipackId/changelog 입력 추가
-- latest.json 로컬 생성 (사용자가 R2에 수동 업로드)
 
 ### Phase 1.5: Import UI 리팩토링 (3일)
 - 2-Column Selection Layout 구현
-  - 왼쪽: 모드팩 카드 (선택 가능)
-  - 오른쪽: 프로필 목록 (조건부 표시)
-- 프로필 카드 디자인
-  - **기본 정보 항상 표시**: MC 버전, 로더 타입, 로더 버전
-  - **호버 시 툴팁**: 모드 개수, 마지막 플레이 시간, 총 플레이 시간
-  - 2줄 레이아웃: 프로필명 + 버전 정보
+- 프로필 카드 디자인 (기본 정보 + 툴팁)
 - 프로필 매칭 로직
-  - hyenipackId 기반 자동 매칭
-  - 강제 업데이트 체크박스
-- 선택 상태 관리
-  - 라디오 버튼 스타일 선택
-  - 버튼 텍스트 동적 변경
-- 반응형 디자인
-  - 스크롤 가능한 프로필 목록
-  - 좁은 화면 대응
+- 강제 업데이트 체크박스
 
-### Phase 2: 업데이트 로직 (5일)
-- `calculateChanges()` 구현 (MC 버전, 로더 버전, 모드, 파일 diff)
-- `updateExistingProfile()` 구현 (프로필 업데이트 포함)
+### Phase 2: 하이브리드 동기화 로직 (5일)
+- `syncMods()` 구현 (선언형, 메타데이터 기반)
+- `syncOverrides()` 구현 (명령형, 내장 정책 기반)
+- `findPolicy()` Cascading Rule 구현
 - 업데이트 감지 UI
 
-### Phase 3: 자동 업데이트 (4일)
+### Phase 3: Export UI 정책 설정 (3일)
+- 파일 선택 UI
+- 정책 선택 UI (트리 구조)
+- 우클릭 메뉴: "Change Policy"
+- Manifest 생성 시 overrides 포함
+
+### Phase 4: 자동 업데이트 (2일)
 - `HyeniPackUpdater` 서비스
 - 게임 시작 전 체크
-- 원클릭 업데이트
+- Import 로직 재사용 (통합)
 
-### Phase 4: R2 및 Worker (2일)
-- Worker API 추가
-- 수동 배포 가이드 문서
-
-### Phase 5: 테스트 (3일)
+### Phase 5: 테스트 및 문서 (2일)
 - 기능 테스트
 - 통합 테스트
-- 문서 작성
+- 수동 배포 가이드 문서
 
 ---
 
@@ -550,157 +678,75 @@ function isValidHyenipackId(id) {
 
 ### 시나리오 1: 최초 배포
 ```
-관리자: Export (hyenipackId: "hyenipack-hyeniworld", v1.0.0)
+관리자: Export (hyenipackId: "hyenipack-hyeniworld", v1.0.0 + overrides)
   → 수동으로 R2 업로드
-사용자: Import → 새 프로필 생성
+사용자: Import → 새 프로필 생성 (내장 정책 적용)
 ```
 
 ### 시나리오 2: 자동 업데이트
 ```
-관리자: 새 버전 Export (v1.1.0) → 수동으로 R2 업로드
+관리자: 새 버전 Export (v1.1.0 + 업데이트된 overrides) → R2 업로드
 사용자: 게임 실행
   → 런처: 업데이트 감지!
-  → 알림: "v1.0.0 → v1.1.0 업데이트"
-  → [업데이트] 클릭 → 자동 적용
+  → [업데이트] 클릭
+  → 하이브리드 동기화 (Mods 선언형 + Configs 내장 정책)
+  → "업데이트 완료! (사용자 추가 모드 3개 유지됨)"
 ```
 
 ### 시나리오 3: 수동 Import 업데이트
 ```
 사용자: 새 .hyenipack 다운로드 → Import
 런처: "기존 프로필 발견. 업데이트하시겠습니까?"
-  → [업데이트] 선택 → MC 버전, 로더 버전, 모드, 파일 모두 업데이트
+  → [업데이트] 선택
+  → 하이브리드 동기화 (Import = Update 동일 로직)
 ```
 
-### 시나리오 4: hyenipackId 없는 프로필 강제 업데이트
+### 시나리오 4: 강제 업데이트
 ```
 사용자: 새 .hyenipack Import
-런처: Import 화면에서 2-column 레이아웃 표시
-
-┌───────────────────────────────────────────────────────────────────────────┐
-│ [✓] 프로필 강제 업데이트                                                  │
-│                                                                            │
-│  ┌──────────────────────┐         ┌────────────────────────────────────┐ │
-│  │ 📦 설치할 모드팩       │   ==>   │ 📁 모든 프로필                      │ │
-│  │                      │         │                                    │ │
-│  │ 혜니월드 생존 팩      │         │ ○ 혜니월드 생존                     │ │
-│  │ v1.2.0              │         │   1.21.1 • Fabric 0.16.7          │ │
-│  │ MC 1.21.1           │         │                                    │ │
-│  │ Fabric 0.16.7       │         │ ○ 크리에이티브                      │ │
-│  │ 모드 52개            │         │   1.21.1 • Forge 52.0.23          │ │
-│  │                      │         │                                    │ │
-│  │ [선택됨: 새로 생성]   │         │ ○ 테스트                           │ │
-│  │                      │         │   1.20.1 • Vanilla                │ │
-│  └──────────────────────┘         │                                    │ │
-│                                   │ (스크롤 가능)                      │ │
-│                                   └────────────────────────────────────┘ │
-│                                                                            │
-│  [프로필 이름: 혜니월드 생존]                                              │
-│             [새 프로필로 설치]                                             │
-└───────────────────────────────────────────────────────────────────────────┘
-
-→ 왼쪽 선택: 새 프로필 생성 (기본)
-→ 오른쪽 선택: 선택한 프로필 업데이트 (예: 혜니월드 생존)
+런처: 2-column 레이아웃 표시
+  → [✓] 프로필 강제 업데이트 체크
+  → 오른쪽에서 기존 프로필 선택
+  → 하이브리드 동기화
 ```
 
 ---
 
 ## ⚠️ 고려사항
 
-### 기존 프로필 마이그레이션
-- v1 혜니팩으로 만든 기존 프로필은 hyenipackId 없음
-- 자동 업데이트 불가 (수동 Import만 가능)
-- 문제없음: 새 버전부터 자동 업데이트 지원
-
 ### MC/로더 버전 자동 업데이트 검증 ✅
-
-**검증 결과:**
-```typescript
-// src/main/ipc/profile.ts - PROFILE_PLAY_GAME 핸들러
-
-// 1. 프로필 정보 가져오기
-const profile = await profileRpc.getProfile({ id: profileId });
-
-// 2. 로더 설치 필요 여부 확인
-if (profile.loaderType !== 'vanilla') {
-  const isInstalled = await loaderManager.isLoaderInstalled(
-    profile.loaderType,
-    profile.gameVersion,  // ← 프로필 정보 사용
-    profile.loaderVersion // ← 프로필 정보 사용
-  );
-  
-  if (!isInstalled) {
-    // 3. 자동으로 로더 설치
-    await loaderManager.installLoader(
-      profile.loaderType,
-      profile.gameVersion,
-      profile.loaderVersion
-    );
-  }
-}
-```
-
-**결론:**
 - ✅ 프로필의 `gameVersion`, `loaderVersion`만 업데이트하면 됨
 - ✅ 다음 게임 시작 시 자동으로 새 버전 로더 설치
 - ✅ 추가 구현 불필요 (기존 로직 재사용)
 
-### Export 접근 제한 불필요
-- 일반 사용자도 Export 사용 가능 (예: 친구와 공유)
-- 제한 없이 모든 사용자에게 개방
+### 로직 통합 (핵심)
+- ✅ **Import = Update**: 동일한 하이브리드 동기화 엔진 사용
+- ✅ **일관성 보장**: 수동 설치와 자동 업데이트가 완전히 동일한 결과
 
-### 공개/제한 혜니팩 구분 불필요
-- **R2 업데이트**: 토큰 필요 (자동)
-- **파일 Import**: 토큰 불필요 (수동)
-- 자연스럽게 구분됨 → 별도 플래그 불필요
+### 사용자 모드 보호
+- ✅ `installedFrom: 'manual'` → 보존
+- ✅ `installedFrom: 'hyenipack'` → 관리 대상
+- ✅ 충돌 시나리오: 파일명/ID 동일하면 혜니팩 버전으로 덮어쓰기 (이제부터 관리 대상)
+
+### 정책 충돌
+- Config 폴더 기본 정책: `keep`
+- 특정 파일 예외 정책: `replace` (Cascading Rule로 해결)
 
 ### 버전 정책
-- **업데이트 가능**: 같은 메이저.마이너 내 (1.0.x → 1.0.y)
-- **업데이트 불가**: 메이저/마이너 변경 시 (1.0.x → 1.1.x)
-- **다운그레이드**: 제한적 지원 (버전 목록 표시, 수동 다운로드)
+- ✅ 업데이트 가능: 같은 메이저.마이너 내 (1.0.x → 1.0.y)
+- ❌ 업데이트 불가: 메이저/마이너 변경 시 (1.0.x → 1.1.x)
 
 ### loaderType 변경 처리
 - Fabric → Forge 등 로더 변경 시 경고 표시
 - "기존 모드가 모두 제거됩니다" 안내 후 사용자 확인
 
-### 업데이트 정책 차이 (Import vs R2)
-
-| 타입 | Import (파일) | R2 업데이트 |
-|------|------------|-------------|
-| config | 보존 (새 파일만 추가) | 메타데이터 기반 |
-| mods | 교체 (출처+버전 비교) | 메타데이터 기반 |
-| shaderpacks | 병합 | 메타데이터 기반 |
-| resourcepacks | 병합 | 메타데이터 기반 |
-| 기타 | 추가만 | 메타데이터 기반 |
-
-**R2 매타데이터 action:**
-- `skip`: 건드리지 않음
-- `add`: 새로 추가
-- `replace`: 덮어쓰기
-- `remove`: 삭제
-- `update`: 모드 버전 업데이트 (기존 삭제 + 새 파일)
-
 ### 보안
-- 토큰 검증 (기존 시스템 활용)
-- SHA256 체크섬
-- HTTPS 전송
+- 토큰 검증, SHA256 체크섬, HTTPS 전송
 - hyenipackId 입력 검증 (path traversal 방지)
 
 > ⚠️ **별도 개선 필요** (HyeniMC 버전 업 시):
 > - URL 파라미터 토큰 → Authorization 헤더로 변경
-> - latest.json에서 downloadUrl 제거 (직접 경로 노출 방지)
-
-### 성능
-- latest.json: 5분 캐시
-- 버전 체크: < 1초
-- 다운로드: 네트워크 속도 의존
-
-### 진행률 UI
-- 기존 모드팩 설치 UI 재사용
-- 별도 구현 불필요
-
-### 동시성
-- 게임 실행 중 업데이트 시도 차단
-- 런처 다중 인스턴스 실행은 의도하지 않음 (고려 대상 외)
+> - latest.json에서 downloadUrl 제거
 
 ---
 
@@ -718,3 +764,4 @@ if (profile.loaderType !== 'vanilla') {
 - 기존: `/docs/HYENIPACK.md`
 - 기존 논의: `/docs/MODPACK_DYNAMIC_UPDATE_DISCUSSION.md`
 - 폐기: `/docs/TOKEN_BASED_MODPACK_SYSTEM.md`
+- 세션 기록: `/docs/HYENIPACK_V2_DISCUSSION_SESSION.md`
