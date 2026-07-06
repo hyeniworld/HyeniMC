@@ -4,6 +4,7 @@
 mod account;
 mod commands;
 mod game;
+mod hyeni;
 mod pack;
 
 use std::sync::Mutex;
@@ -32,16 +33,24 @@ fn db_status(db: tauri::State<commands::DbState>) -> Result<serde_json::Value, S
 fn main() {
     tauri::Builder::default()
         // single-instance는 가장 먼저 등록 (플러그인 문서 요구사항).
-        .plugin(tauri_plugin_single_instance::init(|_app, argv, _cwd| {
-            println!("[single-instance] second instance argv: {argv:?}");
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            // Windows/Linux: 두 번째 인스턴스 argv로 딥링크가 들어온다
+            for arg in &argv {
+                if arg.starts_with("hyenimc://") {
+                    hyeni::handle_deep_link(app, arg);
+                }
+            }
         }))
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             // hyenimc:// 딥링크 수신 로그 (macOS는 번들 앱에서만 OS 등록됨)
-            app.deep_link().on_open_url(|event| {
-                println!("[deep-link] received: {:?}", event.urls());
+            let handle = app.handle().clone();
+            app.deep_link().on_open_url(move |event| {
+                for url in event.urls() {
+                    hyeni::handle_deep_link(&handle, url.as_str());
+                }
             });
 
             // 기존 DB in-place 접속 — 실패 시 명시적 에러 (silent 초기화 금지)

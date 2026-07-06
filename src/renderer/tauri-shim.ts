@@ -154,10 +154,18 @@ function installTauriShim(): void {
     removeAllListeners: () => undefined,
   };
 
-  // 미구현 카테고리: 빈 응답 스텁 + warn (M5+에서 순차 실구현)
+  // preload 계약: checkUpdates(profilePath, gameVersion, loaderType, serverAddress?) / installMultiple(profilePath, updates)
+  api.workerMods = {
+    checkUpdates: (profilePath: string, gameVersion: string, loaderType: string, serverAddress?: string) =>
+      invoke('worker_mods_check', { profilePath, gameVersion, loaderType, serverAddress }),
+    installMultiple: (profilePath: string, updates: unknown[]) =>
+      invoke('worker_mods_install', { profilePath, updates }),
+  };
+
+  // 미구현 카테고리: 빈 응답 스텁 + warn (M5 T4/M6에서 순차 실구현)
   const STUB_CATEGORIES = [
     'mod', 'modpack', 'resourcepack', 'shaderpack',
-    'hyeni', 'workerMods', 'shell', 'dialog', 'fs',
+    'hyeni', 'shell', 'dialog', 'fs',
     'launcher', 'fileWatcher', 'errorDialog',
   ];
   for (const cat of STUB_CATEGORIES) {

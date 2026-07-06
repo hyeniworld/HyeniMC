@@ -1,0 +1,206 @@
+//! 혜니월드 통합 커맨드 (M5) — worker mods + 딥링크 인증.
+
+use std::path::{Path, PathBuf};
+
+use tauri::{AppHandle, Emitter, Manager, State};
+
+use hyenimc_launcher::hyeni as hy;
+use hyenimc_launcher::workermods;
+
+use crate::account::CryptoState;
+use crate::commands::DbState;
+
+/// 승인 서버 도메인 (기존 shared/config/server-config.ts와 동일)
+const AUTHORIZED_DOMAINS: [&str; 2] = ["*.devbug.ing", "*.devbug.me"];
+
+/// 와일드카드 도메인 매칭 — `*.devbug.ing`은 서브도메인 및 루트 도메인 자체도 허용
+pub fn is_authorized_server(address: &str) -> bool {
+    let host = address.to_lowercase();
+    let host = host.split(':').next().unwrap_or(&host);
+    AUTHORIZED_DOMAINS.iter().any(|pattern| {
+        if let Some(root) = pattern.strip_prefix("*.") {
+            host == root || host.ends_with(&format!(".{root}"))
+        } else {
+            host == *pattern
+        }
+    })
+}
+
+/// 트리거 판정 — 프로필 serverAddress 우선, 없으면 servers.dat에 승인 서버 존재 여부(TS 우선순위)
+fn should_check(profile_dir: &Path, server_address: Option<&str>) -> bool {
+    match server_address {
+        Some(addr) if !addr.is_empty() => is_authorized_server(addr),
+        _ => hy::servers_dat_ips(&profile_dir.join("servers.dat"))
+            .iter()
+            .any(|ip| is_authorized_server(ip)),
+    }
+}
+
+#[tauri::command]
+pub async fn worker_mods_check(
+    profile_path: String,
+    game_version: String,
+    loader_type: String,
+    server_address: Option<String>,
+) -> Result<Vec<workermods::WorkerModUpdate>, String> {
+    let profile_dir = PathBuf::from(&profile_path);
+    if !should_check(&profile_dir, server_address.as_deref()) {
+        return Ok(Vec::new()); // 혜니월드 서버 아님 — TS 의미(빈 목록)
+    }
+    let base = crate::pack::worker_base()?;
+    let http = reqwest::Client::new();
+    workermods::check_all_updates(&http, &base, &profile_dir.join("mods"), &game_version, &loader_type)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn worker_mods_install(
+    app: AppHandle,
+    db: State<'_, DbState>,
+    crypto: State<'_, CryptoState>,
+    profile_path: String,
+    updates: Vec<workermods::WorkerModUpdate>,
+    account_id: Option<String>,
+) -> Result<Vec<String>, String> {
+    let base = crate::pack::worker_base()?;
+
+    // 토큰: 지정 계정 또는 가장 최근 사용 계정 (다운로드 인증 필수)
+    let aid = match account_id {
+        Some(a) => a,
+        None => {
+            let conn = db.0.lock().unwrap();
+            hyenimc_core::account::list_accounts(&conn)
+                .map_err(|e| e.to_string())?
+                .first()
+                .map(|a| a.id.clone())
+                .ok_or_else(|| "필수 모드 다운로드에 로그인이 필요합니다".to_string())?
+        }
+    };
+    let token = crate::account::get_valid_tokens(&db, &crypto, &aid).await?.access_token;
+
+    let settings = {
+        let conn = db.0.lock().unwrap();
+        hyenimc_core::settings::get_settings(&conn).map_err(|e| e.to_string())?
+    };
+    let cfg = crate::game::download_config(&settings);
+    let http = reqwest::Client::new();
+
+    let app2 = app.clone();
+    let installed = workermods::install_updates(
+        &http,
+        &base,
+        &PathBuf::from(&profile_path).join("mods"),
+        &updates,
+        &token,
+        &cfg,
+        move |mod_id, progress| {
+            let _ = app2.emit(
+                "worker-mods:install-progress",
+                serde_json::json!({ "modId": mod_id, "progress": progress }),
+            );
+        },
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let _ = app.emit(
+        "worker-mods:update-complete",
+        serde_json::json!({ "installed": installed }),
+    );
+    Ok(installed)
+}
+
+/// hyenimc:// 딥링크 처리 — main.rs의 on_open_url/single-instance에서 호출.
+pub fn handle_deep_link(app: &AppHandle, url: &str) {
+    let Some((token, servers)) = hy::parse_auth_url(url) else {
+        if url.starts_with("hyenimc://") {
+            let _ = app.emit(
+                "auth:error",
+                serde_json::json!({ "message": "잘못된 인증 링크입니다" }),
+            );
+        }
+        return;
+    };
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        match apply_auth(&app, &token, &servers) {
+            Ok((count, names)) => {
+                let server_message = if servers.is_empty() {
+                    "모든 프로필".to_string()
+                } else {
+                    servers.join(", ")
+                };
+                let _ = app.emit(
+                    "auth:success",
+                    serde_json::json!({
+                        "servers": server_message,
+                        "token": token,
+                        "profileCount": count,
+                        "profileNames": names,
+                    }),
+                );
+            }
+            Err(e) => {
+                let _ = app.emit("auth:error", serde_json::json!({ "message": e }));
+            }
+        }
+    });
+}
+
+/// MODE1(servers 있음): servers.dat 매칭 프로필에 무조건 기록.
+/// MODE2(없음): HyeniHelper 설치 프로필에 기존 토큰 없을 때만 기록. (TS handleAuthRequest 의미)
+fn apply_auth(app: &AppHandle, token: &str, servers: &[String]) -> Result<(usize, Vec<String>), String> {
+    let db = app.state::<DbState>();
+    let profiles = {
+        let conn = db.0.lock().unwrap();
+        hyenimc_core::list_profiles(&conn).map_err(|e| e.to_string())?
+    };
+
+    let mut updated: Vec<String> = Vec::new();
+    for profile in &profiles {
+        let game_dir = PathBuf::from(&profile.game_directory);
+        let applied = if servers.is_empty() {
+            // MODE 2
+            hy::has_hyenihelper(&game_dir.join("mods"))
+                && hy::write_hyenihelper_config(&game_dir, token, false).map_err(|e| e.to_string())?
+        } else {
+            // MODE 1
+            let matches = servers
+                .iter()
+                .any(|s| hy::servers_dat_contains(&game_dir.join("servers.dat"), s));
+            if matches {
+                hy::write_hyenihelper_config(&game_dir, token, true).map_err(|e| e.to_string())?
+            } else {
+                false
+            }
+        };
+        if applied {
+            updated.push(profile.name.clone());
+        }
+    }
+
+    if updated.is_empty() {
+        return Err(if servers.is_empty() {
+            "HyeniHelper가 설치된 프로필을 찾을 수 없습니다".to_string()
+        } else {
+            format!("서버({})가 등록된 프로필을 찾을 수 없습니다", servers.join(", "))
+        });
+    }
+    Ok((updated.len(), updated))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn authorized_domain_wildcard() {
+        assert!(is_authorized_server("mc.devbug.ing"));
+        assert!(is_authorized_server("MC.DEVBUG.ING:25565"));
+        assert!(is_authorized_server("devbug.ing"));
+        assert!(is_authorized_server("a.b.devbug.me"));
+        assert!(!is_authorized_server("devbug.ing.evil.com"));
+        assert!(!is_authorized_server("hypixel.net"));
+    }
+}
