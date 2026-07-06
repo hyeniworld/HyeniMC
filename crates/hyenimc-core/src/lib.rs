@@ -7,6 +7,7 @@ pub mod db;
 pub mod paths;
 pub mod profile;
 pub mod settings;
+pub mod stats;
 
 pub use db::open_database;
 pub use profile::{list_profiles, Profile};
