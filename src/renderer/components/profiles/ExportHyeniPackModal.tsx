@@ -116,6 +116,13 @@ export function ExportHyeniPackModal({ isOpen, onClose, profileId, profileName }
   const [version, setVersion] = useState('1.0.0');
   const [author, setAuthor] = useState('');
   const [description, setDescription] = useState('');
+  const [hyenipackId, setHyenipackId] = useState(
+    profileName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+  );
+  const [changelog, setChangelog] = useState('');
+  const [breaking, setBreaking] = useState(false);
+  // 정책: 자동 관리 폴더(mods/resourcepacks/shaderpacks) 외 최상위 경로별 keep/replace
+  const [policies, setPolicies] = useState<Record<string, 'keep' | 'replace'>>({});
   
   // 파일 트리
   const [fileTree, setFileTree] = useState<FileTreeNode[]>([]);
@@ -233,7 +240,17 @@ export function ExportHyeniPackModal({ isOpen, onClose, profileId, profileName }
       toast.error('모드팩 이름을 입력해주세요');
       return;
     }
-    
+
+    if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(hyenipackId)) {
+      toast.error('혜니팩 ID는 소문자/숫자/하이픈만, 최대 64자입니다');
+      return;
+    }
+
+    if (!/^\d+\.\d+\.\d+$/.test(version)) {
+      toast.error('버전은 x.y.z SemVer 형식이어야 합니다');
+      return;
+    }
+
     const selectedFiles = getSelectedFiles(fileTree);
     if (selectedFiles.length === 0) {
       toast.error('최소 1개 이상의 파일을 선택해주세요');
@@ -257,18 +274,24 @@ export function ExportHyeniPackModal({ isOpen, onClose, profileId, profileName }
     setLoading(true);
     
     try {
+      const overridePolicies = Object.entries(policies).map(([p, policy]) => ({ path: p, policy }));
+
       const options = {
         packName,
         version,
         author,
         description,
         selectedFiles,
+        hyenipackId,
+        changelog: changelog || undefined,
+        breaking,
+        overridePolicies,
       };
-      
+
       const result = await window.electronAPI.hyenipack.export(profileId, options, savePath);
-      
+
       if (result.success) {
-        toast.success(`혜니팩이 생성되었습니다: ${savePath}`);
+        toast.success(`혜니팩이 생성되었습니다: ${savePath} (배포용 latest.json이 같은 폴더에 함께 생성됨)`);
         onClose();
       } else {
         throw new Error(result.error || '내보내기 실패');
@@ -318,7 +341,21 @@ export function ExportHyeniPackModal({ isOpen, onClose, profileId, profileName }
                 placeholder="나의 모드팩"
               />
             </div>
-            
+
+            <div>
+              <label className="block text-sm font-medium mb-1 text-gray-300">혜니팩 ID *</label>
+              <input
+                type="text"
+                value={hyenipackId}
+                onChange={(e) => setHyenipackId(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-700 rounded-lg bg-gray-800 text-gray-100 placeholder-gray-500 font-mono"
+                placeholder="hyenipack-hyeniworld"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                소문자/숫자/하이픈만, 최대 64자. 자동 업데이트 채널의 고유 식별자 — 배포 후 변경 금지
+              </p>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1 text-gray-300">버전</label>
@@ -353,8 +390,29 @@ export function ExportHyeniPackModal({ isOpen, onClose, profileId, profileName }
                 rows={3}
               />
             </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1 text-gray-300">변경 사항 (changelog)</label>
+              <textarea
+                value={changelog}
+                onChange={(e) => setChangelog(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-700 rounded-lg bg-gray-800 text-gray-100 placeholder-gray-500"
+                placeholder={'- Sodium 업데이트\n- Config 최적화'}
+                rows={3}
+              />
+            </div>
+
+            <label className="flex items-center gap-2 text-sm text-gray-300">
+              <input
+                type="checkbox"
+                checked={breaking}
+                onChange={(e) => setBreaking(e.target.checked)}
+                className="rounded border-gray-700 bg-gray-800"
+              />
+              <span>호환성 파괴 업데이트 (사용자는 적용 전까지 게임 실행 불가)</span>
+            </label>
           </div>
-          
+
           {/* 2. 파일 트리 */}
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-gray-300">
@@ -388,6 +446,42 @@ export function ExportHyeniPackModal({ isOpen, onClose, profileId, profileName }
             <p className="text-xs text-gray-500">
               💡 폴더를 선택하면 하위 파일이 모두 포함됩니다. saves, logs 등은 자동으로 제외됩니다.
             </p>
+
+            {/* V2: override 정책 (자동 관리 폴더 제외 최상위 경로) */}
+            {(() => {
+              const AUTO_MANAGED = new Set(['mods', 'resourcepacks', 'shaderpacks']);
+              const topDirs = Array.from(
+                new Set(
+                  getSelectedFiles(fileTree)
+                    .map((p) => p.split(/[/\\]/)[0])
+                    .filter((d) => d && !AUTO_MANAGED.has(d))
+                )
+              ).sort();
+              if (topDirs.length === 0) return null;
+              return (
+                <div className="mt-3">
+                  <label className="block text-sm font-medium mb-1 text-gray-300">업데이트 정책 (폴더별)</label>
+                  <p className="text-xs text-gray-500 mb-2">
+                    keep: 사용자 변경 보존(새 파일만 추가) / replace: 팩 내용으로 강제 교체
+                  </p>
+                  {topDirs.map((dir) => (
+                    <div key={dir} className="flex items-center justify-between py-1 text-sm text-gray-300">
+                      <span className="font-mono">{dir}/</span>
+                      <select
+                        value={policies[dir] ?? 'keep'}
+                        onChange={(e) =>
+                          setPolicies((prev) => ({ ...prev, [dir]: e.target.value as 'keep' | 'replace' }))
+                        }
+                        className="px-2 py-1 border border-gray-700 rounded-lg bg-gray-800 text-gray-100"
+                      >
+                        <option value="keep">keep (기본)</option>
+                        <option value="replace">replace</option>
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
         </div>
         
