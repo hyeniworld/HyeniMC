@@ -162,11 +162,56 @@ function installTauriShim(): void {
       invoke('worker_mods_install', { profilePath, updates }),
   };
 
-  // 미구현 카테고리: 빈 응답 스텁 + warn (M5 T4/M6에서 순차 실구현)
+  const notSupported = (what: string) => async () => ({
+    success: false,
+    error: `${what}은(는) 사용자 런처에서 지원되지 않습니다 (폴더 열기로 직접 관리하세요)`,
+  });
+
+  // 리소스/셰이더팩: 읽기전용 리스트만 실연결, 변경류는 명시적 미지원
+  api.resourcepack = {
+    list: (profileId: string) => invoke('resourcepack_list', { profileId }),
+    enable: notSupported('리소스팩 활성화'),
+    disable: notSupported('리소스팩 비활성화'),
+    delete: notSupported('리소스팩 삭제'),
+    install: notSupported('리소스팩 설치'),
+    installUrl: notSupported('리소스팩 설치'),
+    selectFile: async () => null,
+  };
+  api.shaderpack = {
+    list: (profileId: string) => invoke('shaderpack_list', { profileId }),
+    enable: notSupported('셰이더팩 활성화'),
+    disable: notSupported('셰이더팩 비활성화'),
+    delete: notSupported('셰이더팩 삭제'),
+    install: notSupported('셰이더팩 설치'),
+    installUrl: notSupported('셰이더팩 설치'),
+    selectFile: async () => null,
+  };
+  api.fileWatcher = {
+    start: async (profileId: string, gameDirectory: string) => {
+      await invoke('file_watch_start', { profileId, gameDirectory });
+      return { success: true };
+    },
+    stop: async (profileId: string) => {
+      await invoke('file_watch_stop', { profileId });
+      return { success: true };
+    },
+  };
+  // shell: opener 플러그인 직접 호출 (경로/URL 열기)
+  api.shell = {
+    openPath: async (path: string) => {
+      await invoke('plugin:opener|open_path', { path });
+      return '';
+    },
+    openExternal: (url: string) => invoke('plugin:opener|open_url', { url }),
+  };
+  api.crashReport = {
+    exportReport: (profileId: string) => invoke('crash_export_report', { profileId }),
+    openLogs: (profileId: string) => invoke('crash_open_logs', { profileId }),
+  };
+
+  // 미구현 카테고리: 빈 응답 스텁 + warn (M6에서 순차 실구현/정리)
   const STUB_CATEGORIES = [
-    'mod', 'modpack', 'resourcepack', 'shaderpack',
-    'hyeni', 'shell', 'dialog', 'fs',
-    'launcher', 'fileWatcher', 'errorDialog',
+    'mod', 'modpack', 'hyeni', 'dialog', 'fs', 'launcher', 'errorDialog',
   ];
   for (const cat of STUB_CATEGORIES) {
     api[cat] = {};

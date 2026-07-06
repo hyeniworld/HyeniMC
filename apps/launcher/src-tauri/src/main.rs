@@ -3,8 +3,10 @@
 
 mod account;
 mod commands;
+mod crash;
 mod game;
 mod hyeni;
+mod resources;
 mod pack;
 
 use std::sync::Mutex;
@@ -60,6 +62,7 @@ fn main() {
             })?;
             app.manage(commands::DbState(Mutex::new(conn)));
             app.manage(game::GameState::default());
+            app.manage(resources::WatchState::default());
 
             // 암호화 컨텍스트 (.key / .device_id — 기존 Go 판과 동일 파일)
             let data_dir = hyenimc_core::paths::legacy_data_dir()

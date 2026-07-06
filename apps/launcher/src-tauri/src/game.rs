@@ -24,6 +24,31 @@ struct RunningEntry {
 #[derive(Default)]
 pub struct GameState {
     running: Mutex<HashMap<String, RunningEntry>>,
+    /// 프로필별 최근 로그 링버퍼(최대 500줄) — 종료 후에도 보존(크래시 리포트용)
+    pub log_buffers: Mutex<HashMap<String, Vec<String>>>,
+}
+
+const MAX_LOG_LINES: usize = 500;
+
+impl GameState {
+    pub fn push_log(&self, profile_id: &str, line: String) {
+        let mut buffers = self.log_buffers.lock().unwrap();
+        let buf = buffers.entry(profile_id.to_string()).or_default();
+        buf.push(line);
+        if buf.len() > MAX_LOG_LINES {
+            let overflow = buf.len() - MAX_LOG_LINES;
+            buf.drain(0..overflow);
+        }
+    }
+
+    pub fn log_snapshot(&self, profile_id: &str) -> Vec<String> {
+        self.log_buffers
+            .lock()
+            .unwrap()
+            .get(profile_id)
+            .cloned()
+            .unwrap_or_default()
+    }
 }
 
 #[derive(Serialize, Clone)]
@@ -324,6 +349,9 @@ pub async fn game_launch(
     hyenimc_core::stats::record_launch(&db.0.lock().unwrap(), &profile_id, now_secs())
         .map_err(|e| e.to_string())?;
 
+    // 새 실행마다 로그 버퍼 초기화 (크래시 리포트용)
+    game_state.log_buffers.lock().unwrap().insert(profile_id.clone(), Vec::new());
+
     let app_log = app.clone();
     let pid_for_log = profile_id.clone();
     let app_exit = app.clone();
@@ -335,6 +363,7 @@ pub async fn game_launch(
         &args,
         &dirs.instance_dir,
         move |line| {
+            app_log.state::<GameState>().push_log(&pid_for_log, line.clone());
             let _ = app_log.emit(
                 "game:log",
                 serde_json::json!({ "profileId": pid_for_log, "line": line }),

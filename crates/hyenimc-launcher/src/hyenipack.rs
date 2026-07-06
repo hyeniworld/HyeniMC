@@ -309,8 +309,12 @@ pub async fn install_pack(
         write_mod_meta(&jar, &meta)?;
     }
 
-    // overrides 적용
-    apply_overrides(pack_zip, dirs, &manifest.overrides, &on_progress)?;
+    // overrides 적용 + 제공 리소스/셰이더팩 기록
+    let provided = apply_overrides(pack_zip, dirs, &manifest.overrides, &on_progress)?;
+    std::fs::write(
+        provided_packs_path(&dirs.instance_dir),
+        serde_json::to_string_pretty(&provided)?,
+    )?;
 
     // pack_meta
     if let Some(id) = &manifest.hyenipack_id {
@@ -368,12 +372,13 @@ fn scan_installed_mods(mods_dir: &Path) -> Result<Vec<(String, ModMeta)>, Launch
     Ok(out)
 }
 
+/// overrides 적용. 반환: 팩이 제공한 resourcepacks/shaderpacks 파일명 (구분 표시용)
 fn apply_overrides(
     pack_zip: &Path,
     dirs: &GameDirs,
     policies: &[OverridePolicy],
     _on_progress: &(impl Fn(PackInstallProgress) + Send + Sync),
-) -> Result<(), LauncherError> {
+) -> Result<ProvidedPacks, LauncherError> {
     // V2 폴더 replace 의미론: 해당 폴더 기존 내용 전체 삭제 후 zip 내용으로 재설치
     for p in policies {
         if p.policy == "replace" {
@@ -384,6 +389,7 @@ fn apply_overrides(
         }
     }
 
+    let mut provided = ProvidedPacks::default();
     let file = std::fs::File::open(pack_zip)?;
     let mut zip = zip::ZipArchive::new(file).map_err(|e| LauncherError::Other(e.to_string()))?;
     for i in 0..zip.len() {
@@ -393,6 +399,18 @@ fn apply_overrides(
         if rel.is_empty() || name.ends_with('/') {
             continue;
         }
+        // 최상위 폴더가 resourcepacks/shaderpacks면 제공 파일로 기록 (구분 표시용)
+        let norm = rel.replace('\\', "/");
+        if let Some(fname) = norm.strip_prefix("resourcepacks/") {
+            if !fname.contains('/') {
+                provided.resourcepacks.push(fname.to_string());
+            }
+        } else if let Some(fname) = norm.strip_prefix("shaderpacks/") {
+            if !fname.contains('/') {
+                provided.shaderpacks.push(fname.to_string());
+            }
+        }
+
         let dest = dirs.instance_dir.join(rel);
         let policy = find_policy(rel, policies);
         // keep: 이미 있으면 건너뜀 / replace: 덮어씀
@@ -405,7 +423,27 @@ fn apply_overrides(
         let mut out = std::fs::File::create(&dest)?;
         std::io::copy(&mut entry, &mut out)?;
     }
-    Ok(())
+    Ok(provided)
+}
+
+/// 팩 제공 리소스/셰이더팩 파일명 — `<instance>/.hyenipack-provided.json`
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ProvidedPacks {
+    #[serde(default)]
+    pub resourcepacks: Vec<String>,
+    #[serde(default)]
+    pub shaderpacks: Vec<String>,
+}
+
+pub fn provided_packs_path(instance_dir: &Path) -> PathBuf {
+    instance_dir.join(".hyenipack-provided.json")
+}
+
+pub fn read_provided_packs(instance_dir: &Path) -> ProvidedPacks {
+    std::fs::read_to_string(provided_packs_path(instance_dir))
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or_default()
 }
 
 // ── 팩 업데이트 체크 (Worker) ────────────────────────────
