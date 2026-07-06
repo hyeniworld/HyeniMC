@@ -18,6 +18,8 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 sha2 = "0.10"
 base64 = "0.22"
 rand.workspace = true
+fastnbt = "2"
+flate2 = "1"
 
 [dev-dependencies]
 tempfile = "3"
