@@ -1,8 +1,11 @@
 //! 게임 파이프라인 — 다운로드/매니페스트/Java/실행 (M2).
 
 pub mod download;
+pub mod install;
 pub mod java;
+pub mod launch;
 pub mod manifest;
+pub mod natives;
 pub mod rules;
 
 #[derive(thiserror::Error, Debug)]

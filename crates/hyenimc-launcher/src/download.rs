@@ -222,7 +222,7 @@ mod tests {
         let dest = dir.path().join("a/b/file.jar");
         let sha = sha1_hex(b"hello-mc");
         let client = reqwest::Client::new();
-        let cfg = DownloadConfig::default();
+        let cfg = DownloadConfig { timeout: std::time::Duration::from_secs(5), retry_base_ms: 1, ..Default::default() };
 
         let task = || DownloadTask {
             url: format!("{addr}/file.jar"),
@@ -286,7 +286,7 @@ mod tests {
                 size: None,
             })
             .collect();
-        download_all(&reqwest::Client::new(), tasks, &DownloadConfig::default(), move |p| {
+        download_all(&reqwest::Client::new(), tasks, &DownloadConfig { timeout: std::time::Duration::from_secs(5), retry_base_ms: 1, ..Default::default() }, move |p| {
             done2.store(p.completed, Ordering::SeqCst);
         })
         .await
