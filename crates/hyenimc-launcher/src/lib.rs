@@ -10,6 +10,7 @@ pub mod loader;
 pub mod manifest;
 pub mod natives;
 pub mod rules;
+pub mod workermods;
 
 #[derive(thiserror::Error, Debug)]
 pub enum LauncherError {
