@@ -15,4 +15,5 @@ tauri-plugin-deep-link = "2"
 tauri-plugin-updater = "2"
 serde.workspace = true
 serde_json.workspace = true
+sysinfo = "0.33"
 hyenimc-core = { path = "../../../crates/hyenimc-core" }
