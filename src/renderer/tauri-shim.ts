@@ -84,6 +84,13 @@ function installTauriShim(): void {
       getVersions: (loaderType: string, gameVersion: string) =>
         invoke('loader_get_versions', { loaderType, gameVersion }),
     },
+    hyenipack: {
+      import: (profileId: string, filePath: string, accountId?: string) =>
+        invoke('hyenipack_import', { profileId, filePath, accountId }),
+      checkUpdate: (profileId: string) => invoke('pack_check_update', { profileId }),
+      applyUpdate: (profileId: string, accountId?: string) =>
+        invoke('pack_apply_update', { profileId, accountId }),
+    },
     account: {
       loginMicrosoft: () => invoke('account_login_microsoft'),
       addOffline: async () => {
@@ -119,7 +126,7 @@ function installTauriShim(): void {
   // 미구현 카테고리: 빈 응답 스텁 + warn (M4+에서 순차 실구현)
   const STUB_CATEGORIES = [
     'mod', 'modpack', 'resourcepack', 'shaderpack',
-    'hyeni', 'workerMods', 'hyenipack', 'shell', 'dialog', 'fs',
+    'hyeni', 'workerMods', 'shell', 'dialog', 'fs',
     'launcher', 'fileWatcher', 'errorDialog',
   ];
   for (const cat of STUB_CATEGORIES) {

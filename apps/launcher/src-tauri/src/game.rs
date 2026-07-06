@@ -41,7 +41,7 @@ pub struct VersionEntry {
     pub kind: String,
 }
 
-fn game_dirs_for(profile: &hyenimc_core::Profile) -> Result<GameDirs, String> {
+pub fn game_dirs_for(profile: &hyenimc_core::Profile) -> Result<GameDirs, String> {
     let user_data = hyenimc_core::paths::legacy_user_data_dir()
         .ok_or_else(|| "userData 경로를 결정할 수 없음".to_string())?;
     Ok(GameDirs {
@@ -55,6 +55,14 @@ fn load_profile(db: &State<'_, DbState>, profile_id: &str) -> Result<hyenimc_cor
     hyenimc_core::profile::get_profile(&db.0.lock().unwrap(), profile_id)
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("프로필 없음: {profile_id}"))
+}
+
+/// pack.rs에서 재사용
+pub fn load_profile_pub(
+    db: &State<'_, DbState>,
+    profile_id: &str,
+) -> Result<hyenimc_core::Profile, String> {
+    load_profile(db, profile_id)
 }
 
 fn download_config(settings: &hyenimc_core::settings::GlobalSettings) -> DownloadConfig {
@@ -207,6 +215,9 @@ pub async fn game_launch(
     };
     let dirs = game_dirs_for(&profile)?;
     let cfg = download_config(&settings);
+
+    // ⓪ 실행 전 팩 게이트 (breaking 차단 / 서버 접근 불가 시 정책)
+    crate::pack::pre_launch_pack_gate(&dirs, &settings).await?;
 
     // ① 베이스 게임 설치 보장 (이미 설치면 SHA1 스킵으로 빠르게 통과)
     ensure_profile_version(&app, &profile, &dirs, &cfg).await?;

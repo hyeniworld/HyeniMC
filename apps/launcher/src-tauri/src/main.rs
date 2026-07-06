@@ -4,6 +4,7 @@
 mod account;
 mod commands;
 mod game;
+mod pack;
 
 use std::sync::Mutex;
 use tauri::Manager;
@@ -89,6 +90,9 @@ fn main() {
             account::account_login_microsoft,
             account::account_refresh,
             account::account_remove,
+            pack::hyenipack_import,
+            pack::pack_check_update,
+            pack::pack_apply_update,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
