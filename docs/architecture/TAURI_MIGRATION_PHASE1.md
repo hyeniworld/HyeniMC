@@ -139,7 +139,7 @@ hyenimc/
 각 마일스톤은 독립적으로 동작 검증 가능한 상태로 끝나며, 착수 시 writing-plans 형식의 상세 플랜을 개별 작성한다.
 
 - **M0 — 스파이크 (로드맵 4번과 동일, go/no-go 게이트)** — **구현 완료 (2026-07-06, 커밋 8d64733)**: Cargo workspace(crates/hyenimc-core + apps/launcher/src-tauri) + Tauri v2 셸(기존 Vite 렌더러 연결 + withGlobalTauri + tauri-shim) + single-instance/deep-link(hyenimc://)/updater 플러그인 배선 + 서명 키 생성(로컬 보관) + **기존 실DB in-place 읽기 실증(schema v18, 프로필 4개)**. 컴파일·테스트 검증 완료(cargo test 4/4, cargo check, 기존 vite/tsc/vitest 무손상). **잔여(사용자 일괄 테스트 시점으로 연기, 2026-07-06 방침)**: tauri dev 육안 확인·창 드래그·딥링크 런타임 수신(macOS는 번들 필요)·더미 피드 업데이트 라운드트립·Squirrel.Mac 교체 검증
-- **M1 — 골격**: workspace 구성, hyenimc-core(SQLite 호환 접속 + 프로필/설정 CRUD), 커맨드 15개 내외 + 어댑터 shim, 프로필 목록/상세 화면이 실데이터로 렌더
+- **M1 — 골격** — **구현 완료 (2026-07-06, `cafdc10`~`c6005ea`)**: hyenimc-core에 settings(global_settings KV — DB 키 매핑 예외 2개 실측 반영)/profile CRUD(이중 Option 패치, uuid v4, 인스턴스 디렉터리)/stats(profile_stats UPSERT) 모듈, Tauri 커맨드 14개(DbState=Mutex<Connection>), 어댑터 shim 정식화(profile 11·settings 2·system 2 실연결, 나머지 명시적 스텁). core 테스트 13개 + 실DB 스모크 통과. **실DB 스모크가 잡은 비호환 1건 수정**: jvm_args/game_args가 Go 판에서 JSON 배열 BLOB으로 저장됨 → NULL/TEXT/BLOB 허용 파서 + Vec<String> 모델링. 잔여(일괄 테스트): 프로필 화면 실데이터 렌더 육안 확인, 플랜: [2026-07-06-tauri-m1-skeleton.md](../superpowers/plans/2026-07-06-tauri-m1-skeleton.md)
 - **M2 — 게임 파이프라인**: 다운로드 엔진(병렬/SHA1/재개/진행 이벤트), 버전 매니페스트/에셋/라이브러리, Java 감지, JVM 실행 + 로그 스트림 + 종료/크래시 감지. **바닐라 실행 성공이 완료 조건**
 - **M3 — 계정**: MS OAuth 전체 플로우 + 기존 토큰 복호화 호환 + 다계정. 실계정 로그인/재인증 검증
 - **M4 — 로더 + 혜니팩**: Fabric/NeoForge 설치, 혜니팩 v1 설치(resolve 포함), V2 업데이트 엔진(diff/선언형 동기화/사용자 파일 보호), 팩 업데이트 UX. **모드 프로필 실행 성공 + 팩 버전 업/다운 시나리오 통과가 완료 조건**
