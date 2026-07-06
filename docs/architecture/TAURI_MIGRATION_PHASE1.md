@@ -18,6 +18,14 @@
 
 **하지 않는 것 (2안 확정):** 혜니팩 제작 기능(외부 모드팩 import, 모드 검색/설치/업데이트, 혜니팩 export, 리소스/셰이더 설치·삭제 UI)은 기존 Electron 앱을 제작자 개인 도구로 존치. 장기적으로 Rust feature 빌드로 흡수(3안 수렴).
 
+## 1.5 플랫폼 원칙 (2026-07-06 사용자 명시)
+
+**일반 사용자 주 플랫폼은 Windows, 개발 환경은 macOS.** Java 감지·설치·게임 실행 등 플랫폼 민감 로직은 Windows 동작이 1순위다. 실천 규칙:
+- 플랫폼 분기 코드는 Windows 경로를 먼저 작성·검토 (경로 구분자, `;` classpath, `.exe`, 콘솔 창 억제, rename-over-existing 등)
+- `cargo check --target x86_64-pc-windows-msvc`를 각 마일스톤 마감 검증에 포함 (hyenimc-launcher — cfg(windows) 경로 타입 체크. hyenimc-core는 bundled sqlite C 컴파일 제약으로 macOS에서 불가 → Windows 실기/CI)
+- QA 매트릭스에서 Windows 시나리오를 우선 순위로 배치, M6 배포 파이프라인은 NSIS(Windows)를 1급으로
+- Windows 실기 검증(일괄 테스트)은 반드시 Windows 머신에서 수행 — Java 감지 벤더 디렉터리/딥링크 레지스트리/NSIS 교체 설치
+
 ## 2. 확정된 결정 사항 (2026-07-06)
 
 | 항목 | 결정 |
