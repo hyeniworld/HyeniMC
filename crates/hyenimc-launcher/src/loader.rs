@@ -139,7 +139,7 @@ pub async fn install_fabric(
             .clone()
             .unwrap_or_else(|| FABRIC_FALLBACK_REPOS[0].to_string());
         let base = if base.ends_with('/') { base } else { format!("{base}/") };
-        tasks.push(DownloadTask { url: format!("{base}{rel}"), dest, sha1: None, size: None });
+        tasks.push(DownloadTask { url: format!("{base}{rel}"), dest, sha1: None, sha256: None, size: None });
     }
     download_all(http, tasks, cfg, |_| {}).await?;
     Ok(version_id)
@@ -176,6 +176,7 @@ pub async fn install_neoforge(
             ),
             dest: installer.clone(),
             sha1: None,
+            sha256: None,
             size: None,
         }],
         cfg,

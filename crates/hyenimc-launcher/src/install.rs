@@ -137,6 +137,7 @@ pub async fn ensure_version(
             url: client_dl.url.clone(),
             dest: dirs.client_jar(version_id),
             sha1: Some(client_dl.sha1.clone()),
+            sha256: None,
             size: Some(client_dl.size),
         });
     }
@@ -152,6 +153,7 @@ pub async fn ensure_version(
                         url: artifact.url.clone(),
                         dest: dirs.shared_libraries.join(p),
                         sha1: Some(artifact.sha1.clone()),
+                        sha256: None,
                         size: Some(artifact.size),
                     });
                 }
@@ -166,6 +168,7 @@ pub async fn ensure_version(
                                 url: artifact.url.clone(),
                                 dest: dirs.shared_libraries.join(p),
                                 sha1: Some(artifact.sha1.clone()),
+                                sha256: None,
                                 size: Some(artifact.size),
                             });
                         }
@@ -197,6 +200,7 @@ pub async fn ensure_version(
                 url: index_ref.url.clone(),
                 dest: index_path.clone(),
                 sha1: Some(index_ref.sha1.clone()),
+                sha256: None,
                 size: index_ref.size,
             }],
             cfg,
@@ -218,6 +222,7 @@ pub async fn ensure_version(
                         .join(prefix)
                         .join(&obj.hash),
                     sha1: Some(obj.hash.clone()),
+                    sha256: None,
                     size: None,
                 }
             })

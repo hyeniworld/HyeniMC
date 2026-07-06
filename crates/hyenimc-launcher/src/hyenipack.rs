@@ -206,6 +206,11 @@ pub fn plan_mod_sync(existing: &[(String, ModMeta)], target: &[PackMod]) -> ModS
                     && t.effective_version() != meta.version_number;
                 if &t.file_name != name || version_changed {
                     to_install.push(t.clone());
+                    // 파일명이 바뀌는 재설치면 구 jar 제거 (중복 모드 크래시 방지).
+                    // manual이라도 projectId 매치 시 팩이 인수(V2 문서: 덮어쓰기 후 관리 대상).
+                    if &t.file_name != name && !to_remove.contains(name) {
+                        to_remove.push(name.clone());
+                    }
                 }
             }
         }
@@ -248,27 +253,48 @@ pub async fn install_pack(
         let _ = tokio::fs::remove_file(meta_path_for(&jar)).await;
     }
 
-    // 다운로드
+    // 다운로드(url 피닝분) + zip 동봉분(로컬/커스텀 모드 — TS importer 동일) 분리
     let total = plan.to_install.len();
     let mut tasks = Vec::new();
+    let mut from_zip: Vec<&PackMod> = Vec::new();
     for m in &plan.to_install {
-        let url = m
-            .url
-            .clone()
-            .ok_or_else(|| LauncherError::Other(format!("모드 url 없음(피닝 필요): {}", m.file_name)))?;
-        // CF 프록시는 토큰 쿼리 부착 (worker downloadFile 방식)
-        let url = maybe_authorize_url(&url, m, worker_token);
-        tasks.push(DownloadTask {
-            url,
-            dest: mods_dir.join(&m.file_name),
-            sha1: m.sha1.clone(),
-            size: m.size,
-        });
+        match &m.url {
+            Some(url) => {
+                // CF 프록시는 토큰 쿼리 부착 (worker downloadFile 방식)
+                let url = maybe_authorize_url(url, m, worker_token);
+                tasks.push(DownloadTask {
+                    url,
+                    dest: mods_dir.join(&m.file_name),
+                    sha1: m.sha1.clone(),
+                    sha256: m.sha256.clone(),
+                    size: m.size,
+                });
+            }
+            None => from_zip.push(m),
+        }
     }
     download_all(http, tasks, cfg, |p| {
         on_progress(PackInstallProgress { stage: "mods".into(), completed: p.completed, total });
     })
     .await?;
+
+    // zip 동봉 모드 추출 (url 없는 엔트리 — v1 팩/로컬 모드/피닝 실패 폴백)
+    if !from_zip.is_empty() {
+        let file = std::fs::File::open(pack_zip)?;
+        let mut zip = zip::ZipArchive::new(file).map_err(|e| LauncherError::Other(e.to_string()))?;
+        for m in &from_zip {
+            let entry_name = format!("mods/{}", m.file_name);
+            let mut entry = zip.by_name(&entry_name).map_err(|_| {
+                LauncherError::Other(format!(
+                    "모드를 받을 곳이 없음 (url 미피닝 + zip에도 없음): {}",
+                    m.file_name
+                ))
+            })?;
+            let dest = mods_dir.join(&m.file_name);
+            let mut out = std::fs::File::create(&dest)?;
+            std::io::copy(&mut entry, &mut out)?;
+        }
+    }
 
     // .meta.json 기록
     for m in &plan.to_install {
@@ -349,6 +375,16 @@ fn apply_overrides(
     policies: &[OverridePolicy],
     _on_progress: &(impl Fn(PackInstallProgress) + Send + Sync),
 ) -> Result<(), LauncherError> {
+    // V2 폴더 replace 의미론: 해당 폴더 기존 내용 전체 삭제 후 zip 내용으로 재설치
+    for p in policies {
+        if p.policy == "replace" {
+            let target = dirs.instance_dir.join(&p.path);
+            if target.is_dir() {
+                let _ = std::fs::remove_dir_all(&target);
+            }
+        }
+    }
+
     let file = std::fs::File::open(pack_zip)?;
     let mut zip = zip::ZipArchive::new(file).map_err(|e| LauncherError::Other(e.to_string()))?;
     for i in 0..zip.len() {
@@ -530,6 +566,31 @@ mod tests {
     }
 
     #[test]
+    fn sync_removes_old_jar_when_renamed_reinstall() {
+        // F3 회귀: projectId 매치 + 파일명 변경 → 새 jar 설치와 함께 구 jar도 제거돼야 함
+        let existing = vec![
+            ("old-sodium.jar".into(), mk_meta("hyenipack", Some("AAN"), Some("0.5.0"))),
+        ];
+        let target = vec![mk_mod("sodium-0.6.jar", Some("AAN"), Some("0.6.0"))];
+        let plan = plan_mod_sync(&existing, &target);
+        assert!(plan.to_remove.contains(&"old-sodium.jar".to_string()), "구 jar 미삭제 (중복 모드 크래시)");
+        assert_eq!(plan.to_install.len(), 1);
+    }
+
+    #[test]
+    fn sync_takes_over_matching_manual_mod_on_rename() {
+        // V2 문서: 파일명/ID 동일하면 혜니팩 버전으로 덮어쓰기(이제부터 관리 대상)
+        // → manual이라도 projectId가 매치되고 재설치가 필요하면 구 파일 제거
+        let existing = vec![
+            ("sodium-user.jar".into(), mk_meta("manual", Some("AAN"), Some("0.5.0"))),
+        ];
+        let target = vec![mk_mod("sodium-0.6.jar", Some("AAN"), Some("0.6.0"))];
+        let plan = plan_mod_sync(&existing, &target);
+        assert!(plan.to_remove.contains(&"sodium-user.jar".to_string()));
+        assert_eq!(plan.to_install.len(), 1);
+    }
+
+    #[test]
     fn sync_skips_unchanged() {
         let existing = vec![("sodium.jar".into(), mk_meta("hyenipack", Some("AAN"), Some("0.6.0")))];
         let target = vec![mk_mod("sodium.jar", Some("AAN"), Some("0.6.0"))];
@@ -606,6 +667,51 @@ mod tests {
         assert_eq!(meta.modpack_id.as_deref(), Some("hp-test"));
         // pack_meta 기록
         assert_eq!(read_pack_meta(&dirs.instance_dir).unwrap().version, "1.0.0");
+    }
+
+    #[tokio::test]
+    async fn install_pack_extracts_local_mods_and_folder_replace_semantics() {
+        use std::io::Write;
+        let tmp = tempfile::tempdir().unwrap();
+        let pack = tmp.path().join("local.hyenipack");
+        {
+            let f = std::fs::File::create(&pack).unwrap();
+            let mut zw = zip::ZipWriter::new(f);
+            let opt = zip::write::SimpleFileOptions::default();
+            // url 없는 로컬 모드 + scripts 폴더 replace 정책
+            zw.start_file("hyenipack.json", opt).unwrap();
+            zw.write_all(
+                br#"{"formatVersion":2,"hyenipackId":"hp-local","name":"L","version":"1.0.0",
+                    "minecraft":{"version":"1.21.1","loaderType":"fabric","loaderVersion":"0.16.7"},
+                    "mods":[{"fileName":"custom.jar","source":"local"}],
+                    "overrides":[{"path":"scripts","policy":"replace"}]}"#,
+            )
+            .unwrap();
+            zw.start_file("mods/custom.jar", opt).unwrap();
+            zw.write_all(b"CUSTOM").unwrap();
+            zw.start_file("overrides/scripts/new.zs", opt).unwrap();
+            zw.write_all(b"NEW").unwrap();
+            zw.finish().unwrap();
+        }
+
+        let dirs = GameDirs {
+            instance_dir: tmp.path().join("inst"),
+            shared_libraries: tmp.path().join("sl"),
+            shared_assets: tmp.path().join("sa"),
+        };
+        // replace 폴더에 stale 파일 미리 배치 → 삭제돼야 함
+        std::fs::create_dir_all(dirs.instance_dir.join("scripts")).unwrap();
+        std::fs::write(dirs.instance_dir.join("scripts/stale.zs"), b"OLD").unwrap();
+
+        let http = reqwest::Client::new();
+        let cfg = DownloadConfig { timeout: std::time::Duration::from_secs(5), retry_base_ms: 1, ..Default::default() };
+        install_pack(&http, &pack, &dirs, &cfg, None, |_| {}).await.unwrap();
+
+        // F2: zip 동봉 로컬 모드 설치됨
+        assert_eq!(std::fs::read(dirs.instance_dir.join("mods/custom.jar")).unwrap(), b"CUSTOM");
+        // F6: 폴더 replace — stale 삭제 + 신규 설치
+        assert!(!dirs.instance_dir.join("scripts/stale.zs").exists());
+        assert_eq!(std::fs::read(dirs.instance_dir.join("scripts/new.zs")).unwrap(), b"NEW");
     }
 
     #[test]

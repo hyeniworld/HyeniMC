@@ -12,11 +12,12 @@ use tokio::sync::Semaphore;
 
 use crate::LauncherError;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct DownloadTask {
     pub url: String,
     pub dest: PathBuf,
     pub sha1: Option<String>,
+    pub sha256: Option<String>,
     pub size: Option<u64>,
 }
 
@@ -52,6 +53,27 @@ fn sha1_file(path: &std::path::Path) -> std::io::Result<String> {
     Ok(hex::encode(Sha1::digest(&data)))
 }
 
+fn sha256_file(path: &std::path::Path) -> std::io::Result<String> {
+    use sha2::Digest as _;
+    let data = std::fs::read(path)?;
+    Ok(hex::encode(sha2::Sha256::digest(&data)))
+}
+
+/// 기대 체크섬(sha1/sha256 중 존재하는 것)과 파일 대조. 기대치가 없으면 Ok(true).
+fn checksums_match(path: &std::path::Path, task: &DownloadTask) -> std::io::Result<bool> {
+    if let Some(expected) = &task.sha1 {
+        if !sha1_file(path)?.eq_ignore_ascii_case(expected) {
+            return Ok(false);
+        }
+    }
+    if let Some(expected) = &task.sha256 {
+        if !sha256_file(path)?.eq_ignore_ascii_case(expected) {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
 async fn fetch_to_file(
     client: &reqwest::Client,
     task: &DownloadTask,
@@ -76,16 +98,17 @@ async fn fetch_to_file(
     file.flush().await?;
     drop(file);
 
-    if let Some(expected) = &task.sha1 {
-        let actual = sha1_file(&part)?;
-        if !actual.eq_ignore_ascii_case(expected) {
-            let _ = tokio::fs::remove_file(&part).await;
-            return Err(LauncherError::ChecksumMismatch {
-                path: task.dest.display().to_string(),
-                expected: expected.clone(),
-                actual,
-            });
-        }
+    if !checksums_match(&part, task)? {
+        let _ = tokio::fs::remove_file(&part).await;
+        return Err(LauncherError::ChecksumMismatch {
+            path: task.dest.display().to_string(),
+            expected: task
+                .sha1
+                .clone()
+                .or_else(|| task.sha256.clone())
+                .unwrap_or_default(),
+            actual: "mismatch".into(),
+        });
     }
     // Windows는 목적지가 존재하면 rename이 실패한다 (손상 파일 재다운로드 경로)
     if task.dest.exists() {
@@ -100,19 +123,9 @@ async fn download_one(
     task: &DownloadTask,
     cfg: &DownloadConfig,
 ) -> Result<(), LauncherError> {
-    // 이미 존재 + SHA1 일치 → 스킵
-    if task.dest.exists() {
-        match &task.sha1 {
-            Some(expected)
-                if sha1_file(&task.dest)
-                    .map(|a| a.eq_ignore_ascii_case(expected))
-                    .unwrap_or(false) =>
-            {
-                return Ok(());
-            }
-            None => return Ok(()),
-            _ => {} // 불일치 → 재다운로드
-        }
+    // 이미 존재 + 체크섬 일치(또는 기대치 없음) → 스킵, 불일치 → 재다운로드
+    if task.dest.exists() && checksums_match(&task.dest, task).unwrap_or(false) {
+        return Ok(());
     }
     let mut attempt = 0u32;
     loop {
@@ -232,6 +245,7 @@ mod tests {
             url: format!("{addr}/file.jar"),
             dest: dest.clone(),
             sha1: Some(sha.clone()),
+            sha256: None,
             size: None,
         };
         download_all(&client, vec![task()], &cfg, |_| {}).await.unwrap();
@@ -254,10 +268,41 @@ mod tests {
             url: format!("{addr}/fail_once/f.jar"),
             dest: dest.clone(),
             sha1: Some(sha1_hex(b"retry-ok")),
+            sha256: None,
             size: None,
         };
         download_all(&client, vec![task], &cfg, |_| {}).await.unwrap();
         assert_eq!(std::fs::read(&dest).unwrap(), b"retry-ok");
+    }
+
+    #[tokio::test]
+    async fn sha256_is_verified_when_present() {
+        use sha2::Digest as _;
+        let (addr, _) = spawn_server(b"body-256");
+        let dir = tempfile::tempdir().unwrap();
+        let client = reqwest::Client::new();
+        let cfg = DownloadConfig { max_retries: 1, retry_base_ms: 1, timeout: std::time::Duration::from_secs(5), ..Default::default() };
+
+        // 올바른 sha256 → 성공
+        let good = DownloadTask {
+            url: format!("{addr}/ok"),
+            dest: dir.path().join("ok.jar"),
+            sha1: None,
+            sha256: Some(hex::encode(sha2::Sha256::digest(b"body-256"))),
+            size: None,
+        };
+        download_all(&client, vec![good], &cfg, |_| {}).await.unwrap();
+
+        // 틀린 sha256 → 재시도 후 실패
+        let bad = DownloadTask {
+            url: format!("{addr}/bad"),
+            dest: dir.path().join("bad.jar"),
+            sha1: None,
+            sha256: Some("0".repeat(64)),
+            size: None,
+        };
+        let err = download_all(&client, vec![bad], &cfg, |_| {}).await.unwrap_err();
+        assert!(matches!(err, LauncherError::DownloadFailed { .. }));
     }
 
     #[tokio::test]
@@ -270,6 +315,7 @@ mod tests {
             url: format!("{addr}/x.jar"),
             dest: dir.path().join("x.jar"),
             sha1: Some("0000000000000000000000000000000000000000".into()),
+            sha256: None,
             size: None,
         };
         let err = download_all(&client, vec![task], &cfg, |_| {}).await.unwrap_err();
@@ -287,6 +333,7 @@ mod tests {
                 url: format!("{addr}/f{i}"),
                 dest: dir.path().join(format!("f{i}")),
                 sha1: None,
+                sha256: None,
                 size: None,
             })
             .collect();
