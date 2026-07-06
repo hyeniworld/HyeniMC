@@ -12,6 +12,8 @@ import AdmZip from 'adm-zip';
 import { HyeniPackManifestV2, HyeniPackModEntry, HyeniPackExportOptionsV2 } from '../../shared/types/hyenipack';
 import { buildManifestV2, buildLatestInfo } from './hyenipack-manifest';
 import { metadataManager } from './metadata-manager';
+import { ModrinthAPI } from './modrinth-api';
+import { CurseForgeAPI } from './curseforge-api';
 
 interface Profile {
   id: string;
@@ -23,6 +25,44 @@ interface Profile {
 }
 
 export class HyeniPackExporter {
+  private modrinthApi?: ModrinthAPI;
+  private curseforgeApi?: CurseForgeAPI;
+
+  /**
+   * export 시 다운로드 URL 피닝 (V2) — 사용자 런처는 검색 API 없이 이 URL로 설치한다.
+   * 실패하면 null 반환 → 해당 모드 jar를 팩에 동봉(폴백).
+   */
+  private async resolveDownloadUrl(meta: {
+    source?: string;
+    sourceModId?: string;
+    sourceFileId?: string;
+    versionNumber?: string;
+  }): Promise<{ url: string; sha1?: string } | null> {
+    try {
+      const fileId = meta.sourceFileId || meta.versionNumber;
+      if (!meta.source || !meta.sourceModId || !fileId) return null;
+
+      let versions: any[] = [];
+      if (meta.source === 'modrinth') {
+        this.modrinthApi ??= new ModrinthAPI();
+        versions = await this.modrinthApi.getModVersions(meta.sourceModId);
+      } else if (meta.source === 'curseforge') {
+        this.curseforgeApi ??= new CurseForgeAPI();
+        versions = await this.curseforgeApi.getModVersions(meta.sourceModId);
+      } else {
+        return null;
+      }
+
+      const version = versions.find((v: any) => v.id === fileId);
+      if (version?.downloadUrl) {
+        return { url: version.downloadUrl, sha1: version.sha1 };
+      }
+      return null;
+    } catch (error) {
+      console.warn('[HyeniPackExporter] URL 피닝 조회 실패:', error);
+      return null;
+    }
+  }
   /**
    * 프로필을 혜니팩 파일로 내보내기
    */
@@ -70,11 +110,12 @@ export class HyeniPackExporter {
           // mods 폴더의 파일 처리
           if (relativePath.startsWith('mods/') || relativePath.startsWith('mods\\')) {
             const fileName = path.basename(relativePath);
-            const modMeta = metadata?.mods[fileName];
-            
-            // 메타데이터가 있는 모드는 jar 파일을 포함하지 않음 (매니페스트에만 기록)
-            if (modMeta && modMeta.source && modMeta.sourceModId) {
-              console.log(`[HyeniPackExporter] Skipping mod with metadata: ${fileName} (will be downloaded on import)`);
+
+            // URL 피닝에 성공한 모드만 jar 동봉 생략 (설치 시 CDN 다운로드).
+            // 피닝 실패/로컬 모드는 jar를 팩에 동봉해 사용자 런처가 zip에서 추출한다.
+            const manifestEntry = manifest.mods.find(m => m.fileName === fileName);
+            if (manifestEntry?.url) {
+              console.log(`[HyeniPackExporter] Skipping pinned mod: ${fileName} (URL 피닝됨)`);
               continue;
             }
             
@@ -178,9 +219,18 @@ export class HyeniPackExporter {
         if (stat.isDirectory()) continue; // 폴더는 건너뛰기
         
         const sha256 = await this.calculateSHA256(filePath);
-        
+
         const modMeta = metadata?.mods[fileName];
-        
+
+        // V2: 다운로드 URL 피닝 — 실패 시 jar 동봉 폴백 (exportProfile 복사 단계에서 판정)
+        let pinned: { url: string; sha1?: string } | null = null;
+        if (modMeta && modMeta.source && modMeta.sourceModId) {
+          pinned = await this.resolveDownloadUrl(modMeta);
+          if (!pinned) {
+            console.warn(`[HyeniPackExporter] URL 피닝 실패 — jar 동봉으로 폴백: ${fileName}`);
+          }
+        }
+
         mods.push({
           fileName,
           metadata: modMeta ? {
@@ -188,6 +238,8 @@ export class HyeniPackExporter {
             source: modMeta.source,
             projectId: modMeta.sourceModId
           } : undefined,
+          url: pinned?.url,
+          sha1: pinned?.sha1,
           sha256,
           size: stat.size
         });

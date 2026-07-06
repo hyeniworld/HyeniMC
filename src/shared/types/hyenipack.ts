@@ -58,6 +58,11 @@ export interface HyeniPackModEntry {
     description?: string;
   };
   
+  // 다운로드 피닝 (V2 — 사용자 런처가 검색 API 없이 설치할 수 있도록 export 시 기록.
+  // 없으면 jar가 팩 zip의 mods/에 동봉되어 있어야 한다)
+  url?: string;
+  sha1?: string;
+
   // 파일 검증
   sha256: string;
   size: number;                   // 바이트
