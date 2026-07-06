@@ -30,10 +30,25 @@ pub struct Profile {
     pub resolution_width: Option<i64>,
     pub resolution_height: Option<i64>,
     pub fullscreen: Option<bool>,
-    pub jvm_args: Option<String>,
-    pub game_args: Option<String>,
+    /// Go 판이 JSON 배열을 BLOB/TEXT로 저장 — 항상 파싱된 배열로 노출 (렌더러 호환)
+    pub jvm_args: Vec<String>,
+    pub game_args: Vec<String>,
     pub modpack_id: Option<String>,
     pub modpack_source: Option<String>,
+}
+
+/// jvm_args/game_args 컬럼 — NULL/TEXT/BLOB 모두 허용, JSON 배열로 파싱 (실DB는 BLOB).
+fn json_string_array(row: &rusqlite::Row<'_>, idx: usize) -> rusqlite::Result<Vec<String>> {
+    use rusqlite::types::ValueRef;
+    let bytes: Option<Vec<u8>> = match row.get_ref(idx)? {
+        ValueRef::Null => None,
+        ValueRef::Text(t) => Some(t.to_vec()),
+        ValueRef::Blob(b) => Some(b.to_vec()),
+        _ => None,
+    };
+    Ok(bytes
+        .and_then(|b| serde_json::from_slice::<Vec<String>>(&b).ok())
+        .unwrap_or_default())
 }
 
 const PROFILE_COLUMNS: &str = "id, name, description, icon, game_version, loader_type, loader_version,
@@ -65,8 +80,8 @@ fn row_to_profile(row: &rusqlite::Row<'_>) -> rusqlite::Result<Profile> {
         resolution_width: row.get(18)?,
         resolution_height: row.get(19)?,
         fullscreen: row.get::<_, Option<i64>>(20)?.map(|v| v != 0),
-        jvm_args: row.get(21)?,
-        game_args: row.get(22)?,
+        jvm_args: json_string_array(row, 21)?,
+        game_args: json_string_array(row, 22)?,
         modpack_id: row.get(23)?,
         modpack_source: row.get(24)?,
     })
@@ -133,10 +148,10 @@ pub struct ProfilePatch {
     pub resolution_height: Option<Option<i64>>,
     #[serde(default, with = "double_option")]
     pub fullscreen: Option<Option<bool>>,
-    #[serde(default, with = "double_option")]
-    pub jvm_args: Option<Option<String>>,
-    #[serde(default, with = "double_option")]
-    pub game_args: Option<Option<String>>,
+    #[serde(default)]
+    pub jvm_args: Option<Vec<String>>,
+    #[serde(default)]
+    pub game_args: Option<Vec<String>>,
 }
 
 /// JSON에서 필드 부재 = None(미갱신), null = Some(None)(NULL로 초기화), 값 = Some(Some(v)).
@@ -213,8 +228,14 @@ pub fn update_profile(
         sets.push(format!("fullscreen = ?{}", values.len() + 1));
         values.push(Box::new(inner.map(|b| b as i64)));
     }
-    set_nullable!(patch.jvm_args, "jvm_args");
-    set_nullable!(patch.game_args, "game_args");
+    if let Some(args) = &patch.jvm_args {
+        sets.push(format!("jvm_args = ?{}", values.len() + 1));
+        values.push(Box::new(serde_json::to_string(args).unwrap_or_else(|_| "[]".into())));
+    }
+    if let Some(args) = &patch.game_args {
+        sets.push(format!("game_args = ?{}", values.len() + 1));
+        values.push(Box::new(serde_json::to_string(args).unwrap_or_else(|_| "[]".into())));
+    }
 
     if !sets.is_empty() {
         sets.push(format!("updated_at = ?{}", values.len() + 1));
@@ -386,6 +407,28 @@ mod tests {
         assert!(delete_profile(&conn, &created.id).unwrap());
         assert!(get_profile(&conn, &created.id).unwrap().is_none());
         assert!(!delete_profile(&conn, "no-such-id").unwrap());
+    }
+
+    #[test]
+    fn jvm_args_blob_json_is_parsed() {
+        // 실DB 실측: Go가 []string을 JSON 직렬화해 BLOB으로 저장 (예: 0x5B5D = "[]")
+        let (_dir, path) = fixture_db();
+        let conn = open_database(&path).unwrap();
+        conn.execute(
+            "INSERT INTO profiles (id, name, game_version, loader_type, game_directory,
+                                   created_at, updated_at, jvm_args)
+             VALUES ('pb', 'blob', '1.21.1', 'fabric', '/tmp/pb', 1, 1, ?1)",
+            [&b"[\"-Xmx2G\",\"-XX:+UseG1GC\"]"[..]],
+        )
+        .unwrap();
+        let p = get_profile(&conn, "pb").unwrap().unwrap();
+        assert_eq!(p.jvm_args, vec!["-Xmx2G".to_string(), "-XX:+UseG1GC".to_string()]);
+        assert!(p.game_args.is_empty()); // NULL → 빈 배열
+
+        // patch로 배열 갱신 → JSON 텍스트로 저장돼도 재파싱 일치
+        let patch = ProfilePatch { jvm_args: Some(vec!["-Xms1G".into()]), ..Default::default() };
+        let updated = update_profile(&conn, "pb", &patch, 2).unwrap().unwrap();
+        assert_eq!(updated.jvm_args, vec!["-Xms1G".to_string()]);
     }
 
     #[test]

@@ -33,4 +33,21 @@ fn main() {
             p.favorite
         );
     }
+
+    let settings = hyenimc_core::settings::get_settings(&conn).expect("settings");
+    println!(
+        "settings: java.memory_max={} download.max_parallel={} resolution={}x{}",
+        settings.java.memory_max,
+        settings.download.max_parallel,
+        settings.resolution.width,
+        settings.resolution.height
+    );
+
+    if let Some(p) = profiles.first() {
+        let stats = hyenimc_core::stats::get_stats(&conn, &p.id).expect("stats");
+        println!(
+            "stats[{}]: launches={} play_time={}s crashes={}",
+            p.name, stats.launch_count, stats.total_play_time, stats.crash_count
+        );
+    }
 }
