@@ -2,7 +2,7 @@
 //! TS version-manager.ts의 의미 포팅. 전부 download_all 재사용.
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 

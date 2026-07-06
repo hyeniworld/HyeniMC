@@ -11,6 +11,12 @@ declare global {
   interface Window {
     __TAURI__?: {
       core: { invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown> };
+      event: {
+        listen: (
+          event: string,
+          handler: (e: { payload: unknown }) => void
+        ) => Promise<() => void>;
+      };
     };
   }
 }
@@ -37,7 +43,8 @@ function installTauriShim(): void {
       update: (id: string, data: unknown) => invoke('profile_update', { id, data }),
       delete: (id: string) => invoke('profile_delete', { id }),
       toggleFavorite: (id: string) => invoke('profile_toggle_favorite', { id }),
-      launch: stub('profile.launch', undefined), // M2
+      launch: (id: string, accountId?: string) =>
+        invoke('game_launch', { profileId: id, accountId }),
       getStats: (profileId: string) => invoke('profile_get_stats', { profileId }),
       recordLaunch: (profileId: string) => invoke('profile_record_launch', { profileId }),
       recordPlayTime: (profileId: string, seconds: number) =>
@@ -57,19 +64,48 @@ function installTauriShim(): void {
       getMemory: () => invoke('system_memory'),
     },
     game: {
-      getActive: stub('game.getActive', []),
-      isRunning: stub('game.isRunning', false),
-      stop: stub('game.stop', undefined),
+      getActive: () => invoke('game_get_active'),
+      isRunning: (profileId: string) => invoke('game_is_running', { profileId }),
+      stop: (profileId: string) => invoke('game_stop', { profileId }),
+      downloadVersion: (profileId: string) => invoke('game_download_version', { profileId }),
     },
-    on: () => () => undefined,
-    once: () => () => undefined,
+    version: {
+      getVersions: () => invoke('version_list_minecraft'),
+      getLatest: async () => {
+        const list = (await invoke('version_list_minecraft')) as Array<{ id: string; type: string }>;
+        return list.find((v) => v.type === 'release')?.id;
+      },
+    },
+    java: {
+      detect: () => invoke('java_detect'),
+      getInstallations: () => invoke('java_detect'),
+    },
+    // 이벤트 브리지: Electron ipcRenderer.on → Tauri event listen (동일 이벤트 이름)
+    on: (event: string, cb: (data: unknown) => void) => {
+      const unlistenP = tauri.event.listen(event, (e) => cb(e.payload));
+      return () => {
+        unlistenP.then((unlisten) => unlisten());
+      };
+    },
+    once: (event: string, cb: (data: unknown) => void) => {
+      let done = false;
+      const unlistenP = tauri.event.listen(event, (e) => {
+        if (done) return;
+        done = true;
+        unlistenP.then((unlisten) => unlisten());
+        cb(e.payload);
+      });
+      return () => {
+        unlistenP.then((unlisten) => unlisten());
+      };
+    },
     off: () => undefined,
     removeAllListeners: () => undefined,
   };
 
-  // 미구현 카테고리: 빈 응답 스텁 + warn (M2+에서 순차 실구현)
+  // 미구현 카테고리: 빈 응답 스텁 + warn (M3+에서 순차 실구현)
   const STUB_CATEGORIES = [
-    'mod', 'modpack', 'resourcepack', 'shaderpack', 'account', 'version', 'java',
+    'mod', 'modpack', 'resourcepack', 'shaderpack', 'account',
     'loader', 'hyeni', 'workerMods', 'hyenipack', 'shell', 'dialog', 'fs',
     'launcher', 'fileWatcher', 'errorDialog',
   ];

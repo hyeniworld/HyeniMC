@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
+mod game;
 
 use std::sync::Mutex;
 use tauri::Manager;
@@ -46,6 +47,7 @@ fn main() {
                 e
             })?;
             app.manage(commands::DbState(Mutex::new(conn)));
+            app.manage(game::GameState::default());
             println!("[db] legacy DB connected");
             Ok(())
         })
@@ -65,6 +67,13 @@ fn main() {
             commands::settings_update,
             commands::system_memory,
             commands::system_get_path,
+            game::java_detect,
+            game::version_list_minecraft,
+            game::game_download_version,
+            game::game_launch,
+            game::game_stop,
+            game::game_is_running,
+            game::game_get_active,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
