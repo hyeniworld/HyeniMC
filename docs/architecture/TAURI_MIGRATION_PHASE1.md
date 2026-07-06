@@ -153,7 +153,10 @@ hyenimc/
   - **M2b 완료 (2026-07-06, `73abcc8`~`1d9d811`)**: install.rs(ensure_version — 버전 json/클라이언트 jar/라이브러리+natives classifier/에셋, 오프라인 fixture 서버 통합 테스트) + natives.rs(zip 전개) + launch.rs(TS 의미 그대로의 인자 조립 순수 함수 + GameHandle spawn/로그/종료 감시) + game.rs 커맨드 7개 + 이벤트(download:progress/game:log/game:started/game:stopped) + shim `on`→Tauri listen 브리지, profile.launch 실연결. 계정은 M3 전 더미(Player). Rust 테스트 38개. 플랜: [2026-07-06-tauri-m2b-install-launch.md](../superpowers/plans/2026-07-06-tauri-m2b-install-launch.md)
   - **M2 잔여(일괄 테스트)**: 실게임 기동 육안 확인(tauri dev → 프로필 실행 → 바닐라 창). 코드 측 완료 조건은 충족
 - **M3 — 계정** — **구현 완료 (2026-07-06, `923e5db`~`a154a7f`)**: core crypto(Go AES-256-GCM 스킴 바이트 호환 — **실DB 실계정 토큰 복호화 실증**, expires_at은 ms epoch로 실측 정정) + accounts 저장소, launcher auth(PKCE RFC 벡터/콜백 서버 실소켓 테스트/XBL→XSTS→MC 체인), 계정 커맨드 4개 + game_launch 실계정(자동 갱신) + shim. client_id는 option_env/런타임 env — generate-config의 Rust 산출 정식화는 M6. 플랜: [2026-07-06-tauri-m3-accounts.md](../superpowers/plans/2026-07-06-tauri-m3-accounts.md). **잔여(일괄 테스트)**: 실계정 브라우저 로그인 e2e + 실행 검증
-- **M4 — 로더 + 혜니팩**: Fabric/NeoForge 설치, 혜니팩 v1 설치(resolve 포함), V2 업데이트 엔진(diff/선언형 동기화/사용자 파일 보호), 팩 업데이트 UX. **모드 프로필 실행 성공 + 팩 버전 업/다운 시나리오 통과가 완료 조건**
+- **M4 — 로더 + 혜니팩** — **구현 완료 (2026-07-06, `a340e10`~`b281d96`)**:
+  - M4a: loader.rs — Fabric(meta profile json + maven 파생 라이브러리) / NeoForge(installer --install-client, CREATE_NO_WINDOW). game_launch가 로더별 실효 version_id 자동 설치·병합. Quilt/Forge 미지원(방침).
+  - M4b: hyenipack.rs — 매니페스트(v1/v2), plan_mod_sync 선언형 동기화(manual 보존/hyenipack 소속만 제거/버전변경 재설치 — 순수 함수 집중 테스트), install_pack(CDN 다운로드+.meta.json+overrides longest-prefix 정책), Worker check/download. pack.rs 커맨드 3개 + **실행 전 게이트**(breaking 차단 우회 불가 / 서버 접근 불가 시 advanced.force_launch로만 우회). url 피닝 전제(라이브 resolve는 제작자 도구), merge 정책 keep 격하.
+  - 플랜: [M4a](../superpowers/plans/2026-07-06-tauri-m4a-loaders.md) / [M4b](../superpowers/plans/2026-07-06-tauri-m4b-hyenipack.md). **잔여(일괄 테스트)**: 모드 프로필 실행 + 실 R2 팩 업/다운 e2e
 - **M5 — 혜니월드 통합**: worker mods 통합 관리(서버 감지 트리거), 딥링크 인증 e2e(servers.dat + HyeniHelper config), 크래시 리포트 수집·전달, 리소스/셰이더 리스트 + 구분 배지 + 파일 감시
 - **M6 — 마감**: 자동 업데이트 프로덕션 구성, **기존 Electron 설치 교체 실행**(아래 전략), 테마/접근성 폴리시, QA 매트릭스 전체 회귀, 배포 파이프라인(arm64/x64/win)
 
