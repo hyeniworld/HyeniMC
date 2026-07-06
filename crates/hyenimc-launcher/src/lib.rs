@@ -2,6 +2,7 @@
 
 pub mod auth;
 pub mod download;
+pub mod hyenipack;
 pub mod install;
 pub mod java;
 pub mod launch;
