@@ -65,7 +65,7 @@ pub fn load_profile_pub(
     load_profile(db, profile_id)
 }
 
-fn download_config(settings: &hyenimc_core::settings::GlobalSettings) -> DownloadConfig {
+pub fn download_config(settings: &hyenimc_core::settings::GlobalSettings) -> DownloadConfig {
     DownloadConfig {
         max_parallel: settings.download.max_parallel.max(1) as usize,
         max_retries: settings.download.max_retries.max(0) as u32,

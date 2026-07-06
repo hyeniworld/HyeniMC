@@ -12,7 +12,7 @@ use crate::LauncherError;
 
 // ── 매니페스트 (v1/v2 공용) ──────────────────────────────
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PackManifest {
     #[serde(default)]
@@ -30,7 +30,7 @@ pub struct PackManifest {
     pub breaking: bool,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PackMinecraft {
     pub version: String,
@@ -41,7 +41,7 @@ pub struct PackMinecraft {
 
 /// 매니페스트 모드 엔트리. exporter는 metadata 중첩({source,projectId,version})으로 저장하므로
 /// 평면 필드 + 중첩 metadata 양쪽을 흡수한다.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PackMod {
     pub file_name: String,
@@ -61,7 +61,7 @@ pub struct PackMod {
     pub metadata: Option<PackModMetadata>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PackModMetadata {
     #[serde(default)]
@@ -88,7 +88,7 @@ impl PackMod {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct OverridePolicy {
     pub path: String,
     pub policy: String, // keep | replace | merge(→keep 취급)
@@ -335,7 +335,7 @@ fn maybe_authorize_url(url: &str, m: &PackMod, token: Option<&str>) -> String {
     }
 }
 
-fn read_manifest_from_zip(pack_zip: &Path) -> Result<PackManifest, LauncherError> {
+pub fn read_manifest_from_zip(pack_zip: &Path) -> Result<PackManifest, LauncherError> {
     let file = std::fs::File::open(pack_zip)?;
     let mut zip = zip::ZipArchive::new(file).map_err(|e| LauncherError::Other(e.to_string()))?;
     let mut entry = zip

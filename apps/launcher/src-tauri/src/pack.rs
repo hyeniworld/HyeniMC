@@ -11,22 +11,17 @@ use crate::account::CryptoState;
 use crate::commands::DbState;
 use crate::game::{game_dirs_for, load_profile_pub};
 
-/// Worker base URL — HYENIMC_WORKER_URL env, 없으면 컴파일 상수(배포 시 주입).
-pub fn worker_base() -> String {
+/// Worker base URL — HYENIMC_WORKER_URL env 또는 빌드 시 주입. 미설정이면 명시적 에러.
+pub fn worker_base() -> Result<String, String> {
     std::env::var("HYENIMC_WORKER_URL")
         .ok()
         .filter(|v| !v.is_empty())
-        .or_else(|| option_env!("HYENIMC_WORKER_URL").map(String::from))
-        .unwrap_or_else(|| "https://worker.hyeniworld.invalid".into())
-}
-
-fn download_cfg(settings: &hyenimc_core::settings::GlobalSettings) -> hyenimc_launcher::download::DownloadConfig {
-    hyenimc_launcher::download::DownloadConfig {
-        max_parallel: settings.download.max_parallel.max(1) as usize,
-        max_retries: settings.download.max_retries.max(0) as u32,
-        timeout: std::time::Duration::from_millis(settings.download.request_timeout_ms.max(1000) as u64),
-        retry_base_ms: 1000,
-    }
+        .or_else(|| {
+            option_env!("HYENIMC_WORKER_URL")
+                .filter(|v| !v.is_empty())
+                .map(String::from)
+        })
+        .ok_or_else(|| "HYENIMC_WORKER_URL이 설정되지 않았습니다 (.env 또는 환경변수)".to_string())
 }
 
 /// 로컬 .hyenipack import — 모드 동기화 + overrides + 프로필 버전/로더 반영.
@@ -45,7 +40,7 @@ pub async fn hyenipack_import(
         (p, s)
     };
     let dirs = game_dirs_for(&profile)?;
-    let cfg = download_cfg(&settings);
+    let cfg = crate::game::download_config(&settings);
 
     // CF 프록시용 토큰 (계정 있으면)
     let token = match &account_id {
@@ -90,6 +85,12 @@ pub async fn hyenipack_import(
     Ok(())
 }
 
+/// 팩 미리보기 — 설치 없이 매니페스트만 읽기 (preload hyenipack.preview 대응)
+#[tauri::command]
+pub fn hyenipack_preview(file_path: String) -> Result<hyenipack::PackManifest, String> {
+    hyenipack::read_manifest_from_zip(&PathBuf::from(&file_path)).map_err(|e| e.to_string())
+}
+
 /// 팩 업데이트 확인 (없으면 null, 네트워크 실패는 에러)
 #[tauri::command]
 pub async fn pack_check_update(
@@ -99,7 +100,7 @@ pub async fn pack_check_update(
     let profile = load_profile_pub(&db, &profile_id)?;
     let dirs = game_dirs_for(&profile)?;
     let http = reqwest::Client::new();
-    hyenipack::check_pack_update(&http, &worker_base(), &dirs.instance_dir)
+    hyenipack::check_pack_update(&http, &worker_base()?, &dirs.instance_dir)
         .await
         .map_err(|e| e.to_string())
 }
@@ -117,7 +118,7 @@ pub async fn pack_apply_update(
     let dirs = game_dirs_for(&profile)?;
     let http = reqwest::Client::new();
 
-    let update = hyenipack::check_pack_update(&http, &worker_base(), &dirs.instance_dir)
+    let update = hyenipack::check_pack_update(&http, &worker_base()?, &dirs.instance_dir)
         .await
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "적용할 업데이트가 없습니다".to_string())?;
@@ -132,7 +133,7 @@ pub async fn pack_apply_update(
     ));
     hyenipack::download_pack_version(
         &http,
-        &worker_base(),
+        &worker_base()?,
         &update.hyenipack_id,
         &update.latest_version,
         &token,
@@ -161,8 +162,25 @@ pub async fn pre_launch_pack_gate(
     dirs: &GameDirs,
     settings: &hyenimc_core::settings::GlobalSettings,
 ) -> Result<(), String> {
+    // 팩 미설치 프로필(바닐라 등)은 게이트 대상 아님
+    if hyenipack::read_pack_meta(&dirs.instance_dir).is_none() {
+        return Ok(());
+    }
+
+    // Worker URL 미설정 = 체크 불가 → 접근 불가와 동일 정책 (기본 차단 + force_launch 우회)
+    let base = match worker_base() {
+        Ok(b) => b,
+        Err(e) => {
+            return if settings.advanced.force_launch {
+                Ok(())
+            } else {
+                Err(format!("{e} — 팩 업데이트 확인 불가. 설정의 '강제 실행'으로 우회할 수 있습니다."))
+            };
+        }
+    };
+
     let http = reqwest::Client::new();
-    match hyenipack::check_pack_update(&http, &worker_base(), &dirs.instance_dir).await {
+    match hyenipack::check_pack_update(&http, &base, &dirs.instance_dir).await {
         Ok(None) => Ok(()), // 최신
         Ok(Some(update)) if update.breaking => Err(format!(
             "호환성 파괴 업데이트(v{})가 있어 적용 전까지 실행할 수 없습니다. 팩을 업데이트하세요.",
@@ -171,18 +189,14 @@ pub async fn pre_launch_pack_gate(
         Ok(Some(_)) => Ok(()), // non-breaking: 배너로 안내(렌더러), 실행 허용
         Err(_) => {
             // 서버 접근 불가
-            if read_pack_installed(dirs) && !settings.advanced.force_launch {
+            if settings.advanced.force_launch {
+                Ok(())
+            } else {
                 Err("업데이트 서버에 연결할 수 없습니다. 설정에서 '강제 실행'을 켜거나 잠시 후 다시 시도하세요."
                     .into())
-            } else {
-                Ok(())
             }
         }
     }
-}
-
-fn read_pack_installed(dirs: &GameDirs) -> bool {
-    hyenipack::read_pack_meta(&dirs.instance_dir).is_some()
 }
 
 fn now_secs() -> i64 {

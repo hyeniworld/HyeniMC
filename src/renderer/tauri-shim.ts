@@ -84,9 +84,33 @@ function installTauriShim(): void {
       getVersions: (loaderType: string, gameVersion: string) =>
         invoke('loader_get_versions', { loaderType, gameVersion }),
     },
+    // preload 계약(hyenipack.import(filePath, profileId, instanceDir) + {success} envelope) 그대로 유지
     hyenipack: {
-      import: (profileId: string, filePath: string, accountId?: string) =>
-        invoke('hyenipack_import', { profileId, filePath, accountId }),
+      import: async (filePath: string, profileId: string, _instanceDir?: string) => {
+        try {
+          await invoke('hyenipack_import', { profileId, filePath });
+          return { success: true };
+        } catch (e) {
+          return { success: false, error: String(e) };
+        }
+      },
+      preview: async (filePath: string) => {
+        try {
+          const manifest = await invoke('hyenipack_preview', { filePath });
+          return { success: true, manifest };
+        } catch (e) {
+          return { success: false, error: String(e) };
+        }
+      },
+      getFileTree: async () => ({
+        success: false,
+        error: '혜니팩 제작(export)은 제작자 도구에서만 지원됩니다',
+      }),
+      export: async () => ({
+        success: false,
+        error: '혜니팩 제작(export)은 제작자 도구에서만 지원됩니다',
+      }),
+      // 신규 표면 (팩 업데이트)
       checkUpdate: (profileId: string) => invoke('pack_check_update', { profileId }),
       applyUpdate: (profileId: string, accountId?: string) =>
         invoke('pack_apply_update', { profileId, accountId }),
