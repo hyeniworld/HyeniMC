@@ -1,5 +1,8 @@
 # HyeniPack V2 Export + 배포 채널 Implementation Plan
 
+> **실행 결과 (2026-07-06, 인라인 실행 완료)**: Task 1~6 전부 구현·커밋 — `588e5a0`(타입+빌더, vitest 11) / `15d8d6a`(exporter — **보너스: HyeniPackExportOptions 중복 선언 잠재 버그 발견·제거**) / `9137f10`(모달) / `c064b85`(Worker — wrangler dev에서 400/404/401/health 검증) / `e31ede0`(스크립트 — 가짜 wrangler 드라이런 + sha 불일치 거부 검증) / `d3561ba`(문서). 최종 vite+tsc 클린, vitest 19/19.
+> **잔여 수동 e2e (사용자)**: ① 앱에서 실제 export → `unzip -p <팩>.hyenipack hyenipack.json`에서 formatVersion 2 확인 + latest.json sha256 대조 ② 실 R2에 테스트 배포(`deploy-hyenipack.sh`) 후 실 Worker에서 latest 조회·토큰 다운로드 확인 (Task 5 Step 3의 절차 그대로).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 제작자 도구(기존 Electron HyeniMC)에서 V2 혜니팩(.hyenipack, formatVersion 2)을 export하고, Cloudflare Worker + R2로 배포·조회·다운로드할 수 있게 한다 — Tauri 런처 M4(팩 자동 업데이트)의 배포 측 전제 조건.
