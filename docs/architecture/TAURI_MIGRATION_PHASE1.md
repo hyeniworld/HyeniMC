@@ -99,7 +99,7 @@ hyenimc/
 
 기존 사용자의 데이터를 마이그레이션 절차 없이 그대로 읽는다:
 
-- `~/.hyenimc/hyenimc.db` SQLite: profiles / accounts / global_settings / profile_stats 테이블은 스키마 그대로 사용. 모드 캐시류 테이블(api_cache, loader_versions, mod_* 등)은 미사용 방치(v2에서 정리)
+- SQLite DB 위치 **(2026-07-06 실측 정정)**: 실데이터는 `~/.hyenimc`가 아니라 **Electron userData/data** — macOS `~/Library/Application Support/hyenimc/data/hyenimc.db`, Windows `%APPDATA%\hyenimc\data\`, Linux `~/.config/hyenimc/data/` (Electron이 Go 데몬을 `HYENIMC_DATA_DIR=userData/data`로 spawn했기 때문. `~/.hyenimc`는 Go 단독 실행 폴백으로 schema_version만 있는 빈 DB). Tauri도 이 경로를 그대로 본다 — `hyenimc-core/src/paths.rs::legacy_data_dir()`. profiles / accounts / global_settings / profile_stats 테이블은 스키마 그대로 사용, 모드 캐시류 테이블(api_cache, loader_versions, mod_* 등)은 미사용 방치(v2에서 정리)
 - 계정 토큰: Go의 AES-256(`.key` 32바이트 + `.device_id` 파생) 방식을 동일하게 구현해 기존 저장 토큰 복호화 유지
 - 프로필 디렉터리 구조(instances/, mods/, resourcepacks/, `.meta.json` 사이드카) 완전 호환 — `.meta.json`의 `installedFrom: 'hyenipack'` / `modpackId` 필드가 V2 동기화·리소스팩 구분 배지의 근거
 - 렌더러 설정(zustand persist 등)은 WebView localStorage로 이전되므로 초기화 허용(경미)
@@ -138,7 +138,7 @@ hyenimc/
 
 각 마일스톤은 독립적으로 동작 검증 가능한 상태로 끝나며, 착수 시 writing-plans 형식의 상세 플랜을 개별 작성한다.
 
-- **M0 — 스파이크 (로드맵 4번과 동일, go/no-go 게이트)**: Tauri v2 셸에 기존 렌더러 로드(Vite), `hyenimc://` 딥링크 수신(macOS/Windows), 창 드래그(`data-tauri-drag-region`), updater 서명 키 생성 + 더미 피드 업데이트 1회, 기존 `~/.hyenimc/hyenimc.db` 열기, **macOS Squirrel.Mac 교체 검증**(아래 "기존 Electron 설치 교체" 참조). **검증 항목이 하나라도 막히면 설계 재검토**
+- **M0 — 스파이크 (로드맵 4번과 동일, go/no-go 게이트)** — **구현 완료 (2026-07-06, 커밋 8d64733)**: Cargo workspace(crates/hyenimc-core + apps/launcher/src-tauri) + Tauri v2 셸(기존 Vite 렌더러 연결 + withGlobalTauri + tauri-shim) + single-instance/deep-link(hyenimc://)/updater 플러그인 배선 + 서명 키 생성(로컬 보관) + **기존 실DB in-place 읽기 실증(schema v18, 프로필 4개)**. 컴파일·테스트 검증 완료(cargo test 4/4, cargo check, 기존 vite/tsc/vitest 무손상). **잔여(사용자 일괄 테스트 시점으로 연기, 2026-07-06 방침)**: tauri dev 육안 확인·창 드래그·딥링크 런타임 수신(macOS는 번들 필요)·더미 피드 업데이트 라운드트립·Squirrel.Mac 교체 검증
 - **M1 — 골격**: workspace 구성, hyenimc-core(SQLite 호환 접속 + 프로필/설정 CRUD), 커맨드 15개 내외 + 어댑터 shim, 프로필 목록/상세 화면이 실데이터로 렌더
 - **M2 — 게임 파이프라인**: 다운로드 엔진(병렬/SHA1/재개/진행 이벤트), 버전 매니페스트/에셋/라이브러리, Java 감지, JVM 실행 + 로그 스트림 + 종료/크래시 감지. **바닐라 실행 성공이 완료 조건**
 - **M3 — 계정**: MS OAuth 전체 플로우 + 기존 토큰 복호화 호환 + 다계정. 실계정 로그인/재인증 검증
