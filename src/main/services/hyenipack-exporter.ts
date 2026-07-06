@@ -9,7 +9,8 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import { app } from 'electron';
 import AdmZip from 'adm-zip';
-import { HyeniPackManifest, HyeniPackModEntry, HyeniPackExportOptions } from '../../shared/types/hyenipack';
+import { HyeniPackManifestV2, HyeniPackModEntry, HyeniPackExportOptionsV2 } from '../../shared/types/hyenipack';
+import { buildManifestV2, buildLatestInfo } from './hyenipack-manifest';
 import { metadataManager } from './metadata-manager';
 
 interface Profile {
@@ -27,7 +28,7 @@ export class HyeniPackExporter {
    */
   async exportProfile(
     profile: Profile,
-    options: HyeniPackExportOptions,
+    options: HyeniPackExportOptionsV2,
     outputPath?: string
   ): Promise<string> {
     const instanceDir = profile.gameDir;
@@ -121,7 +122,20 @@ export class HyeniPackExporter {
         );
       
       await this.createZip(tempDir, finalPath);
-      
+
+      // 6.5 latest.json 사이드카 생성 (R2 배포용)
+      const packSha256 = await this.calculateSHA256(finalPath);
+      const packStat = await fs.stat(finalPath);
+      const latestInfo = buildLatestInfo(
+        manifest,
+        packSha256,
+        packStat.size,
+        new Date().toISOString()
+      );
+      const latestPath = finalPath.replace(/\.hyenipack$/, '.latest.json');
+      await fs.writeFile(latestPath, JSON.stringify(latestInfo, null, 2), 'utf8');
+      console.log(`[HyeniPackExporter] latest.json created: ${latestPath}`);
+
       console.log(`[HyeniPackExporter] HyeniPack created: ${finalPath}`);
       return finalPath;
       
@@ -141,9 +155,9 @@ export class HyeniPackExporter {
    */
   private async createManifest(
     profile: Profile,
-    options: HyeniPackExportOptions,
+    options: HyeniPackExportOptionsV2,
     instanceDir: string
-  ): Promise<HyeniPackManifest> {
+  ): Promise<HyeniPackManifestV2> {
     // 선택된 파일 중 mods 폴더의 파일들만 메타데이터 수집
     const modsDir = path.join(instanceDir, 'mods');
     const metadata = await metadataManager.readUnifiedMetadata(modsDir);
@@ -182,25 +196,18 @@ export class HyeniPackExporter {
       }
     }
     
-    return {
-      formatVersion: 1,
-      name: options.packName,
-      version: options.version,
-      author: options.author,
-      description: options.description,
-      minecraft: {
-        version: profile.gameVersion,
+    return buildManifestV2({
+      profile: {
+        name: profile.name,
+        gameVersion: profile.gameVersion,
         loaderType: profile.loaderType,
-        loaderVersion: profile.loaderVersion
+        loaderVersion: profile.loaderVersion,
       },
+      options,
       mods,
+      launcherVersion: app.getVersion(),
       createdAt: new Date().toISOString(),
-      exportedFrom: {
-        launcher: 'HyeniMC',
-        version: app.getVersion(),
-        profileName: profile.name
-      }
-    };
+    });
   }
   
   /**

@@ -292,18 +292,6 @@ export type HyeniPackInstallStage =
   | 'complete';
 
 /**
- * HyeniPack 내보내기 옵션
- */
-export interface HyeniPackExportOptions {
-  includeOverrides: boolean;
-  includeServerFiles: boolean;
-  includeResourcePacks: boolean;
-  includeShaderPacks: boolean;
-  includeScreenshots: boolean;
-  minify: boolean;
-}
-
-/**
  * 설치된 모드의 메타 파일 (.meta.json)
  */
 export interface InstalledModMeta {
