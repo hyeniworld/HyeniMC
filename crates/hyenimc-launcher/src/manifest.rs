@@ -140,7 +140,8 @@ pub fn merge_inherited(child: VersionDetail, parent: VersionDetail) -> VersionDe
     libraries.extend(parent.libraries);
     VersionDetail {
         id: child.id,
-        inherits_from: None,
+        // 보존 — 클라이언트 jar는 부모 버전 것을 쓰므로(TS buildClasspath 의미) 병합 후에도 필요
+        inherits_from: child.inherits_from,
         main_class: child.main_class.or(parent.main_class),
         asset_index: child.asset_index.or(parent.asset_index),
         assets: child.assets.or(parent.assets),

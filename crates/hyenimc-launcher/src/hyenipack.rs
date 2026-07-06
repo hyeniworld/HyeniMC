@@ -1,7 +1,6 @@
 //! 혜니팩 설치 + V2 선언형 동기화 + 팩 업데이트.
 //! 사용자 런처는 url 피닝된 매니페스트 전제(MR/CF 라이브 resolve는 제작자 도구 몫).
 
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};

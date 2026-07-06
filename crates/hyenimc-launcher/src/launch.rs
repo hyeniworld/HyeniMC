@@ -68,7 +68,13 @@ pub fn build_classpath(detail: &VersionDetail, dirs: &GameDirs) -> (String, Vec<
         }
     }
 
-    parts.push(dirs.client_jar(&detail.id).display().to_string());
+    // 클라이언트 jar — TS 의미(전체 리뷰 G8):
+    // NeoForge는 제외(installer가 만든 srg client jar가 라이브러리로 자동 로드),
+    // inheritsFrom 프로필(fabric 등)은 부모 버전의 jar 사용
+    if !detail.id.starts_with("neoforge-") {
+        let client_id = detail.inherits_from.as_deref().unwrap_or(&detail.id);
+        parts.push(dirs.client_jar(client_id).display().to_string());
+    }
     (parts.join(sep), missing)
 }
 
@@ -438,6 +444,28 @@ mod tests {
         let got = logs.lock().unwrap().clone();
         assert!(got.contains(&"line-one".to_string()));
         assert!(got.iter().any(|l| l.contains("err-one")));
+    }
+
+    #[test]
+    fn classpath_uses_parent_jar_for_inherited_and_none_for_neoforge() {
+        // 전체 리뷰 G8: fabric 등 inheritsFrom 프로필은 부모 jar, neoforge는 클라이언트 jar 미포함
+        let tmp = tempfile::tempdir().unwrap();
+        let dirs = fixture_dirs(&tmp);
+
+        let fabric: crate::manifest::VersionDetail = serde_json::from_str(
+            r#"{"id":"fabric-loader-0.16.7-1.21.1","inheritsFrom":"1.21.1","libraries":[]}"#,
+        )
+        .unwrap();
+        let (cp, _) = build_classpath(&fabric, &dirs);
+        assert!(cp.ends_with(&dirs.client_jar("1.21.1").display().to_string()));
+        assert!(!cp.contains("fabric-loader-0.16.7-1.21.1.jar"));
+
+        let neo: crate::manifest::VersionDetail = serde_json::from_str(
+            r#"{"id":"neoforge-21.1.213","inheritsFrom":"1.21.1","libraries":[]}"#,
+        )
+        .unwrap();
+        let (cp, _) = build_classpath(&neo, &dirs);
+        assert!(!cp.contains("1.21.1.jar"), "neoforge는 클라이언트 jar 미포함이어야: {cp}");
     }
 
     #[test]
