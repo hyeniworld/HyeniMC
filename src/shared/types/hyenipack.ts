@@ -80,6 +80,68 @@ export interface HyeniPackExportOptions {
 }
 
 /**
+ * V2 override 정책 (파일/폴더 단위, Longest-Prefix-Match 우선)
+ */
+export interface OverridePolicy {
+  path: string;                          // "config" 또는 "config/sodium-options.json"
+  policy: 'keep' | 'replace' | 'merge';  // UI는 keep/replace만 노출, merge는 예약
+}
+
+/**
+ * HyeniPack V2 매니페스트 (자동 업데이트 지원)
+ */
+export interface HyeniPackManifestV2 {
+  formatVersion: 2;
+  hyenipackId: string;      // /^[a-z0-9][a-z0-9-]{0,63}$/
+  name: string;
+  version: string;          // SemVer
+  author: string;
+  description?: string;
+  changelog?: string;
+  breaking?: boolean;       // true: 적용 전 게임 실행 차단 (기본 false)
+  minecraft: {
+    version: string;
+    loaderType: LoaderType;
+    loaderVersion: string;
+  };
+  mods: HyeniPackModEntry[];
+  overrides: OverridePolicy[];
+  createdAt: string;
+  exportedFrom?: {
+    launcher: 'HyeniMC';
+    version: string;
+    profileName: string;
+  };
+}
+
+export type AnyHyeniPackManifest = HyeniPackManifest | HyeniPackManifestV2;
+
+/**
+ * V2 Export 옵션
+ */
+export interface HyeniPackExportOptionsV2 extends HyeniPackExportOptions {
+  hyenipackId: string;
+  changelog?: string;
+  breaking?: boolean;
+  overridePolicies: OverridePolicy[];
+}
+
+/**
+ * R2 latest.json 스키마 (Worker /api/v2/modpacks/{id}/latest 응답)
+ */
+export interface HyeniPackLatestInfo {
+  hyenipackId: string;
+  name: string;
+  version: string;
+  changelog?: string;
+  breaking: boolean;
+  minLauncherVersion?: string;
+  fileSize: number;
+  sha256: string;
+  releaseDate: string;
+}
+
+/**
  * Import 시 진행 상태
  */
 export interface HyeniPackImportProgress {
