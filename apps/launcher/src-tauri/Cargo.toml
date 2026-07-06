@@ -1,5 +1,5 @@
 [package]
-name = "hyenimc-launcher"
+name = "hyenimc-app"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

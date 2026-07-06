@@ -1,0 +1,20 @@
+[package]
+name = "hyenimc-launcher"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "process", "sync", "io-util", "time"] }
+reqwest = { version = "0.12", features = ["stream"] }
+sha1 = "0.10"
+hex = "0.4"
+futures = "0.3"
+
+[dev-dependencies]
+tempfile = "3"
+tiny_http = "0.12"
