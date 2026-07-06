@@ -71,3 +71,8 @@ src/main/gen/
 
 .wrangler
 .dev.vars
+
+# Rust (Tauri)
+/target
+apps/launcher/src-tauri/target
+apps/launcher/src-tauri/gen

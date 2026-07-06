@@ -1,0 +1,52 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "HyeniMC",
+  "version": "0.4.0",
+  "identifier": "me.devbug.hyeniworld.hyenimc",
+  "build": {
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "cd ../../.. && npm run dev:vite",
+    "beforeBuildCommand": "cd ../../.. && npm run build:renderer",
+    "frontendDist": "../../../dist/renderer"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "HyeniMC",
+        "label": "main",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 1024,
+        "minHeight": 700
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["dmg", "nsis"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["hyenimc"]
+      }
+    },
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI5QzA1QjBCRkZCOTQ2N0UKUldSK1Jybi9DMXZBdWZXS2MvYitCaWFWMnc1SzdVUWRaaWQwTTdKZi9rRU9CdWtpZ2ZMTFhXbjEK",
+      "endpoints": [
+        "https://hyenimc-releases.invalid/launcher/{{target}}/{{arch}}/{{current_version}}"
+      ]
+    }
+  }
+}
