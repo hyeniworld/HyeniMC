@@ -29,7 +29,8 @@
     "backend:build:win-x64": "cd backend && go build -o bin/hyenimc-backend.exe ./cmd/hyenimc",
     "backend:build:all": "npm run backend:build:mac-arm64 && npm run backend:build:mac-x64 && npm run backend:build:win-x64",
     "dev:tauri": "cd apps/launcher && tauri dev",
-    "build:tauri": "cd apps/launcher && tauri build"
+    "build:tauri": "cd apps/launcher && tauri build",
+    "tauri": "tauri"
   },
   "dependencies": {
     "@bufbuild/protobuf": "^2.9.0",

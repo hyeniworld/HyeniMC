@@ -5,8 +5,8 @@
   "identifier": "me.devbug.hyeniworld.hyenimc",
   "build": {
     "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "cd ../../.. && npm run dev:vite",
-    "beforeBuildCommand": "cd ../../.. && npm run build:renderer",
+    "beforeDevCommand": "cd ../.. && npm run dev:vite",
+    "beforeBuildCommand": "cd ../.. && npm run build:renderer",
     "frontendDist": "../../../dist/renderer"
   },
   "app": {
