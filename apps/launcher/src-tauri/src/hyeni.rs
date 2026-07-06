@@ -157,23 +157,20 @@ fn apply_auth(app: &AppHandle, token: &str, servers: &[String]) -> Result<(usize
         hyenimc_core::list_profiles(&conn).map_err(|e| e.to_string())?
     };
 
+    // 프로필별 독립 처리 — 한 프로필 실패가 전체를 막지 않음 (TS handleAuthRequest 의미)
     let mut updated: Vec<String> = Vec::new();
     for profile in &profiles {
         let game_dir = PathBuf::from(&profile.game_directory);
         let applied = if servers.is_empty() {
-            // MODE 2
+            // MODE 2: HyeniHelper 설치 프로필에 기존 토큰 없을 때만
             hy::has_hyenihelper(&game_dir.join("mods"))
-                && hy::write_hyenihelper_config(&game_dir, token, false).map_err(|e| e.to_string())?
+                && hy::write_hyenihelper_config(&game_dir, token, false).unwrap_or(false)
         } else {
-            // MODE 1
+            // MODE 1: servers.dat 매칭 프로필에 무조건
             let matches = servers
                 .iter()
                 .any(|s| hy::servers_dat_contains(&game_dir.join("servers.dat"), s));
-            if matches {
-                hy::write_hyenihelper_config(&game_dir, token, true).map_err(|e| e.to_string())?
-            } else {
-                false
-            }
+            matches && hy::write_hyenihelper_config(&game_dir, token, true).unwrap_or(false)
         };
         if applied {
             updated.push(profile.name.clone());

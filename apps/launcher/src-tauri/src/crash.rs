@@ -35,12 +35,7 @@ pub fn crash_export_report(
     let dirs = game_dirs_for(&profile)?;
     let instance = &dirs.instance_dir;
 
-    let downloads = hyenimc_core::paths::legacy_user_data_dir()
-        .and_then(|u| u.parent().map(|p| p.to_path_buf()))
-        .map(|home| home.join("Downloads"))
-        .filter(|d| d.exists())
-        .or_else(|| std::env::var_os("HOME").map(|h| Path::new(&h).join("Downloads")))
-        .ok_or_else(|| "다운로드 폴더를 찾을 수 없습니다".to_string())?;
+    let downloads = downloads_dir().ok_or_else(|| "다운로드 폴더를 찾을 수 없습니다".to_string())?;
     std::fs::create_dir_all(&downloads).map_err(|e| e.to_string())?;
 
     let safe_name: String = profile
@@ -101,6 +96,14 @@ pub fn crash_export_report(
 
     zip.finish().map_err(|e| e.to_string())?;
     Ok(out_path.display().to_string())
+}
+
+/// 사용자 Downloads 폴더 — 플랫폼별 홈 환경변수 사용 (Windows는 USERPROFILE, M5-2).
+fn downloads_dir() -> Option<std::path::PathBuf> {
+    let home = std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
+        .map(std::path::PathBuf::from)?;
+    Some(home.join("Downloads"))
 }
 
 fn list_mod_files(mods_dir: &Path) -> Vec<String> {

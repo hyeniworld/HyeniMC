@@ -111,11 +111,13 @@ pub fn is_newer_version(remote: &str, local: &str) -> bool {
 
 // ── 로컬 상태 ────────────────────────────────────────────
 
-/// mods/에서 modId 프리픽스 jar 파일 목록
+/// mods/에서 `{modId}-*.jar` 파일 목록 (TS `^{modId}-.*\.jar$` 동일 — 하이픈 필수).
+/// 하이픈을 요구해야 modId가 다른 modId의 프리픽스일 때 오검출/오삭제를 막는다
+/// (예: "hyeni"가 "hyenihelper-*.jar"를 잡지 않도록).
 pub fn find_mod_files(mods_dir: &Path, mod_id: &str) -> Vec<std::path::PathBuf> {
     let mut out = Vec::new();
     let Ok(rd) = std::fs::read_dir(mods_dir) else { return out };
-    let prefix = mod_id.to_lowercase();
+    let prefix = format!("{}-", mod_id.to_lowercase());
     for entry in rd.flatten() {
         let name = entry.file_name().to_string_lossy().to_lowercase();
         if name.starts_with(&prefix) && name.ends_with(".jar") {
@@ -338,5 +340,20 @@ mod tests {
         std::fs::write(tmp.path().join("other-mod-2.0.0.jar"), b"x").unwrap();
         assert_eq!(local_mod_version(tmp.path(), "hyenihelper").as_deref(), Some("1.0.4"));
         assert_eq!(local_mod_version(tmp.path(), "hyenicore"), None);
+    }
+
+    #[test]
+    fn find_requires_hyphen_no_prefix_false_positive() {
+        // M5-1 회귀: "hyeni"가 "hyenihelper-*.jar"를 잡으면 안 됨 (오삭제 방지)
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("hyenihelper-neoforge-1.21.1-1.0.5.jar"), b"x").unwrap();
+        std::fs::write(tmp.path().join("hyenicore-2.0.0.jar"), b"x").unwrap();
+        std::fs::write(tmp.path().join("hyeni-1.0.0.jar"), b"x").unwrap();
+
+        let hyeni = find_mod_files(tmp.path(), "hyeni");
+        assert_eq!(hyeni.len(), 1, "hyeni는 hyeni-만 잡아야 함");
+        assert!(hyeni[0].file_name().unwrap().to_string_lossy().starts_with("hyeni-1"));
+
+        assert_eq!(find_mod_files(tmp.path(), "hyenihelper").len(), 1);
     }
 }

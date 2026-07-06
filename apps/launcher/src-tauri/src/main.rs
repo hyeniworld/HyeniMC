@@ -106,6 +106,14 @@ fn main() {
             pack::hyenipack_preview,
             pack::pack_check_update,
             pack::pack_apply_update,
+            hyeni::worker_mods_check,
+            hyeni::worker_mods_install,
+            resources::resourcepack_list,
+            resources::shaderpack_list,
+            resources::file_watch_start,
+            resources::file_watch_stop,
+            crash::crash_export_report,
+            crash::crash_open_logs,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
