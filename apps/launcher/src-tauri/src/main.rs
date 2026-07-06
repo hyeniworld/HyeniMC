@@ -79,6 +79,7 @@ fn main() {
             commands::system_get_path,
             game::java_detect,
             game::version_list_minecraft,
+            game::loader_get_versions,
             game::game_download_version,
             game::game_launch,
             game::game_stop,

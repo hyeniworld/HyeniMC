@@ -127,6 +127,32 @@ pub async fn java_detect() -> Vec<hyenimc_launcher::java::JavaInstallation> {
 }
 
 #[tauri::command]
+pub async fn loader_get_versions(
+    loader_type: String,
+    game_version: String,
+) -> Result<Vec<String>, String> {
+    let http = reqwest::Client::new();
+    match loader_type.as_str() {
+        "fabric" => Ok(hyenimc_launcher::loader::fabric_loader_versions(&http, &game_version)
+            .await
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .map(|v| v.version)
+            .collect()),
+        "neoforge" => {
+            let all = hyenimc_launcher::loader::neoforge_versions(&http)
+                .await
+                .map_err(|e| e.to_string())?;
+            Ok(all
+                .into_iter()
+                .filter(|v| hyenimc_launcher::loader::neoforge_matches_mc(v, &game_version))
+                .collect())
+        }
+        other => Err(format!("지원하지 않는 로더: {other}")),
+    }
+}
+
+#[tauri::command]
 pub async fn version_list_minecraft() -> Result<Vec<VersionEntry>, String> {
     let http = reqwest::Client::new();
     let manifest: VersionManifest = http
@@ -182,10 +208,11 @@ pub async fn game_launch(
     let dirs = game_dirs_for(&profile)?;
     let cfg = download_config(&settings);
 
-    // ① 설치 보장 (이미 설치면 SHA1 스킵으로 빠르게 통과)
-    let detail = ensure_profile_version(&app, &profile, &dirs, &cfg).await?;
+    // ① 베이스 게임 설치 보장 (이미 설치면 SHA1 스킵으로 빠르게 통과)
+    ensure_profile_version(&app, &profile, &dirs, &cfg).await?;
 
     // ② Java 결정: 프로필 오버라이드 → 전역 설정 → 자동 감지 최상위
+    //    (NeoForge installer가 Java를 필요로 하므로 로더 설치 전에 결정)
     let java_path = profile
         .java_path
         .clone()
@@ -203,8 +230,34 @@ pub async fn game_launch(
             .ok_or_else(|| "Java를 찾을 수 없습니다. 설정에서 Java 경로를 지정하세요.".to_string())?,
     };
 
-    // ③ natives + classpath + 인자
-    let version_id = profile.game_version.clone();
+    // ③ 로더 설치 → 실효 version_id 결정 (vanilla면 게임 버전 그대로)
+    let http = reqwest::Client::new();
+    let loader_version = profile.loader_version.clone().unwrap_or_default();
+    let version_id = match profile.loader_type.as_str() {
+        "fabric" if !loader_version.is_empty() => {
+            let _ = app.emit("game:log", serde_json::json!({ "profileId": profile_id, "line": "[loader] Fabric 설치 확인 중..." }));
+            hyenimc_launcher::loader::install_fabric(&http, &profile.game_version, &loader_version, &dirs, &cfg)
+                .await
+                .map_err(|e| e.to_string())?
+        }
+        "neoforge" if !loader_version.is_empty() => {
+            let _ = app.emit("game:log", serde_json::json!({ "profileId": profile_id, "line": "[loader] NeoForge 설치 확인 중..." }));
+            let app_log = app.clone();
+            let pid = profile_id.clone();
+            hyenimc_launcher::loader::install_neoforge(&http, &loader_version, &java_path, &dirs, &cfg, move |line| {
+                let _ = app_log.emit("game:log", serde_json::json!({ "profileId": pid, "line": line }));
+            })
+            .await
+            .map_err(|e| e.to_string())?
+        }
+        _ => profile.game_version.clone(),
+    };
+
+    // 로더 프로필이면 병합된 상세를 다시 로드
+    let detail = hyenimc_launcher::install::load_version_detail(&dirs, &version_id)
+        .map_err(|e| e.to_string())?;
+
+    // ④ natives + classpath + 인자
     let native_jars = native_jars_for(&detail, &dirs);
     let natives_dir = hyenimc_launcher::natives::extract_natives(&dirs.version_dir(&version_id), &native_jars)
         .map_err(|e| e.to_string())?;
