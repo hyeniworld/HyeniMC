@@ -242,18 +242,6 @@ export interface HyeniPackExportOptions {
 }
 
 /**
- * 모드팩 업데이트 확인 결과
- */
-export interface HyeniPackUpdateCheck {
-  currentVersion: string;
-  latestVersion: string;
-  updateAvailable: boolean;
-  updateUrl?: string;
-  changelog?: string;
-  breaking: boolean;
-}
-
-/**
  * 설치된 모드의 메타 파일 (.meta.json)
  */
 export interface InstalledModMeta {
