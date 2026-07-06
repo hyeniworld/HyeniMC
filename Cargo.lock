@@ -1800,12 +1800,15 @@ dependencies = [
 name = "hyenimc-launcher"
 version = "0.4.0"
 dependencies = [
+ "base64 0.22.1",
  "futures",
  "hex",
+ "rand",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
  "sha1",
+ "sha2",
  "tempfile",
  "thiserror 2.0.18",
  "tiny_http",

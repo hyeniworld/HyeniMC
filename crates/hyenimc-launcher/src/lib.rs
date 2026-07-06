@@ -1,5 +1,6 @@
 //! 게임 파이프라인 — 다운로드/매니페스트/Java/실행 (M2).
 
+pub mod auth;
 pub mod download;
 pub mod install;
 pub mod java;
