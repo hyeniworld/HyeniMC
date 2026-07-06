@@ -46,6 +46,20 @@ pub fn servers_dat_contains(path: &Path, server_address: &str) -> bool {
     })
 }
 
+/// servers.dat의 서버 주소 목록 (worker mods 폴백 트리거용)
+pub fn servers_dat_ips(path: &Path) -> Vec<String> {
+    let Ok(bytes) = std::fs::read(path) else { return Vec::new() };
+    let parsed: Option<ServersDat> = fastnbt::from_bytes(&bytes).ok().or_else(|| {
+        let mut decoder = flate2::read::GzDecoder::new(&bytes[..]);
+        let mut out = Vec::new();
+        decoder.read_to_end(&mut out).ok()?;
+        fastnbt::from_bytes(&out).ok()
+    });
+    parsed
+        .map(|d| d.servers.into_iter().filter_map(|s| s.ip).collect())
+        .unwrap_or_default()
+}
+
 /// mods/에 HyeniHelper jar가 있는지 (MODE 2 대상 판정)
 pub fn has_hyenihelper(mods_dir: &Path) -> bool {
     !crate::workermods::find_mod_files(mods_dir, "hyenihelper").is_empty()

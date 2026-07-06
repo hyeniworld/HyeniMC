@@ -77,6 +77,9 @@ pub struct WorkerModUpdate {
     pub sha256: Option<String>,
     #[serde(default)]
     pub size: Option<u64>,
+    // 설치 URL 구성에 필요 (installMultiple 계약이 updates만 받으므로 내장)
+    pub loader_type: String,
+    pub game_version: String,
 }
 
 // ── 버전 파싱/비교 (순수) ────────────────────────────────
@@ -194,18 +197,16 @@ pub async fn check_all_updates(
             file: file_info.file.clone(),
             sha256: file_info.sha256.clone(),
             size: file_info.size,
+            loader_type: loader_type.to_string(),
+            game_version: game_version.to_string(),
         });
     }
     Ok(updates)
 }
 
-pub fn download_url(
-    worker_base: &str,
-    update: &WorkerModUpdate,
-    loader_type: &str,
-    game_version: &str,
-    token: &str,
-) -> String {
+pub fn download_url(worker_base: &str, update: &WorkerModUpdate, token: &str) -> String {
+    let loader_type = &update.loader_type;
+    let game_version = &update.game_version;
     let encoded: String = token
         .bytes()
         .map(|b| match b {
@@ -227,8 +228,6 @@ pub async fn install_updates(
     worker_base: &str,
     mods_dir: &Path,
     updates: &[WorkerModUpdate],
-    loader_type: &str,
-    game_version: &str,
     token: &str,
     cfg: &DownloadConfig,
     on_progress: impl Fn(&str, u32) + Send + Sync,
@@ -247,7 +246,7 @@ pub async fn install_updates(
         download_all(
             http,
             vec![DownloadTask {
-                url: download_url(worker_base, update, loader_type, game_version, token),
+                url: download_url(worker_base, update, token),
                 dest,
                 sha1: None,
                 sha256: update.sha256.clone(),
@@ -324,8 +323,10 @@ mod tests {
             file: "h.jar".into(),
             sha256: None,
             size: None,
+            loader_type: "neoforge".into(),
+            game_version: "1.21.1".into(),
         };
-        let url = download_url("https://w", &u, "neoforge", "1.21.1", "a+b/c=");
+        let url = download_url("https://w", &u, "a+b/c=");
         assert!(url.ends_with("?token=a%2Bb%2Fc%3D"));
         assert!(url.contains("/download/v2/mods/hyenihelper/versions/1.0.5/neoforge/1.21.1/h.jar"));
     }
