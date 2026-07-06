@@ -125,26 +125,34 @@ hyenimc/
 
 ## 5. V2 팩 업데이트 — 스펙 확정 필요 항목 (갭)
 
-[HYENIPACK_V2_AUTO_UPDATE.md](../HYENIPACK_V2_AUTO_UPDATE.md) 설계를 기반으로 하되, 다음 갭을 M4 착수 전에 확정한다:
+[HYENIPACK_V2_AUTO_UPDATE.md](../HYENIPACK_V2_AUTO_UPDATE.md) 설계를 기반으로 한다. 갭 6항목은 2026-07-06 사용자 결정으로 모두 확정:
 
-1. **R2 레이아웃**: `hyenipacks/<hyenipackId>/latest.json`(포인터) + `hyenipacks/<hyenipackId>/<version>.hyenipack` 제안. Worker에 조회 엔드포인트 추가 여부(정적 R2 public vs Worker 경유 — 기존 mods API처럼 Worker 경유 권장, rate limit·토큰 일관성)
-2. **체크 시점(확정됨)**: 프로필 실행 전 필수 체크(실패 시 정책: 네트워크 불가 시 경고 후 실행 허용) + 런처 시작 시 1회(배너)
-3. **breaking 플래그 UX**: breaking=true면 업데이트 없이 실행 불가(서버 호환성 보장), false면 "나중에" 허용
-4. **v1 팩 공존**: 기존 v1 혜니팩(hyenipackId 없음)은 업데이트 체크 없이 동작 — v2 export가 준비되면 재배포로 승격
-5. **CF 파일 다운로드**: 매니페스트에 CF 직링크가 없는 항목은 Worker 프록시로 resolve (API 키 은닉 유지)
-6. **제작자 측 선행 의존**: 로드맵 3번(기존 Electron에 V2 export + R2 업로드)이 M4 테스트의 전제
+1. **팩 배포 접근 (확정)**: **Worker 경유** — 기존 mods v2 API 패턴 그대로 확장(`/api/v2/hyenipacks/<id>/latest` 등). R2 정적 public 직접 접근 안 함. rate limit·클라이언트 식별 일관성 유지
+2. **체크 시점 (확정)**: 프로필 실행 전(필수) + 런처 시작 시 1회(배너)
+3. **업데이트 서버 접근 불가 시 (확정)**: **기본 실행 차단 + 설정(고급)에서 강제 실행 허용**. 근거(사용자): 필수 모드가 미갱신 상태면 어차피 서버 접속이 거부되므로 사용자는 업데이트될 때까지 재시도하게 됨 — 차단이 오히려 명확한 UX. (M4 설계 시 선택적 완화 검토: 직전 성공 체크가 N시간 이내 + 미적용 업데이트 없음이면 통과시키는 grace window)
+4. **breaking 플래그 UX (확정)**: breaking=true 업데이트가 존재하면 적용 전까지 실행 차단 — 위 3번의 강제 실행 설정으로도 우회 불가(3번은 "체크를 못 한" 상황용, breaking은 "비호환을 아는" 상황이라 강제 실행이 무의미). breaking=false면 "나중에" 허용
+5. **v1 팩 공존**: 기존 v1 혜니팩(hyenipackId 없음)은 업데이트 체크 없이 동작 — v2 export 준비 후 재배포로 승격
+6. **CF 파일 다운로드**: 매니페스트에 직링크가 없는 항목은 Worker 프록시로 resolve (API 키 은닉 유지). **제작자 측 선행(로드맵 3번)**: V2 export + Worker 팩 엔드포인트 + 업로드 스크립트(기존 wrangler 스크립트 패턴 유지 — 배포 관리 도구는 별도 P3 백로그)가 M4 테스트의 전제
 
 ## 6. 마일스톤
 
 각 마일스톤은 독립적으로 동작 검증 가능한 상태로 끝나며, 착수 시 writing-plans 형식의 상세 플랜을 개별 작성한다.
 
-- **M0 — 스파이크 (로드맵 4번과 동일, go/no-go 게이트)**: Tauri v2 셸에 기존 렌더러 로드(Vite), `hyenimc://` 딥링크 수신(macOS/Windows), 창 드래그(`data-tauri-drag-region`), updater 서명 키 생성 + 더미 피드 업데이트 1회, 기존 `~/.hyenimc/hyenimc.db` 열기. **검증 항목이 하나라도 막히면 설계 재검토**
+- **M0 — 스파이크 (로드맵 4번과 동일, go/no-go 게이트)**: Tauri v2 셸에 기존 렌더러 로드(Vite), `hyenimc://` 딥링크 수신(macOS/Windows), 창 드래그(`data-tauri-drag-region`), updater 서명 키 생성 + 더미 피드 업데이트 1회, 기존 `~/.hyenimc/hyenimc.db` 열기, **macOS Squirrel.Mac 교체 검증**(아래 "기존 Electron 설치 교체" 참조). **검증 항목이 하나라도 막히면 설계 재검토**
 - **M1 — 골격**: workspace 구성, hyenimc-core(SQLite 호환 접속 + 프로필/설정 CRUD), 커맨드 15개 내외 + 어댑터 shim, 프로필 목록/상세 화면이 실데이터로 렌더
 - **M2 — 게임 파이프라인**: 다운로드 엔진(병렬/SHA1/재개/진행 이벤트), 버전 매니페스트/에셋/라이브러리, Java 감지, JVM 실행 + 로그 스트림 + 종료/크래시 감지. **바닐라 실행 성공이 완료 조건**
 - **M3 — 계정**: MS OAuth 전체 플로우 + 기존 토큰 복호화 호환 + 다계정. 실계정 로그인/재인증 검증
 - **M4 — 로더 + 혜니팩**: Fabric/NeoForge 설치, 혜니팩 v1 설치(resolve 포함), V2 업데이트 엔진(diff/선언형 동기화/사용자 파일 보호), 팩 업데이트 UX. **모드 프로필 실행 성공 + 팩 버전 업/다운 시나리오 통과가 완료 조건**
 - **M5 — 혜니월드 통합**: worker mods 통합 관리(서버 감지 트리거), 딥링크 인증 e2e(servers.dat + HyeniHelper config), 크래시 리포트 수집·전달, 리소스/셰이더 리스트 + 구분 배지 + 파일 감시
-- **M6 — 마감**: 자동 업데이트 프로덕션 구성, **브릿지 릴리스**(마지막 Electron 릴리스가 Tauri 설치본 안내/전환), 테마/접근성 폴리시, QA 매트릭스 전체 회귀, 배포 파이프라인(arm64/x64/win)
+- **M6 — 마감**: 자동 업데이트 프로덕션 구성, **기존 Electron 설치 교체 실행**(아래 전략), 테마/접근성 폴리시, QA 매트릭스 전체 회귀, 배포 파이프라인(arm64/x64/win)
+
+### 기존 Electron 설치 교체 전략 (M0 검증 → M6 실행)
+
+**요구(2026-07-06)**: 기존 Electron 판 사용자가 수동 제거 없이 새 배포판으로 전환 — 새 설치 시 기존 제거 또는 정식 업데이트를 통한 교체.
+
+- **Windows (주 경로 — 정식 업데이트 교체)**: 기존 electron-updater 피드(GitHub releases의 latest.yml)에 다음 버전으로 **Tauri NSIS 설치본**을 게시 → 구버전의 electron-updater가 이를 정상 업데이트로 다운로드·실행 → Tauri NSIS pre-install 훅(NSIS_HOOK_PREINSTALL)이 electron-builder가 남긴 언인스톨 레지스트리 키(appId `me.devbug.hyeniworld.hyenimc`)를 탐지해 기존 언인스톨러를 silent 실행 → 새 버전 설치. 사용자 데이터는 보존됨(`deleteAppDataOnUninstall: false` 기설정 + `~/.hyenimc`는 언인스톨 범위 밖)
+- **macOS (M0에서 검증)**: electron-updater(Squirrel.Mac)의 zip 교체가 동일 Developer ID 서명의 Tauri .app으로 동작하는지 검증. 성공 시 정식 업데이트로 .app 통째 교체. 실패 시 폴백 = **브릿지 릴리스**: 마지막 Electron 버전이 Tauri DMG 다운로드·열기 안내 + 종료 후 헬퍼 스크립트로 구 .app 자기 제거
+- **공통**: Tauri 앱의 productName/번들 이름을 `HyeniMC`로 동일 유지 — 수동 재설치 경로에서도 자연 덮어쓰기
 
 ## 7. 리스크와 완화
 
