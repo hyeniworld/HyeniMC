@@ -69,20 +69,27 @@ function installTauriShim(): void {
       stop: (profileId: string) => invoke('game_stop', { profileId }),
       downloadVersion: (profileId: string) => invoke('game_download_version', { profileId }),
     },
+    // preload 계약: list(releaseOnly): string[] / latest(): string (전체 리뷰 G5)
     version: {
-      getVersions: () => invoke('version_list_minecraft'),
-      getLatest: async () => {
-        const list = (await invoke('version_list_minecraft')) as Array<{ id: string; type: string }>;
-        return list.find((v) => v.type === 'release')?.id;
+      list: async (releaseOnly?: boolean) => {
+        const all = (await invoke('version_list_minecraft')) as Array<{ id: string; type: string }>;
+        return (releaseOnly === false ? all : all.filter((v) => v.type === 'release')).map((v) => v.id);
+      },
+      latest: async () => {
+        const all = (await invoke('version_list_minecraft')) as Array<{ id: string; type: string }>;
+        return all.find((v) => v.type === 'release')?.id ?? '';
       },
     },
     java: {
       detect: () => invoke('java_detect'),
       getInstallations: () => invoke('java_detect'),
     },
+    // preload 계약: getVersions는 {versions: [{version, stable}...]} 형태 반환 (CreateProfileModal)
     loader: {
-      getVersions: (loaderType: string, gameVersion: string) =>
-        invoke('loader_get_versions', { loaderType, gameVersion }),
+      getVersions: async (loaderType: string, gameVersion: string, _includeUnstable?: boolean) => {
+        const versions = await invoke('loader_get_versions', { loaderType, gameVersion });
+        return { versions };
+      },
     },
     // preload 계약(hyenipack.import(filePath, profileId, instanceDir) + {success} envelope) 그대로 유지
     hyenipack: {
@@ -147,17 +154,25 @@ function installTauriShim(): void {
     removeAllListeners: () => undefined,
   };
 
-  // 미구현 카테고리: 빈 응답 스텁 + warn (M4+에서 순차 실구현)
+  // 미구현 카테고리: 빈 응답 스텁 + warn (M5+에서 순차 실구현)
   const STUB_CATEGORIES = [
     'mod', 'modpack', 'resourcepack', 'shaderpack',
     'hyeni', 'workerMods', 'shell', 'dialog', 'fs',
     'launcher', 'fileWatcher', 'errorDialog',
   ];
   for (const cat of STUB_CATEGORIES) {
-    api[cat] = new Proxy(
-      {},
-      { get: (_t, m: string | symbol) => stub(`${cat}.${String(m)}`) }
-    );
+    api[cat] = {};
+  }
+
+  // 전 카테고리 공통: 부분 구현이어도 미구현 메서드는 undefined(TypeError)가 아니라
+  // 경고 스텁으로 강등되도록 Proxy 폴백을 병합한다 (전체 리뷰 G6)
+  for (const cat of Object.keys(api)) {
+    const value = api[cat];
+    if (typeof value !== 'object' || value === null) continue; // on/off 등 최상위 함수 제외
+    api[cat] = new Proxy(value, {
+      get: (target, method: string | symbol) =>
+        (target as Record<string | symbol, unknown>)[method] ?? stub(`${cat}.${String(method)}`),
+    });
   }
 
   (window as any).electronAPI = api;

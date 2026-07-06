@@ -132,7 +132,8 @@ pub fn settings_update(db: State<DbState>, settings: serde_json::Value) -> Resul
 pub fn system_memory() -> u64 {
     let mut sys = sysinfo::System::new();
     sys.refresh_memory();
-    sys.total_memory() // bytes
+    // 기존 IPC와 동일하게 MB 단위 (shell.ts system:getMemory — 전체 리뷰 G2)
+    sys.total_memory() / (1024 * 1024)
 }
 
 #[tauri::command]

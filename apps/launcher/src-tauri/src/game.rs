@@ -138,23 +138,27 @@ pub async fn java_detect() -> Vec<hyenimc_launcher::java::JavaInstallation> {
 pub async fn loader_get_versions(
     loader_type: String,
     game_version: String,
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<hyenimc_launcher::loader::LoaderVersion>, String> {
     let http = reqwest::Client::new();
     match loader_type.as_str() {
-        "fabric" => Ok(hyenimc_launcher::loader::fabric_loader_versions(&http, &game_version)
+        "fabric" => hyenimc_launcher::loader::fabric_loader_versions(&http, &game_version)
             .await
-            .map_err(|e| e.to_string())?
-            .into_iter()
-            .map(|v| v.version)
-            .collect()),
+            .map_err(|e| e.to_string()),
         "neoforge" => {
             let all = hyenimc_launcher::loader::neoforge_versions(&http)
                 .await
                 .map_err(|e| e.to_string())?;
-            Ok(all
+            let mut list: Vec<_> = all
                 .into_iter()
                 .filter(|v| hyenimc_launcher::loader::neoforge_matches_mc(v, &game_version))
-                .collect())
+                .map(|v| hyenimc_launcher::loader::LoaderVersion {
+                    stable: !v.contains("beta"),
+                    version: v,
+                })
+                .collect();
+            // 최신 우선 (렌더러가 첫 항목을 자동 선택)
+            list.reverse();
+            Ok(list)
         }
         other => Err(format!("지원하지 않는 로더: {other}")),
     }
@@ -373,9 +377,11 @@ pub async fn game_launch(
             started_at,
         },
     );
+    // 주의: 렌더러는 Electron 의미(processKey=profileId)로 versionId 필드를 키잉한다 —
+    // 실제 로더 버전 id가 아니라 profileId를 넣어야 상태 표시가 맞는다 (전체 리뷰 G1)
     let _ = app.emit(
         "game:started",
-        serde_json::json!({ "profileId": profile_id, "versionId": version_id }),
+        serde_json::json!({ "profileId": profile_id, "versionId": profile_id }),
     );
     Ok(())
 }
