@@ -30,6 +30,11 @@ export default {
       const url = new URL(request.url);
       const path = url.pathname;
 
+      // Route: Modpacks API v2 (HyeniPack)
+      if (path.startsWith('/api/v2/modpacks') || path.startsWith('/download/v2/modpacks')) {
+        return await handleModpacksAPI(request, env, corsHeaders);
+      }
+
       // Route: Releases API v2
       if (path.startsWith('/api/v2/mods') || path.startsWith('/download/v2/mods')) {
         return await handleReleasesAPI(request, env, corsHeaders, 'v2');
@@ -152,6 +157,99 @@ async function handleCurseForgeProxy(request, env, corsHeaders) {
       ...corsHeaders,
     },
   });
+}
+
+/**
+ * Handle HyeniPack Modpacks API (v2)
+ * R2 layout: modpacks/{id}/latest.json, modpacks/{id}/versions/{version}/pack.hyenipack
+ */
+const MODPACK_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const MODPACK_VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
+
+async function handleModpacksAPI(request, env, corsHeaders) {
+  if (!env.RELEASES) {
+    return jsonResponse({ error: 'R2 bucket not configured' }, 500, corsHeaders);
+  }
+
+  const path = new URL(request.url).pathname;
+
+  const latestMatch = path.match(/^\/api\/v2\/modpacks\/([^\/]+)\/latest$/);
+  if (latestMatch) {
+    const id = latestMatch[1];
+    if (!MODPACK_ID_PATTERN.test(id)) {
+      return jsonResponse({ error: 'Invalid modpack id' }, 400, corsHeaders);
+    }
+    const latest = await env.RELEASES.get(`modpacks/${id}/latest.json`);
+    if (!latest) {
+      return jsonResponse({ error: 'Not Found', message: `No release for ${id}` }, 404, corsHeaders);
+    }
+    return new Response(latest.body, {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json',
+        'Cache-Control': 'public, max-age=300',
+      },
+    });
+  }
+
+  const versionsMatch = path.match(/^\/api\/v2\/modpacks\/([^\/]+)\/versions$/);
+  if (versionsMatch) {
+    const id = versionsMatch[1];
+    if (!MODPACK_ID_PATTERN.test(id)) {
+      return jsonResponse({ error: 'Invalid modpack id' }, 400, corsHeaders);
+    }
+    const list = await env.RELEASES.list({ prefix: `modpacks/${id}/versions/` });
+    const versions = new Set();
+    for (const obj of list.objects) {
+      const m = obj.key.match(/versions\/(\d+\.\d+\.\d+)\//);
+      if (m) versions.add(m[1]);
+    }
+    const sorted = [...versions].sort((a, b) => compareVersions(b, a));
+    return jsonResponse({ versions: sorted }, 200, corsHeaders, 'public, max-age=600');
+  }
+
+  const dlMatch = path.match(/^\/download\/v2\/modpacks\/([^\/]+)\/([^\/]+)$/);
+  if (dlMatch) {
+    const [, id, version] = dlMatch;
+    if (!MODPACK_ID_PATTERN.test(id) || !MODPACK_VERSION_PATTERN.test(version)) {
+      return jsonResponse({ error: 'Invalid modpack id or version' }, 400, corsHeaders);
+    }
+
+    const url = new URL(request.url);
+    const token = url.searchParams.get('token') ||
+                  request.headers.get('Authorization')?.replace('Bearer ', '');
+    if (!token || !(await isValidToken(token, env))) {
+      return jsonResponse({
+        error: 'Unauthorized',
+        message: '유효한 토큰이 필요합니다. Discord에서 /인증 명령어로 인증하세요.',
+      }, 401, corsHeaders);
+    }
+
+    const file = await env.RELEASES.get(`modpacks/${id}/versions/${version}/pack.hyenipack`);
+    if (!file) {
+      return jsonResponse({ error: 'Not Found', message: '파일을 찾을 수 없습니다.' }, 404, corsHeaders);
+    }
+
+    console.log(`[Modpacks API] Download: ${id}@${version} (token: ${token.substring(0, 8)}...)`);
+    return new Response(file.body, {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/zip',
+        'Content-Disposition': `attachment; filename="${id}-${version}.hyenipack"`,
+        'Content-Length': file.size,
+        'Cache-Control': 'private, max-age=3600',
+        'X-Content-Type-Options': 'nosniff',
+      },
+    });
+  }
+
+  return jsonResponse({ error: 'Not Found' }, 404, corsHeaders);
+}
+
+function jsonResponse(obj, status, corsHeaders, cacheControl) {
+  const headers = { ...corsHeaders, 'Content-Type': 'application/json' };
+  if (cacheControl) headers['Cache-Control'] = cacheControl;
+  return new Response(JSON.stringify(obj), { status, headers });
 }
 
 /**
