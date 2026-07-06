@@ -3,6 +3,8 @@
 //! Phase 1 원칙: 기존 Electron+Go 판의 데이터를 마이그레이션 없이 그대로 읽는다
 //! (SQLite 스키마·프로필 디렉터리 in-place 호환).
 
+pub mod account;
+pub mod crypto;
 pub mod db;
 pub mod paths;
 pub mod profile;
@@ -21,4 +23,8 @@ pub enum CoreError {
     Db(#[from] rusqlite::Error),
     #[error("data directory not found: {0}")]
     DataDirNotFound(String),
+    #[error("io error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("crypto error: {0}")]
+    Crypto(String),
 }

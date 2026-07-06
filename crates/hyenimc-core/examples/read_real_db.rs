@@ -50,4 +50,27 @@ fn main() {
             p.name, stats.launch_count, stats.total_play_time, stats.crash_count
         );
     }
+
+    // 계정 토큰 복호화 호환 검증 (M3) — 토큰 값은 절대 출력하지 않는다
+    let accounts = hyenimc_core::account::list_accounts(&conn).expect("accounts");
+    println!("accounts: {}개", accounts.len());
+    match hyenimc_core::crypto::load_or_create_encryption_key(&data_dir) {
+        Ok(key) => {
+            for a in &accounts {
+                match hyenimc_core::account::get_tokens(&conn, &key, &a.id) {
+                    Ok(Some(t)) => println!(
+                        "  - {} ({}) 복호화 OK: access_token {}자, refresh {}자, expires_at={}",
+                        a.name,
+                        a.account_type,
+                        t.access_token.len(),
+                        t.refresh_token.len(),
+                        t.expires_at
+                    ),
+                    Ok(None) => println!("  - {} ({}) 토큰 없음", a.name, a.account_type),
+                    Err(e) => println!("  - {} 복호화 실패: {e}", a.name),
+                }
+            }
+        }
+        Err(e) => println!("  .key 로드 실패: {e}"),
+    }
 }
