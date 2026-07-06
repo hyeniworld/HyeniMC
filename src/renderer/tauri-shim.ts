@@ -209,9 +209,25 @@ function installTauriShim(): void {
     openLogs: (profileId: string) => invoke('crash_open_logs', { profileId }),
   };
 
-  // 미구현 카테고리: 빈 응답 스텁 + warn (M6에서 순차 실구현/정리)
+  // 런처 자체 업데이트 (preload launcher 계약)
+  api.launcher = {
+    getVersion: () => invoke('launcher_get_version'),
+    checkForUpdates: async () => {
+      const r = (await invoke('launcher_check_updates')) as { available: boolean };
+      return { success: true, ...r };
+    },
+    downloadUpdate: async () => ({ success: await invoke('launcher_download_update') }),
+    quitAndInstall: async () => {
+      await invoke('launcher_quit_and_install');
+      return { success: true };
+    },
+    openLogsFolder: async () => undefined,
+  };
+
+  // 제작자 전용/미사용 카테고리 스텁 — 사용자 런처 UI에선 해당 기능이 숨겨짐(M6b).
+  // hyeni.installUpdate는 worker mods로 통합됐으므로 no-op 성공 처리.
   const STUB_CATEGORIES = [
-    'mod', 'modpack', 'hyeni', 'dialog', 'fs', 'launcher', 'errorDialog',
+    'mod', 'modpack', 'hyeni', 'dialog', 'fs', 'errorDialog',
   ];
   for (const cat of STUB_CATEGORIES) {
     api[cat] = {};

@@ -18,7 +18,6 @@ use crate::commands::DbState;
 struct RunningEntry {
     version_id: String,
     handle: Option<GameHandle>,
-    started_at: Instant,
 }
 
 #[derive(Default)]
@@ -403,7 +402,6 @@ pub async fn game_launch(
         RunningEntry {
             version_id: version_id.clone(),
             handle: Some(handle),
-            started_at,
         },
     );
     // 주의: 렌더러는 Electron 의미(processKey=profileId)로 versionId 필드를 키잉한다 —

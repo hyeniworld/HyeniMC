@@ -6,6 +6,7 @@ mod commands;
 mod crash;
 mod game;
 mod hyeni;
+mod launcher;
 mod resources;
 mod pack;
 
@@ -63,6 +64,7 @@ fn main() {
             app.manage(commands::DbState(Mutex::new(conn)));
             app.manage(game::GameState::default());
             app.manage(resources::WatchState::default());
+            app.manage(launcher::PendingUpdate::default());
 
             // 암호화 컨텍스트 (.key / .device_id — 기존 Go 판과 동일 파일)
             let data_dir = hyenimc_core::paths::legacy_data_dir()
@@ -114,6 +116,10 @@ fn main() {
             resources::file_watch_stop,
             crash::crash_export_report,
             crash::crash_open_logs,
+            launcher::launcher_get_version,
+            launcher::launcher_check_updates,
+            launcher::launcher_download_update,
+            launcher::launcher_quit_and_install,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
