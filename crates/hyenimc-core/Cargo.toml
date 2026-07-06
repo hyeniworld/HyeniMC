@@ -9,6 +9,7 @@ authors.workspace = true
 serde.workspace = true
 rusqlite.workspace = true
 thiserror.workspace = true
+uuid.workspace = true
 
 [dev-dependencies]
 tempfile = "3"

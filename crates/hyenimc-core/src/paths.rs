@@ -34,3 +34,13 @@ pub fn legacy_data_dir() -> Option<PathBuf> {
 pub fn database_path(data_dir: &std::path::Path) -> PathBuf {
     data_dir.join("hyenimc.db")
 }
+
+/// Electron userData 루트 (data의 상위). 인스턴스/에셋 등이 이 아래에 있다.
+pub fn legacy_user_data_dir() -> Option<PathBuf> {
+    legacy_data_dir().map(|d| d.parent().map(|p| p.to_path_buf()).unwrap_or(d))
+}
+
+/// 프로필 인스턴스 루트 — 실DB 실측: `<userData>/instances/<uuid>`
+pub fn instances_dir() -> Option<PathBuf> {
+    legacy_user_data_dir().map(|d| d.join("instances"))
+}
