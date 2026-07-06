@@ -22,6 +22,11 @@
 - settings 스키마(snake_case 중첩, M1에서 실측 기반) / profile CRUD 표면 / hyenipack(M4b-fix에서 정합됨)
 - Windows 경로: 패키지 앱 userData는 productName("HyeniMC") 기준이나 Windows/macOS 모두 대소문자 무시 FS라 lowercase 매핑과 동일 디렉터리 (Linux만 주의 — 문서화)
 
-## 2차 계획 (미착수 — 다음 세션)
+## 2차 (Rust 의미론 심층) — 진행 상태
 
-Rust 내부 의미론 심층: ① launch.rs 인자 조립을 TS 산출과 필드 단위 대조(실프로필 1개로 양쪽 인자 배열 덤프 비교) ② install.rs 에셋/라이브러리 경로를 실디렉터리와 대조 ③ auth.rs 체인 페이로드를 TS와 필드 대조 ④ account/crypto 업서트 시 device_id 갱신 의미 ⑤ 앱 크레이트 lock 보유 중 await 지점 점검(데드락 위험) ⑥ 렌더러 이벤트 구독 해제 경로.
+- [x] ④ account 업서트 device_id 갱신 — Go SaveMicrosoftAccount와 동일 의미(재로그인 시 현 device_id로 갱신) 확인
+- [x] ⑤ lock 보유 중 await — **구조상 불가 확인**: tauri 커맨드 future는 Send 요구, std MutexGuard가 await를 넘으면 컴파일 에러. 전 코드 컴파일 통과 = 해당 지점 없음. 수동 추적으로도 game_launch/account/pack의 lock이 전부 블록/문장 단위로 drop됨
+- [x] ⑥ 이벤트 구독 해제 — shim on()이 unlisten 클로저 반환, 렌더러 cleanup 패턴(useEffect return) 호환. once는 1회 후 자체 해제
+- [ ] ① launch.rs 인자 조립 TS 대조 (실프로필 인자 덤프 비교 — **다음 세션 재개 지점**)
+- [ ] ② install.rs 에셋/라이브러리 경로 실디렉터리 대조
+- [ ] ③ auth.rs 체인 페이로드 TS 필드 대조 (실로그인은 일괄 테스트에서)
