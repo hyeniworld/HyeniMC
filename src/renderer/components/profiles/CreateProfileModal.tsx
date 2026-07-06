@@ -4,6 +4,7 @@ import { X, Loader2, Package, Settings, FileArchive } from 'lucide-react';
 import { ModpackSearchModal } from '../modpack/ModpackSearchModal';
 import { ImportModpackTab } from './ImportModpackTab';
 import { IPC_EVENTS } from '../../../shared/constants/ipc';
+import { isCreatorMode } from '../../utils/appMode';
 
 interface CreateProfileModalProps {
   isOpen?: boolean;
@@ -301,7 +302,8 @@ export function CreateProfileModal({ isOpen, onClose, onSuccess, initialModpackI
             </button>
           </div>
 
-          {/* Tabs */}
+          {/* Tabs — 온라인 모드팩/파일 import는 제작자 전용(사용자 런처에서 숨김) */}
+          {isCreatorMode() && (
           <div className="flex gap-2 mb-6 bg-gray-800 p-1 rounded-lg">
             <button
               type="button"
@@ -343,6 +345,7 @@ export function CreateProfileModal({ isOpen, onClose, onSuccess, initialModpackI
               파일
             </button>
           </div>
+          )}
 
           {/* Custom Profile Tab */}
           {tab === 'custom' && (

@@ -6,6 +6,7 @@ import { ResourcePackList } from '../components/resourcepacks/ResourcePackList';
 import { ShaderPackList } from '../components/shaderpacks/ShaderPackList';
 import { ProfileSettingsTab } from '../components/profiles/ProfileSettingsTab';
 import { ExportHyeniPackModal } from '../components/profiles/ExportHyeniPackModal';
+import { isCreatorMode } from '../utils/appMode';
 import { WorkerModUpdatePanel } from '../components/worker-mods/WorkerModUpdatePanel';
 import { useWorkerModUpdates } from '../hooks/useWorkerModUpdates';
 import { useDownloadStore } from '../store/downloadStore';
@@ -532,7 +533,9 @@ const OverviewTab: React.FC<{ profile: any }> = ({ profile }) => {
             <div className="font-medium text-gray-200">로그 보기</div>
             <div className="text-xs text-gray-400">게임 로그 확인</div>
           </button>
-          <button 
+          {/* 혜니팩 내보내기는 제작자 전용 (사용자 런처에서 숨김) */}
+          {isCreatorMode() && (
+          <button
             onClick={handleExport}
             className="p-4 border border-gray-700 rounded-lg hover:bg-purple-900 hover:border-purple-800 transition-colors text-left"
           >
@@ -542,6 +545,7 @@ const OverviewTab: React.FC<{ profile: any }> = ({ profile }) => {
             <div className="font-medium text-gray-200">혜니팩 내보내기</div>
             <div className="text-xs text-gray-400">모드팩 파일로 저장</div>
           </button>
+          )}
           <button 
             onClick={() => setShowDeleteConfirm(true)}
             className="p-4 border border-gray-700 rounded-lg hover:bg-red-900 hover:border-red-800 transition-colors text-left"

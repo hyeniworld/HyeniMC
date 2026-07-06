@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Plus, RefreshCw } from 'lucide-react';
 import { ModSearchModal } from './ModSearchModal';
+import { isCreatorMode } from '../../utils/appMode';
 import { useToast } from '../../contexts/ToastContext';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 
@@ -309,6 +310,8 @@ export const ModList: React.FC<ModListProps> = ({ profileId }) => {
             </span>
           )}
         </div>
+        {/* 모드 검색/설치/업데이트는 제작자 전용 (사용자 런처에선 설치된 목록만 조회) */}
+        {isCreatorMode() && (
         <div className="flex gap-2">
           <button
             onClick={handleCheckUpdates}
@@ -344,6 +347,7 @@ export const ModList: React.FC<ModListProps> = ({ profileId }) => {
             />
           </label>
         </div>
+        )}
       </div>
 
       {/* Search */}
