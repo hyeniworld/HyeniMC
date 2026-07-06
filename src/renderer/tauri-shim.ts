@@ -80,6 +80,15 @@ function installTauriShim(): void {
       detect: () => invoke('java_detect'),
       getInstallations: () => invoke('java_detect'),
     },
+    account: {
+      loginMicrosoft: () => invoke('account_login_microsoft'),
+      addOffline: async () => {
+        throw new Error('오프라인 계정은 지원이 종료되었습니다 (2026-07-06 결정)');
+      },
+      list: () => invoke('account_list'),
+      remove: (id: string) => invoke('account_remove', { id }),
+      refresh: (id: string) => invoke('account_refresh', { id }),
+    },
     // 이벤트 브리지: Electron ipcRenderer.on → Tauri event listen (동일 이벤트 이름)
     on: (event: string, cb: (data: unknown) => void) => {
       const unlistenP = tauri.event.listen(event, (e) => cb(e.payload));
@@ -103,9 +112,9 @@ function installTauriShim(): void {
     removeAllListeners: () => undefined,
   };
 
-  // 미구현 카테고리: 빈 응답 스텁 + warn (M3+에서 순차 실구현)
+  // 미구현 카테고리: 빈 응답 스텁 + warn (M4+에서 순차 실구현)
   const STUB_CATEGORIES = [
-    'mod', 'modpack', 'resourcepack', 'shaderpack', 'account',
+    'mod', 'modpack', 'resourcepack', 'shaderpack',
     'loader', 'hyeni', 'workerMods', 'hyenipack', 'shell', 'dialog', 'fs',
     'launcher', 'fileWatcher', 'errorDialog',
   ];

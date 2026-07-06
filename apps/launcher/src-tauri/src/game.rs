@@ -166,8 +166,9 @@ pub async fn game_launch(
     app: AppHandle,
     db: State<'_, DbState>,
     game_state: State<'_, GameState>,
+    crypto: State<'_, crate::account::CryptoState>,
     profile_id: String,
-    #[allow(unused_variables)] account_id: Option<String>, // M3에서 실계정 연결
+    account_id: Option<String>,
 ) -> Result<(), String> {
     if game_state.running.lock().unwrap().contains_key(&profile_id) {
         return Err(format!("프로필 {profile_id}이(가) 이미 실행 중입니다"));
@@ -212,16 +213,36 @@ pub async fn game_launch(
         eprintln!("[game] 누락 라이브러리 {}개: {:?}", missing.len(), missing);
     }
 
+    // 계정: account_id가 있으면 실계정(만료 임박 시 자동 갱신), 없으면 더미
+    let (username, uuid, access_token, user_type) = match &account_id {
+        Some(aid) => {
+            let tokens = crate::account::get_valid_tokens(&db, &crypto, aid).await?;
+            let account = {
+                let conn = db.0.lock().unwrap();
+                hyenimc_core::account::get_account(&conn, aid)
+                    .map_err(|e| e.to_string())?
+                    .ok_or_else(|| format!("계정 없음: {aid}"))?
+            };
+            (account.name, account.uuid, Some(tokens.access_token), Some("msa".to_string()))
+        }
+        None => (
+            "Player".to_string(),
+            "00000000-0000-0000-0000-000000000000".to_string(),
+            None,
+            None,
+        ),
+    };
+
     let spec = LaunchSpec {
         profile_id: profile_id.clone(),
         version_id: version_id.clone(),
         java_path: java_path.clone(),
         min_memory_mb: profile.memory_min.unwrap_or(settings.java.memory_min).max(1) as u32,
         max_memory_mb: profile.memory_max.unwrap_or(settings.java.memory_max).max(1) as u32,
-        username: "Player".into(), // M3에서 실계정으로 교체
-        uuid: "00000000-0000-0000-0000-000000000000".into(),
-        access_token: None,
-        user_type: None,
+        username,
+        uuid,
+        access_token,
+        user_type,
         resolution: Some((
             profile.resolution_width.unwrap_or(settings.resolution.width).max(1) as u32,
             profile.resolution_height.unwrap_or(settings.resolution.height).max(1) as u32,

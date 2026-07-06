@@ -1,6 +1,7 @@
 // HyeniMC Tauri 런처
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod account;
 mod commands;
 mod game;
 
@@ -35,6 +36,7 @@ fn main() {
         }))
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             // hyenimc:// 딥링크 수신 로그 (macOS는 번들 앱에서만 OS 등록됨)
             app.deep_link().on_open_url(|event| {
@@ -48,6 +50,14 @@ fn main() {
             })?;
             app.manage(commands::DbState(Mutex::new(conn)));
             app.manage(game::GameState::default());
+
+            // 암호화 컨텍스트 (.key / .device_id — 기존 Go 판과 동일 파일)
+            let data_dir = hyenimc_core::paths::legacy_data_dir()
+                .ok_or("legacy data dir을 결정할 수 없음")?;
+            let key = hyenimc_core::crypto::load_or_create_encryption_key(&data_dir)?;
+            let device_id = hyenimc_core::crypto::load_or_create_device_id(&data_dir)?;
+            app.manage(account::CryptoState { key, device_id });
+
             println!("[db] legacy DB connected");
             Ok(())
         })
@@ -74,6 +84,10 @@ fn main() {
             game::game_stop,
             game::game_is_running,
             game::game_get_active,
+            account::account_list,
+            account::account_login_microsoft,
+            account::account_refresh,
+            account::account_remove,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
