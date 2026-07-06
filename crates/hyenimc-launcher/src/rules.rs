@@ -32,11 +32,15 @@ pub fn os_name() -> &'static str {
     }
 }
 
+/// piston rules의 arch 값은 "x86"(32비트)과 "arm64"만 등장한다.
+/// 64비트 x86에서는 어느 쪽도 매치되지 않아야 32비트 전용 natives가 제외된다.
 pub fn os_arch() -> &'static str {
     if cfg!(target_arch = "aarch64") {
         "arm64"
-    } else {
+    } else if cfg!(target_pointer_width = "32") {
         "x86"
+    } else {
+        "x64"
     }
 }
 
@@ -49,7 +53,7 @@ fn rule_matches(rule: &Rule) -> bool {
         None => true,
         Some(os) => {
             os.name.as_deref().map_or(true, |n| n == os_name())
-                && os.arch.as_deref().map_or(true, |a| a == os_arch() || a == "x86")
+                && os.arch.as_deref().map_or(true, |a| a == os_arch())
         }
     }
 }
@@ -99,6 +103,19 @@ mod tests {
         let json = format!(r#"[{{"action":"allow","os":{{"name":"{other}"}}}}]"#);
         let rules: Vec<Rule> = serde_json::from_str(&json).unwrap();
         assert!(!rules_allow(&rules));
+    }
+
+    #[test]
+    fn x86_arch_rule_does_not_match_64bit() {
+        // 64비트(x64/arm64)에서 32비트 전용(natives-windows-x86) 규칙은 제외돼야 함
+        let rules: Vec<Rule> =
+            serde_json::from_str(r#"[{"action":"allow","os":{"name":"windows","arch":"x86"}}]"#)
+                .unwrap();
+        if os_name() == "windows" {
+            assert_eq!(rules_allow(&rules), os_arch() == "x86");
+        } else {
+            assert!(!rules_allow(&rules));
+        }
     }
 
     #[test]

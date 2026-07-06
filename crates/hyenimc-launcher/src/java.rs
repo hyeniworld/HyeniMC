@@ -78,17 +78,41 @@ pub async fn detect_java_installations() -> Vec<JavaInstallation> {
 
     #[cfg(target_os = "windows")]
     {
-        for base in [
-            r"C:\Program Files\Java",
-            r"C:\Program Files\Eclipse Adoptium",
-            r"C:\Program Files\Microsoft",
-        ] {
-            if let Ok(mut rd) = tokio::fs::read_dir(base).await {
+        // 벤더별 설치 루트: <ProgramFiles>\<vendor>\<jdk-xx>\bin\java.exe
+        const VENDOR_DIRS: [&str; 7] = [
+            "Java",
+            "Eclipse Adoptium",
+            "Microsoft",
+            "Zulu",
+            "Amazon Corretto",
+            "BellSoft",
+            "Semeru",
+        ];
+        let mut bases: Vec<std::path::PathBuf> = Vec::new();
+        for var in ["ProgramFiles", "ProgramFiles(x86)"] {
+            if let Some(pf) = std::env::var_os(var) {
+                for vendor in VENDOR_DIRS {
+                    bases.push(std::path::Path::new(&pf).join(vendor));
+                }
+            }
+        }
+        // 사용자 설치 (Adoptium 등의 per-user 설치 위치)
+        if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+            bases.push(std::path::Path::new(&local).join("Programs").join("Eclipse Adoptium"));
+        }
+        for base in bases {
+            if let Ok(mut rd) = tokio::fs::read_dir(&base).await {
                 while let Ok(Some(entry)) = rd.next_entry().await {
                     candidates.push(entry.path().join(r"bin\java.exe"));
                 }
             }
         }
+    }
+
+    // JAVA_HOME (전 플랫폼)
+    if let Some(home) = std::env::var_os("JAVA_HOME") {
+        let bin = if cfg!(windows) { r"bin\java.exe" } else { "bin/java" };
+        candidates.push(std::path::Path::new(&home).join(bin));
     }
 
     // PATH의 java

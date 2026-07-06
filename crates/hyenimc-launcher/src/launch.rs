@@ -238,12 +238,15 @@ pub async fn spawn_game(
     use tokio::io::{AsyncBufReadExt, BufReader};
 
     tokio::fs::create_dir_all(cwd).await?;
-    let mut child = tokio::process::Command::new(java)
-        .args(args)
+    let mut cmd = tokio::process::Command::new(java);
+    cmd.args(args)
         .current_dir(cwd)
         .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()?;
+        .stderr(std::process::Stdio::piped());
+    // Windows: GUI 앱(windows_subsystem)에서 java.exe 실행 시 콘솔 창 방지
+    #[cfg(windows)]
+    cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    let mut child = cmd.spawn()?;
 
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();

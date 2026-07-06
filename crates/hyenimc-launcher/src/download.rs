@@ -87,6 +87,10 @@ async fn fetch_to_file(
             });
         }
     }
+    // Windows는 목적지가 존재하면 rename이 실패한다 (손상 파일 재다운로드 경로)
+    if task.dest.exists() {
+        let _ = tokio::fs::remove_file(&task.dest).await;
+    }
     tokio::fs::rename(&part, &task.dest).await?;
     Ok(())
 }
