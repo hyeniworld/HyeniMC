@@ -68,10 +68,14 @@ pub fn build_classpath(detail: &VersionDetail, dirs: &GameDirs) -> (String, Vec<
         }
     }
 
-    // 클라이언트 jar — TS 의미(전체 리뷰 G8):
-    // NeoForge는 제외(installer가 만든 srg client jar가 라이브러리로 자동 로드),
-    // inheritsFrom 프로필(fabric 등)은 부모 버전의 jar 사용
-    if !detail.id.starts_with("neoforge-") {
+    // 클라이언트 jar:
+    // - NeoForge / Forge(1.17+)는 securejarhandler 모듈 시스템 — FML이 libraryDirectory에서
+    //   SRG 매핑 client jar(client-*-srg.jar)를 로드한다. 여기서 raw vanilla client jar를
+    //   -cp에 넣으면 net.minecraft 패키지가 unnamed 모듈과 SRG 모듈에 중복돼 모듈 해석 실패로
+    //   (트랜스포머 초기화 직후) 조용히 종료된다. → forge 계열은 제외.
+    // - vanilla / Fabric / Quilt만 부모(inheritsFrom) 버전의 client jar를 -cp에 필요로 한다.
+    let is_forge_family = detail.id.starts_with("neoforge-") || detail.id.contains("-forge-");
+    if !is_forge_family {
         let client_id = detail.inherits_from.as_deref().unwrap_or(&detail.id);
         parts.push(dirs.client_jar(client_id).display().to_string());
     }
@@ -466,6 +470,14 @@ mod tests {
         .unwrap();
         let (cp, _) = build_classpath(&neo, &dirs);
         assert!(!cp.contains("1.21.1.jar"), "neoforge는 클라이언트 jar 미포함이어야: {cp}");
+
+        // Forge(1.17+)도 모듈 시스템 — vanilla client jar 미포함이어야(중복 모듈 방지)
+        let forge: crate::manifest::VersionDetail = serde_json::from_str(
+            r#"{"id":"1.20.1-forge-47.4.20","inheritsFrom":"1.20.1","libraries":[]}"#,
+        )
+        .unwrap();
+        let (cp, _) = build_classpath(&forge, &dirs);
+        assert!(!cp.contains("1.20.1.jar"), "forge는 vanilla client jar 미포함이어야: {cp}");
     }
 
     #[test]

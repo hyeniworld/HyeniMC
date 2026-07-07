@@ -618,17 +618,21 @@ export class GameLauncher {
       missingLibraries.forEach(lib => console.error(`  - ${lib}`));
     }
 
-    // Add client JAR (except for NeoForge, which uses its own client JAR)
-    // NeoForge installer creates client-X.X.X-srg.jar which is loaded automatically
-    if (!versionId.startsWith('neoforge-')) {
+    // Add client JAR (except for NeoForge/Forge, which use their own SRG client JAR)
+    // NeoForge/Forge(1.17+) installer creates client-X.X.X-srg.jar loaded by FML from
+    // libraryDirectory. Putting the raw vanilla client jar on -cp duplicates the
+    // net.minecraft package (unnamed module vs SRG module) → module resolution fails and
+    // the game exits silently right after transformer init.
+    const isForgeFamily = versionId.startsWith('neoforge-') || versionId.includes('-forge-');
+    if (!isForgeFamily) {
       // For versions with inheritsFrom, use the parent's JAR
       const clientVersionId = (versionJson as any).inheritsFrom || versionId;
       const clientJar = path.join(gameDir, 'versions', clientVersionId, `${clientVersionId}.jar`);
-      
+
       console.log(`[Game Launcher] Client JAR: ${clientJar}`);
       classpathParts.push(clientJar);
     } else {
-      console.log(`[Game Launcher] Skipping Minecraft JAR for NeoForge (uses own client JAR)`);
+      console.log(`[Game Launcher] Skipping Minecraft JAR for NeoForge/Forge (uses own SRG client JAR)`);
     }
 
     // Join with platform-specific separator
