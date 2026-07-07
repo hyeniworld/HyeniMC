@@ -16,8 +16,16 @@ fn mods_dir(db: &State<'_, DbState>, profile_id: &str) -> Result<PathBuf, String
 }
 
 #[tauri::command]
-pub fn mod_list(db: State<'_, DbState>, profile_id: String) -> Result<Vec<InstalledMod>, String> {
-    Ok(modmeta::list_mods(&mods_dir(&db, &profile_id)?))
+pub async fn mod_list(
+    db: State<'_, DbState>,
+    profile_id: String,
+) -> Result<Vec<InstalledMod>, String> {
+    // DB 조회는 즉시 끝나지만 jar 파싱(수백 개 zip)은 무거우므로 blocking 풀로 넘겨
+    // webview 이벤트 루프(메인 스레드)를 막지 않는다 — 모드 탭 프리즈 방지.
+    let dir = mods_dir(&db, &profile_id)?;
+    tauri::async_runtime::spawn_blocking(move || modmeta::list_mods(&dir))
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

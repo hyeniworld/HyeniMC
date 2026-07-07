@@ -433,31 +433,17 @@ export function CreateProfileModal({ isOpen, onClose, onSuccess, initialModpackI
               >
                 <option value="vanilla">바닐라</option>
                 <option value="fabric">Fabric</option>
-                <option value="quilt">Quilt</option>
-                <option value="forge">Forge (권장하지 않음)</option>
-                <option value="neoforge">NeoForge ⭐</option>
+                <option value="neoforge">NeoForge</option>
               </select>
             </div>
           </div>
-
-          {/* Forge deprecation warning */}
-          {formData.loaderType === 'forge' && (
-            <div className="bg-yellow-900/20 border border-yellow-800 rounded-lg p-3">
-              <p className="text-sm text-yellow-300 font-semibold mb-1">
-                ⚠ Forge는 권장하지 않습니다
-              </p>
-              <p className="text-xs text-yellow-400">
-                Forge 개발이 중단되었습니다. 대신 <strong>NeoForge</strong>를 사용하시는 것을 강력히 권장합니다.
-              </p>
-            </div>
-          )}
 
           {/* Loader Version */}
           {formData.loaderType !== 'vanilla' && (
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="text-sm font-semibold text-gray-300">
-                  {formData.loaderType === 'fabric' ? 'Fabric' : formData.loaderType === 'quilt' ? 'Quilt' : formData.loaderType === 'neoforge' ? 'NeoForge' : 'Forge'} 버전
+                  {formData.loaderType === 'fabric' ? 'Fabric' : 'NeoForge'} 버전
                 </label>
                 <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer hover:text-gray-300 transition-colors">
                   <input

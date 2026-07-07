@@ -8,6 +8,8 @@ pub struct JavaInstallation {
     pub path: String,
     pub version: String,
     pub major_version: u32,
+    pub vendor: String,
+    pub architecture: String,
 }
 
 /// `java -version` stderr에서 `version "..."` 안의 버전 문자열 추출.
@@ -16,6 +18,28 @@ pub fn parse_java_version_output(out: &str) -> Option<String> {
     let rest = &out[idx..];
     let end = rest.find('"')?;
     Some(rest[..end].to_string())
+}
+
+/// `-XshowSettings:properties` 출력에서 `key = value` 한 줄 추출.
+fn parse_property(out: &str, key: &str) -> Option<String> {
+    let needle = format!("{key} = ");
+    out.lines().find_map(|line| {
+        line.trim()
+            .strip_prefix(&needle)
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty())
+    })
+}
+
+/// os.arch(aarch64/amd64/…) → 표시용 정규화(arm64/x64/x86).
+fn normalize_arch(arch: &str) -> String {
+    match arch {
+        "aarch64" | "arm64" => "arm64",
+        "amd64" | "x86_64" => "x64",
+        "x86" | "i386" | "i686" => "x86",
+        other => other,
+    }
+    .to_string()
 }
 
 /// "1.8.0_392" → 8, "21.0.5" → 21, "17" → 17
@@ -30,17 +54,25 @@ pub fn parse_major(version: &str) -> u32 {
 }
 
 async fn probe(java_path: &std::path::Path) -> Option<JavaInstallation> {
+    // properties까지 한 번에 얻어 vendor/os.arch도 채운다(별도 호출 불필요).
     let output = tokio::process::Command::new(java_path)
+        .arg("-XshowSettings:properties")
         .arg("-version")
         .output()
         .await
         .ok()?;
     let text = String::from_utf8_lossy(&output.stderr);
     let version = parse_java_version_output(&text)?;
+    let vendor = parse_property(&text, "java.vendor").unwrap_or_default();
+    let architecture = parse_property(&text, "os.arch")
+        .map(|a| normalize_arch(&a))
+        .unwrap_or_default();
     Some(JavaInstallation {
         path: java_path.display().to_string(),
         major_version: parse_major(&version),
         version,
+        vendor,
+        architecture,
     })
 }
 

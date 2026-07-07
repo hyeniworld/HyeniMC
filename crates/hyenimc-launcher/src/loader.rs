@@ -29,18 +29,34 @@ pub fn neoforge_version_id(version: &str) -> String {
     format!("neoforge-{version}")
 }
 
-/// MC "1.21.1" → neoforge "21.1.*" 프리픽스 매칭 (TS 필터 동일)
-pub fn neoforge_matches_mc(neoforge_version: &str, mc_version: &str) -> bool {
-    let mc: Vec<&str> = mc_version.split('.').collect();
-    if mc.len() < 2 {
-        return false;
+/// MC 버전 → 매칭할 NeoForge 버전 프리픽스(끝에 `.` 포함).
+///
+/// NeoForge 버전 넘버링은 MC 버전 체계를 따라간다(실측 확인, 2026):
+/// - 구형 MC `1.21.1` → NeoForge `21.1.<build>` (3세그먼트) → prefix `"21.1."`
+/// - 구형 MC `1.21`   → NeoForge `21.0.<build>`            → prefix `"21.0."`
+/// - 신형 MC `26.2`   → NeoForge `26.2.0.<build>` (4세그)  → prefix `"26.2.0."`
+/// - 신형 MC `26.1.2` → NeoForge `26.1.2.<build>`          → prefix `"26.1.2."`
+fn neoforge_prefix_for_mc(mc_version: &str) -> Option<String> {
+    if let Some(rest) = mc_version.strip_prefix("1.") {
+        // 구형: 앞의 "1." 제거 후 major.minor (minor 없으면 0)
+        let mut parts = rest.split('.');
+        let major = parts.next().filter(|s| !s.is_empty())?;
+        let minor = parts.next().unwrap_or("0");
+        Some(format!("{major}.{minor}."))
+    } else {
+        // 신형: major.minor[.patch] 그대로 (patch 없으면 0)
+        let mut parts = mc_version.split('.');
+        let major = parts.next().filter(|s| !s.is_empty())?;
+        let minor = parts.next().filter(|s| !s.is_empty())?;
+        let patch = parts.next().unwrap_or("0");
+        Some(format!("{major}.{minor}.{patch}."))
     }
-    let (mc_major, mc_minor) = (mc[1], mc.get(2).copied().unwrap_or("0"));
-    let mut it = neoforge_version.split('.');
-    let (Some(neo_major), Some(neo_minor)) = (it.next(), it.next()) else {
-        return false;
-    };
-    neo_major == mc_major && neo_minor == mc_minor
+}
+
+/// NeoForge 버전이 주어진 MC 버전에 해당하는지 (신·구 버전 체계 모두 지원).
+pub fn neoforge_matches_mc(neoforge_version: &str, mc_version: &str) -> bool {
+    neoforge_prefix_for_mc(mc_version)
+        .is_some_and(|prefix| neoforge_version.starts_with(&prefix))
 }
 
 /// maven-metadata.xml에서 <version> 태그 추출 (XML 의존 없이)
@@ -233,12 +249,24 @@ mod tests {
 
     #[test]
     fn neoforge_mc_mapping() {
+        // 구형 (1.21.x → 21.1.<build>)
         assert!(neoforge_matches_mc("21.1.213", "1.21.1"));
         assert!(neoforge_matches_mc("21.1.213-beta", "1.21.1"));
         assert!(!neoforge_matches_mc("21.4.10", "1.21.1"));
         assert!(!neoforge_matches_mc("20.4.237", "1.21.1"));
-        // 26.x 명명 (1.21.11 다음이 26.1) — MC "26.1.2" 형태는 mc[1]="1"이라 별도 확인
-        assert!(neoforge_matches_mc("1.2.3", "x.1.2"));
+        // 21.1 vs 21.10 혼동 방지 (prefix가 '.'로 끝나 경계 보장)
+        assert!(!neoforge_matches_mc("21.10.5", "1.21.1"));
+        assert!(neoforge_matches_mc("21.10.5", "1.21.10"));
+        // 구형 patch 생략 1.21 → 21.0
+        assert!(neoforge_matches_mc("21.0.153", "1.21"));
+        assert!(!neoforge_matches_mc("21.1.234", "1.21"));
+        // 신형 (26.x → 26.<minor>.<patch>.<build>, patch 없으면 0)
+        assert!(neoforge_matches_mc("26.2.0.8-beta", "26.2"));
+        assert!(!neoforge_matches_mc("26.1.2.78", "26.2"));
+        assert!(neoforge_matches_mc("26.1.0.5", "26.1"));
+        assert!(!neoforge_matches_mc("26.1.2.78", "26.1"));
+        assert!(neoforge_matches_mc("26.1.2.78", "26.1.2"));
+        assert!(!neoforge_matches_mc("26.1.1.9", "26.1.2"));
     }
 
     #[test]
