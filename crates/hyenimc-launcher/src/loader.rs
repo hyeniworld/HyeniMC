@@ -194,11 +194,18 @@ async fn run_forge_family_installer(
         return Ok(version_id);
     }
 
-    // installer 요구사항: launcher_profiles.json 존재
+    // installer 요구사항: launcher_profiles.json 존재. 일부 installer 버전이 필드를
+    // 요구하므로 Electron과 동일한 리치 형태로 생성(최소형 `{"profiles":{}}`은 거부 가능).
     tokio::fs::create_dir_all(&dirs.instance_dir).await?;
     let profiles_path = dirs.instance_dir.join("launcher_profiles.json");
     if !profiles_path.exists() {
-        tokio::fs::write(&profiles_path, r#"{"profiles":{}}"#).await?;
+        let profiles = serde_json::json!({
+            "profiles": {},
+            "selectedProfile": "(Default)",
+            "clientToken": "00000000-0000-0000-0000-000000000000",
+            "launcherVersion": { "name": "HyeniMC", "format": 21 }
+        });
+        tokio::fs::write(&profiles_path, serde_json::to_vec_pretty(&profiles)?).await?;
     }
 
     let installer = dirs.instance_dir.join(".temp").join(&installer_filename);
