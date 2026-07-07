@@ -77,8 +77,11 @@ export function useLauncherUpdate() {
     const cleanup4 = window.electronAPI.on('launcher:update-downloaded', handleUpdateDownloaded);
     const cleanup5 = window.electronAPI.on('launcher:update-error', handleUpdateError);
 
-    // Check for updates on mount
-    checkForUpdates();
+    // 업데이트 체크는 초기 렌더·데이터 로드를 우선하기 위해 약간 지연(백그라운드 작업).
+    // 즉시 실행하면 시작 시 네트워크 체크가 초기 UI/데이터와 경쟁해 흰 화면이 길어진다.
+    const initialCheck = setTimeout(() => {
+      checkForUpdates();
+    }, 1500);
 
     // Check every 4 hours
     const interval = setInterval(() => {
@@ -86,6 +89,7 @@ export function useLauncherUpdate() {
     }, 4 * 60 * 60 * 1000);
 
     return () => {
+      clearTimeout(initialCheck);
       clearInterval(interval);
       cleanup1();
       cleanup2();
