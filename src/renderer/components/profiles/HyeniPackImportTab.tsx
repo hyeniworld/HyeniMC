@@ -29,6 +29,7 @@ export function HyeniPackImportTab({ onSuccess, onImportingChange }: HyeniPackIm
   const [name, setName] = useState('');
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<{ completed: number; total: number; percent: number; stage: string } | null>(null);
 
   const setImportingState = (v: boolean) => {
     setImporting(v);
@@ -60,6 +61,8 @@ export function HyeniPackImportTab({ onSuccess, onImportingChange }: HyeniPackIm
     if (!manifest || !name.trim()) return;
     setImportingState(true);
     setError(null);
+    setProgress(null);
+    let unlisten: (() => void) | undefined;
     try {
       // 팩 메타 기준으로 프로필 생성 후 혜니팩 import(모드 설치)
       const profile = await window.electronAPI.profile.create({
@@ -67,6 +70,17 @@ export function HyeniPackImportTab({ onSuccess, onImportingChange }: HyeniPackIm
         gameVersion: manifest.minecraft.version,
         loaderType: manifest.minecraft.loaderType,
         loaderVersion: manifest.minecraft.loaderVersion || '',
+      });
+      // 이 프로필의 설치 진행률만 인라인으로 구독(전역 다운로드 모달 대신)
+      unlisten = window.electronAPI.on('hyenipack:import-progress', (raw: unknown) => {
+        const data = raw as { profileId?: string; completed?: number; total?: number; percent?: number; stage?: string };
+        if (data?.profileId && data.profileId !== profile.id) return;
+        setProgress({
+          completed: data?.completed ?? 0,
+          total: data?.total ?? 0,
+          percent: data?.percent ?? 0,
+          stage: data?.stage ?? 'mods',
+        });
       });
       const result = await window.electronAPI.hyenipack.import(
         filePath,
@@ -82,7 +96,9 @@ export function HyeniPackImportTab({ onSuccess, onImportingChange }: HyeniPackIm
     } catch (e) {
       setError(errorText(e, '프로필 생성에 실패했습니다.'));
     } finally {
+      unlisten?.();
       setImportingState(false);
+      setProgress(null);
     }
   };
 
@@ -133,21 +149,37 @@ export function HyeniPackImportTab({ onSuccess, onImportingChange }: HyeniPackIm
         </div>
       )}
 
-      {manifest && (
+      {manifest && !importing && (
         <button
           type="button"
           onClick={handleCreate}
-          disabled={importing || !name.trim()}
+          disabled={!name.trim()}
           className="w-full py-3 bg-purple-600 hover:bg-purple-700 rounded-lg font-medium text-white disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
         >
-          {importing ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin" /> 설치 중...
-            </>
-          ) : (
-            '혜니팩으로 프로필 생성'
-          )}
+          혜니팩으로 프로필 생성
         </button>
+      )}
+
+      {importing && (
+        <div className="bg-gray-800 border border-gray-700 rounded-lg p-4 space-y-2">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-gray-300">
+              {progress?.stage === 'finalize'
+                ? '마무리 중...'
+                : `모드 다운로드 중${progress?.total ? ` (${progress.completed}/${progress.total})` : '...'}`}
+            </span>
+            <span className="font-semibold text-purple-400">{Math.round(progress?.percent ?? 0)}%</span>
+          </div>
+          <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-300"
+              style={{ width: `${Math.min(100, progress?.percent ?? 0)}%` }}
+            />
+          </div>
+          <div className="flex items-center gap-1 text-xs text-gray-500">
+            <Loader2 className="w-3 h-3 animate-spin" /> 혜니팩을 가져오는 중입니다...
+          </div>
+        </div>
       )}
     </div>
   );

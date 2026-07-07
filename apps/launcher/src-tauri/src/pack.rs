@@ -60,11 +60,22 @@ pub async fn hyenipack_import(
         &cfg,
         token.as_deref(),
         move |p| {
+            // 혜니팩 설치는 전용 이벤트로 진행률을 보낸다(전역 game 다운로드 모달이 아니라
+            // HyeniPackImportTab 인라인 진행률이 소비). download:progress를 쓰면 전역 모달이 떠서
+            // 완료 시 닫히지 않는 문제가 있었음.
+            let percent = if p.total > 0 {
+                (p.completed as f64 / p.total as f64) * 100.0
+            } else {
+                0.0
+            };
             let _ = app.emit(
-                "download:progress",
+                "hyenipack:import-progress",
                 serde_json::json!({
-                    "profileId": pid, "phase": p.stage,
-                    "completed": p.completed, "total": p.total, "currentFile": ""
+                    "profileId": pid,
+                    "stage": p.stage,
+                    "completed": p.completed,
+                    "total": p.total,
+                    "percent": percent
                 }),
             );
         },
