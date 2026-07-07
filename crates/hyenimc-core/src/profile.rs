@@ -175,9 +175,13 @@ pub fn create_profile(
 ) -> Result<Profile, CoreError> {
     let id = uuid::Uuid::new_v4().to_string();
     conn.execute(
+        // description/icon/loader_version/modpack_*는 NULL 대신 '' 로 저장한다.
+        // Electron(Go) 리더가 이 컬럼들을 non-null string으로 스캔해, NULL이면 해당 행 스캔이
+        // 실패하고 프로필이 목록에서 통째로 빠지기 때문(공유 DB 호환).
         "INSERT INTO profiles (id, name, description, icon, game_version, loader_type, loader_version,
-                               game_directory, created_at, updated_at, favorite, installation_status)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?9,0,'complete')",
+                               game_directory, created_at, updated_at, favorite, installation_status,
+                               modpack_id, modpack_source)
+         VALUES (?1,?2,COALESCE(?3,''),COALESCE(?4,''),?5,?6,COALESCE(?7,''),?8,?9,?9,0,'complete','','')",
         rusqlite::params![
             id, new.name, new.description, new.icon, new.game_version,
             new.loader_type, new.loader_version, game_directory, now_secs
