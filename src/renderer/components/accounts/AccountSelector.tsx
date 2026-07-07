@@ -97,24 +97,11 @@ export function AccountSelector({ selectedAccountId, onSelect }: AccountSelector
 
       {/* Account List */}
       <div className="space-y-2 max-h-48 overflow-y-auto">
-        <div
-          onClick={() => onSelect(undefined)}
-          className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${
-            !selectedAccountId
-              ? 'border-purple-500 bg-purple-500/10'
-              : 'border-gray-700 bg-gray-800/50 hover:border-gray-600'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gray-700 rounded flex items-center justify-center">
-              <User className="w-5 h-5 text-gray-400" />
-            </div>
-            <div>
-              <div className="font-medium text-sm">Player</div>
-              <div className="text-xs text-gray-400">오프라인 (기본)</div>
-            </div>
+        {accounts.length === 0 && (
+          <div className="p-3 text-center text-xs text-gray-500">
+            Microsoft 계정으로 로그인하세요
           </div>
-        </div>
+        )}
 
         {accounts.map((account) => (
           <div
