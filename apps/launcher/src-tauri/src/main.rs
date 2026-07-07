@@ -48,6 +48,7 @@ fn main() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             // hyenimc:// 딥링크 수신 로그 (macOS는 번들 앱에서만 OS 등록됨)
             let handle = app.handle().clone();

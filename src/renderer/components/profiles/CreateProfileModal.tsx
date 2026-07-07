@@ -3,6 +3,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { X, Loader2, Package, Settings, FileArchive } from 'lucide-react';
 import { ModpackSearchModal } from '../modpack/ModpackSearchModal';
 import { ImportModpackTab } from './ImportModpackTab';
+import { HyeniPackImportTab } from './HyeniPackImportTab';
 import { IPC_EVENTS } from '../../../shared/constants/ipc';
 import { isCreatorMode } from '../../utils/appMode';
 
@@ -23,7 +24,7 @@ interface JavaInstallation {
 
 export function CreateProfileModal({ isOpen, onClose, onSuccess, initialModpackId }: CreateProfileModalProps) {
   const toast = useToast();
-  const [tab, setTab] = useState<'custom' | 'modpack' | 'import'>('custom');
+  const [tab, setTab] = useState<'custom' | 'modpack' | 'import' | 'hyenipack'>('custom');
   const [step, setStep] = useState<'basic' | 'modpack' | 'installing'>('basic');
   const [showModpackSearch, setShowModpackSearch] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -302,8 +303,7 @@ export function CreateProfileModal({ isOpen, onClose, onSuccess, initialModpackI
             </button>
           </div>
 
-          {/* Tabs — 온라인 모드팩/파일 import는 제작자 전용(사용자 런처에서 숨김) */}
-          {isCreatorMode() && (
+          {/* Tabs — 사용자: 커스텀 + 혜니팩 / 제작자: 커스텀 + 온라인 + 파일 */}
           <div className="flex gap-2 mb-6 bg-gray-800 p-1 rounded-lg">
             <button
               type="button"
@@ -318,34 +318,51 @@ export function CreateProfileModal({ isOpen, onClose, onSuccess, initialModpackI
               <Settings className="w-4 h-4" />
               커스텀
             </button>
-            <button
-              type="button"
-              onClick={() => setTab('modpack')}
-              disabled={loading || importing}
-              className={`flex-1 py-2 px-3 rounded-md font-medium transition-all flex items-center justify-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed ${
-                tab === 'modpack'
-                  ? 'bg-purple-600 text-white shadow-lg'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-700'
-              }`}
-            >
-              <Package className="w-4 h-4" />
-              온라인
-            </button>
-            <button
-              type="button"
-              onClick={() => setTab('import')}
-              disabled={loading || importing}
-              className={`flex-1 py-2 px-3 rounded-md font-medium transition-all flex items-center justify-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed ${
-                tab === 'import'
-                  ? 'bg-purple-600 text-white shadow-lg'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-700'
-              }`}
-            >
-              <FileArchive className="w-4 h-4" />
-              파일
-            </button>
+            {isCreatorMode() ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setTab('modpack')}
+                  disabled={loading || importing}
+                  className={`flex-1 py-2 px-3 rounded-md font-medium transition-all flex items-center justify-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed ${
+                    tab === 'modpack'
+                      ? 'bg-purple-600 text-white shadow-lg'
+                      : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                  }`}
+                >
+                  <Package className="w-4 h-4" />
+                  온라인
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTab('import')}
+                  disabled={loading || importing}
+                  className={`flex-1 py-2 px-3 rounded-md font-medium transition-all flex items-center justify-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed ${
+                    tab === 'import'
+                      ? 'bg-purple-600 text-white shadow-lg'
+                      : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                  }`}
+                >
+                  <FileArchive className="w-4 h-4" />
+                  파일
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setTab('hyenipack')}
+                disabled={loading || importing}
+                className={`flex-1 py-2 px-3 rounded-md font-medium transition-all flex items-center justify-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed ${
+                  tab === 'hyenipack'
+                    ? 'bg-purple-600 text-white shadow-lg'
+                    : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                }`}
+              >
+                <Package className="w-4 h-4" />
+                혜니팩
+              </button>
+            )}
           </div>
-          )}
 
           {/* Custom Profile Tab */}
           {tab === 'custom' && (
@@ -665,11 +682,15 @@ export function CreateProfileModal({ isOpen, onClose, onSuccess, initialModpackI
 
           {/* Import Tab */}
           {tab === 'import' && (
-            <ImportModpackTab 
+            <ImportModpackTab
               onSuccess={onSuccess}
               onImportingChange={setImporting}
               onProfileIdChange={setInstallingProfileId}
             />
+          )}
+
+          {tab === 'hyenipack' && (
+            <HyeniPackImportTab onSuccess={onSuccess} onImportingChange={setImporting} />
           )}
         </div>
       </div>

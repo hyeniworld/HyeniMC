@@ -263,10 +263,24 @@ function installTauriShim(): void {
     openLogsFolder: async () => undefined,
   };
 
+  // 파일 선택 다이얼로그 (tauri-plugin-dialog) — 혜니팩 import 등에서 사용
+  api.dialog = {
+    selectFile: async (opts?: { filters?: { name: string; extensions: string[] }[] }) => {
+      const path = await invoke('plugin:dialog|open', {
+        options: {
+          multiple: false,
+          directory: false,
+          filters: opts?.filters ?? [{ name: 'HyeniPack', extensions: ['hyenipack'] }],
+        },
+      });
+      return typeof path === 'string' ? path : null;
+    },
+  };
+
   // 제작자 전용/미사용 카테고리 스텁 — 사용자 런처 UI에선 해당 기능이 숨겨짐(M6b).
   // hyeni.installUpdate는 worker mods로 통합됐으므로 no-op 성공 처리.
   const STUB_CATEGORIES = [
-    'modpack', 'hyeni', 'dialog', 'fs', 'errorDialog',
+    'modpack', 'hyeni', 'fs', 'errorDialog',
   ];
   for (const cat of STUB_CATEGORIES) {
     api[cat] = {};

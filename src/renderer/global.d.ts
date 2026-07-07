@@ -138,6 +138,15 @@ declare global {
         quitAndInstall: () => Promise<{ success: boolean }>;
         getVersion: () => Promise<{ success: boolean; version: string }>;
       };
+      hyenipack: {
+        import: (filePath: string, profileId: string, accountId?: string) => Promise<{ success: boolean; error?: string }>;
+        preview: (filePath: string) => Promise<{ success: boolean; manifest?: any; error?: string }>;
+        [key: string]: (...args: any[]) => Promise<any>;
+      };
+      dialog: {
+        selectFile: (opts?: { filters?: { name: string; extensions: string[] }[] }) => Promise<string | null>;
+        [key: string]: (...args: any[]) => Promise<any>;
+      };
       on: (channel: string, callback: (...args: any[]) => void) => () => void;
       once: (channel: string, callback: (...args: any[]) => void) => void;
       off: (channel: string, callback: (...args: any[]) => void) => void;
