@@ -70,10 +70,24 @@ fn scan_mods_dir(dir: &Path) -> Vec<DiskFile> {
 }
 
 fn to_installed(c: &CachedMod) -> InstalledMod {
+    let canonical = c.file_name.trim_end_matches(DISABLED).to_string();
+    // 캐시에 name/version이 비어 있을 수 있음(메타 없는 라이브러리 jar를 Electron이 빈 값으로
+    // 저장한 경우). 표시용으로 파일명/추론값 폴백 — '이름 없음, v —' 방지.
+    let name = if c.name.is_empty() {
+        canonical.clone()
+    } else {
+        c.name.clone()
+    };
+    let version = if c.version.is_empty() {
+        let stem = canonical.trim_end_matches(".jar");
+        hyenimc_launcher::workermods::parse_mod_version(stem).unwrap_or_else(|| "Unknown".into())
+    } else {
+        c.version.clone()
+    };
     InstalledMod {
-        file_name: c.file_name.trim_end_matches(DISABLED).to_string(),
-        name: c.name.clone(),
-        version: c.version.clone(),
+        file_name: canonical,
+        name,
+        version,
         mod_id: c.mod_id.clone(),
         description: c.description.clone(),
         authors: c.authors.clone(),

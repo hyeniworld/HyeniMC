@@ -44,6 +44,7 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
   const [javaInstallations, setJavaInstallations] = useState<JavaInstallation[]>([]);
   const [selectedJava, setSelectedJava] = useState<string>(profile?.javaPath || '');
   const [loadingJava, setLoadingJava] = useState(true);
+  const [recommendedJava, setRecommendedJava] = useState<number>(17);
   
   // JVM arguments
   const [jvmArgs, setJvmArgs] = useState(profile?.jvmArgs?.join(' ') || '');
@@ -93,6 +94,15 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
       setLoaderVersion('');
     }
   }, [loaderType, gameVersion, includeUnstableVersions]);
+
+  // 게임 버전 변경 시 권장 Java 갱신 (26.1+는 Java 25 등)
+  useEffect(() => {
+    if (!gameVersion) return;
+    window.electronAPI.java
+      .getRecommended(gameVersion)
+      .then((v: number) => setRecommendedJava(v))
+      .catch(() => {});
+  }, [gameVersion]);
 
   // Initialize from profile (only when profile ID changes)
   useEffect(() => {
@@ -735,6 +745,35 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
           </div>
         ) : (
           <div className="space-y-3">
+            {/* 권장 Java 안내 — 게임 버전(26.1+ 등)에 필요한 최소 버전 */}
+            {(() => {
+              const hasCompatible = javaInstallations.some(j => j.majorVersion >= recommendedJava);
+              const selected = javaInstallations.find(j => j.path === selectedJava);
+              const selectedOk = !selected || selected.majorVersion >= recommendedJava;
+              return (
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className={`px-2 py-1 rounded font-medium ${
+                    hasCompatible
+                      ? 'bg-green-900/30 text-green-300 border border-green-800'
+                      : 'bg-yellow-900/30 text-yellow-300 border border-yellow-800'
+                  }`}>
+                    권장: Java {recommendedJava}+
+                  </span>
+                  {!selectedOk && (
+                    <span className="text-yellow-400">⚠ 선택한 Java가 권장 버전보다 낮습니다</span>
+                  )}
+                  {!hasCompatible && (
+                    <button
+                      type="button"
+                      onClick={() => window.electronAPI.shell.openExternal(`https://adoptium.net/temurin/releases/?version=${recommendedJava}`)}
+                      className="px-2 py-1 bg-yellow-700 hover:bg-yellow-600 rounded text-white"
+                    >
+                      Java {recommendedJava} 설치 안내
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
             {javaInstallations.map((java, index) => (
               <button
                 key={index}

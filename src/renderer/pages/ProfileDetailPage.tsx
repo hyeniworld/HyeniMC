@@ -129,7 +129,13 @@ export const ProfileDetailPage: React.FC = () => {
 
   const handleLaunch = React.useCallback(async () => {
     if (!profileId) return;
-    
+
+    // 계정 필수 — 오프라인 미지원(정품 서버 전용). 다운로드 시작 전에 안내.
+    if (!selectedAccountId) {
+      toast.warning('로그인 필요', 'Microsoft 계정으로 로그인해야 게임을 실행할 수 있습니다.');
+      return;
+    }
+
     if (isRunning) {
       toast.warning('실행 중', '이 프로필은 이미 실행 중입니다!');
       return;

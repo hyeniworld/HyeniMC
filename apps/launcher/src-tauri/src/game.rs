@@ -286,6 +286,11 @@ pub async fn game_launch(
         return Err(format!("프로필 {profile_id}이(가) 이미 실행 중입니다"));
     }
 
+    // 계정 필수 — 오프라인 계정 미지원(정품 온라인 서버 전용). 다운로드 전에 차단.
+    if account_id.is_none() {
+        return Err("Microsoft 계정으로 로그인해야 게임을 실행할 수 있습니다.".into());
+    }
+
     let (profile, settings) = {
         let p = load_profile(&db, &profile_id)?;
         let s = hyenimc_core::settings::get_settings(&db.0.lock().unwrap()).map_err(|e| e.to_string())?;
@@ -365,24 +370,19 @@ pub async fn game_launch(
         eprintln!("[game] 누락 라이브러리 {}개: {:?}", missing.len(), missing);
     }
 
-    // 계정: account_id가 있으면 실계정(만료 임박 시 자동 갱신), 없으면 더미
-    let (username, uuid, access_token, user_type) = match &account_id {
-        Some(aid) => {
-            let tokens = crate::account::get_valid_tokens(&db, &crypto, aid).await?;
-            let account = {
-                let conn = db.0.lock().unwrap();
-                hyenimc_core::account::get_account(&conn, aid)
-                    .map_err(|e| e.to_string())?
-                    .ok_or_else(|| format!("계정 없음: {aid}"))?
-            };
-            (account.name, account.uuid, Some(tokens.access_token), Some("msa".to_string()))
-        }
-        None => (
-            "Player".to_string(),
-            "00000000-0000-0000-0000-000000000000".to_string(),
-            None,
-            None,
-        ),
+    // 계정 필수(위에서 None 차단). 실계정 토큰 확보(만료 임박 시 자동 갱신).
+    let aid = account_id
+        .as_ref()
+        .ok_or_else(|| "Microsoft 계정으로 로그인해야 게임을 실행할 수 있습니다.".to_string())?;
+    let (username, uuid, access_token, user_type) = {
+        let tokens = crate::account::get_valid_tokens(&db, &crypto, aid).await?;
+        let account = {
+            let conn = db.0.lock().unwrap();
+            hyenimc_core::account::get_account(&conn, aid)
+                .map_err(|e| e.to_string())?
+                .ok_or_else(|| format!("계정 없음: {aid}"))?
+        };
+        (account.name, account.uuid, Some(tokens.access_token), Some("msa".to_string()))
     };
 
     let spec = LaunchSpec {
