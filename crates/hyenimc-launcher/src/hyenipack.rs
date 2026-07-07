@@ -272,16 +272,19 @@ pub async fn install_pack(
             None => from_zip.push(m),
         }
     }
+    // 다운로드분 개수 — zip 동봉 추출 진행률을 이 뒤로 이어붙인다(전체 total 대비 연속 표시).
+    let downloaded_count = tasks.len();
     download_all(http, tasks, cfg, |p| {
         on_progress(PackInstallProgress { stage: "mods".into(), completed: p.completed, total });
     })
     .await?;
 
-    // zip 동봉 모드 추출 (url 없는 엔트리 — v1 팩/로컬 모드/피닝 실패 폴백)
+    // zip 동봉 모드 추출 (url 없는 엔트리 — v1 팩/로컬 모드/피닝 실패 폴백).
+    // 다운로드 안 하는 동봉분도 진행률에 포함해야 303/343에서 멈춘 듯 보이지 않는다.
     if !from_zip.is_empty() {
         let file = std::fs::File::open(pack_zip)?;
         let mut zip = zip::ZipArchive::new(file).map_err(|e| LauncherError::Other(e.to_string()))?;
-        for m in &from_zip {
+        for (i, m) in from_zip.iter().enumerate() {
             let entry_name = format!("mods/{}", m.file_name);
             let mut entry = zip.by_name(&entry_name).map_err(|_| {
                 LauncherError::Other(format!(
@@ -292,6 +295,11 @@ pub async fn install_pack(
             let dest = mods_dir.join(&m.file_name);
             let mut out = std::fs::File::create(&dest)?;
             std::io::copy(&mut entry, &mut out)?;
+            on_progress(PackInstallProgress {
+                stage: "mods".into(),
+                completed: downloaded_count + i + 1,
+                total,
+            });
         }
     }
 
