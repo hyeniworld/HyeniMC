@@ -18,6 +18,7 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 toml = "0.8"
 sha2 = "0.10"
 base64 = "0.22"
+log = "0.4"
 rand.workspace = true
 fastnbt = "2"
 flate2 = "1"

@@ -228,6 +228,10 @@ pub async fn check_all_updates(
             game_version: game_version.to_string(),
         });
     }
+    log::info!(
+        "워커 모드 체크 완료: {} 업데이트 필요 (게임 {game_version}, 로더 {loader_type})",
+        updates.len()
+    );
     Ok(updates)
 }
 
@@ -249,6 +253,20 @@ pub fn download_url(worker_base: &str, update: &WorkerModUpdate, token: &str) ->
     )
 }
 
+/// 워커 모드 다운로드 실패를 사용자 친화 메시지로 변환 (Electron worker-mod-updater.ts와 동일 매핑).
+/// 401/403 = 토큰 만료·무효 → /인증 재인증 안내, 404 = 서버에 파일 없음. 그 외는 원본 사유 유지.
+fn map_worker_download_error(e: LauncherError) -> LauncherError {
+    match &e {
+        LauncherError::DownloadFailed { status: Some(401 | 403), .. } => LauncherError::Other(
+            "인증이 만료되었거나 유효하지 않습니다.\n\nDiscord에서 /인증 명령어로 재인증해주세요.".into(),
+        ),
+        LauncherError::DownloadFailed { status: Some(404), .. } => LauncherError::Other(
+            "모드 파일을 서버에서 찾을 수 없습니다. 잠시 후 다시 시도해주세요.".into(),
+        ),
+        _ => e,
+    }
+}
+
 /// 선택 업데이트 설치 — sha256 검증 다운로드 후 구버전 파일 제거.
 pub async fn install_updates(
     http: &reqwest::Client,
@@ -262,6 +280,14 @@ pub async fn install_updates(
     std::fs::create_dir_all(mods_dir)?;
     let mut installed = Vec::new();
     for update in updates {
+        log::info!(
+            "워커 모드 설치: {} {} → {} ({}/{})",
+            update.mod_id,
+            update.current_version.as_deref().unwrap_or("없음"),
+            update.latest_version,
+            update.loader_type,
+            update.file
+        );
         on_progress(&update.mod_id, 0);
         // 구버전 파일 목록 (설치 후 제거 — 새 파일과 이름이 같으면 덮어써지므로 제외)
         let old_files: Vec<_> = find_mod_files(mods_dir, &update.mod_id)
@@ -282,7 +308,8 @@ pub async fn install_updates(
             cfg,
             |_| {},
         )
-        .await?;
+        .await
+        .map_err(map_worker_download_error)?;
 
         for old in old_files {
             let _ = std::fs::remove_file(&old);

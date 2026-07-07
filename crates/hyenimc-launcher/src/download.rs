@@ -84,47 +84,76 @@ fn checksums_match(path: &std::path::Path, task: &DownloadTask) -> std::io::Resu
     Ok(true)
 }
 
+/// 한 번의 fetch 시도 실패 — 재시도 가치가 있는지(retryable)와 사람이 읽을 사유를 함께 보존.
+/// 이 사유가 최종 DownloadFailed로 전파되어 로그·UI에 실제 원인(HTTP 401/404, 본문 등)을 노출한다.
+struct FetchErr {
+    retryable: bool,
+    reason: String,
+    /// HTTP 상태 코드 (HTTP 오류일 때만). 401/404 분기용으로 상위까지 보존.
+    status: Option<u16>,
+}
+
+impl FetchErr {
+    /// IO 오류는 대개 결정적(권한/경로) — 재시도 대신 사유를 명확히 노출.
+    fn io(e: std::io::Error) -> Self {
+        Self { retryable: false, reason: format!("파일 IO 오류: {e}"), status: None }
+    }
+}
+
 async fn fetch_to_file(
     client: &reqwest::Client,
     task: &DownloadTask,
     timeout: Duration,
-) -> Result<(), LauncherError> {
+) -> Result<(), FetchErr> {
     if let Some(parent) = task.dest.parent() {
-        tokio::fs::create_dir_all(parent).await?;
+        tokio::fs::create_dir_all(parent).await.map_err(FetchErr::io)?;
     }
     let part = task.dest.with_extension("part");
     let resp = client
         .get(&task.url)
         .timeout(timeout)
         .send()
-        .await?
-        .error_for_status()?;
-    let mut file = tokio::fs::File::create(&part).await?;
+        .await
+        .map_err(|e| FetchErr { retryable: true, reason: format!("요청 실패: {e}"), status: None })?;
+
+    // error_for_status()로 상태를 삼키지 않고 직접 검사 — 실제 상태 코드/본문을 사유에 담는다.
+    // 4xx(클라이언트 오류: 401 인증/404 없음)는 재시도해도 소용없으므로 즉시 실패시킨다.
+    let status = resp.status();
+    if !status.is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        let snippet: String = body.chars().take(300).collect();
+        let reason = if snippet.trim().is_empty() {
+            format!("HTTP {status}")
+        } else {
+            format!("HTTP {status}: {snippet}")
+        };
+        return Err(FetchErr {
+            retryable: status.is_server_error(),
+            reason,
+            status: Some(status.as_u16()),
+        });
+    }
+
+    let mut file = tokio::fs::File::create(&part).await.map_err(FetchErr::io)?;
     let mut stream = resp.bytes_stream();
     use futures::StreamExt;
     while let Some(chunk) = stream.next().await {
-        file.write_all(&chunk?).await?;
+        let bytes = chunk.map_err(|e| FetchErr { retryable: true, reason: format!("본문 수신 중단: {e}"), status: None })?;
+        file.write_all(&bytes).await.map_err(FetchErr::io)?;
     }
-    file.flush().await?;
+    file.flush().await.map_err(FetchErr::io)?;
     drop(file);
 
-    if !checksums_match(&part, task)? {
+    if !checksums_match(&part, task).map_err(FetchErr::io)? {
         let _ = tokio::fs::remove_file(&part).await;
-        return Err(LauncherError::ChecksumMismatch {
-            path: task.dest.display().to_string(),
-            expected: task
-                .sha1
-                .clone()
-                .or_else(|| task.sha256.clone())
-                .unwrap_or_default(),
-            actual: "mismatch".into(),
-        });
+        // 전송 중 손상 가능 — 재시도 가치 있음
+        return Err(FetchErr { retryable: true, reason: "체크섬 불일치".into(), status: None });
     }
     // Windows는 목적지가 존재하면 rename이 실패한다 (손상 파일 재다운로드 경로)
     if task.dest.exists() {
         let _ = tokio::fs::remove_file(&task.dest).await;
     }
-    tokio::fs::rename(&part, &task.dest).await?;
+    tokio::fs::rename(&part, &task.dest).await.map_err(FetchErr::io)?;
     Ok(())
 }
 
@@ -149,19 +178,30 @@ async fn download_one(
     loop {
         match fetch_to_file(client, task, cfg.timeout).await {
             Ok(()) => return Ok(()),
-            Err(_e) if attempt < cfg.max_retries => {
-                let backoff = cfg
-                    .retry_base_ms
-                    .saturating_mul(1 << attempt.min(5))
-                    .min(30_000);
-                tokio::time::sleep(Duration::from_millis(backoff)).await;
-                attempt += 1;
-            }
-            Err(_) => {
-                return Err(LauncherError::DownloadFailed {
-                    url: task.url.clone(),
-                    retries: cfg.max_retries,
-                });
+            Err(e) => {
+                if e.retryable && attempt < cfg.max_retries {
+                    log::warn!(
+                        "다운로드 재시도 {}/{} — {} ({})",
+                        attempt + 1,
+                        cfg.max_retries,
+                        task.url,
+                        e.reason
+                    );
+                    let backoff = cfg
+                        .retry_base_ms
+                        .saturating_mul(1 << attempt.min(5))
+                        .min(30_000);
+                    tokio::time::sleep(Duration::from_millis(backoff)).await;
+                    attempt += 1;
+                } else {
+                    // 재시도 불가(4xx 등) 또는 재시도 소진 — 실제 사유를 로그+에러로 전파
+                    log::error!("다운로드 실패 — {} ({})", task.url, e.reason);
+                    return Err(LauncherError::DownloadFailed {
+                        url: task.url.clone(),
+                        reason: e.reason,
+                        status: e.status,
+                    });
+                }
             }
         }
     }

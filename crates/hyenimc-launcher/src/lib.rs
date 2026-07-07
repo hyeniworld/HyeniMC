@@ -28,8 +28,13 @@ pub enum LauncherError {
         expected: String,
         actual: String,
     },
-    #[error("download failed after {retries} retries: {url}")]
-    DownloadFailed { url: String, retries: u32 },
+    #[error("다운로드 실패 ({reason}): {url}")]
+    DownloadFailed {
+        url: String,
+        reason: String,
+        /// HTTP 상태 코드 (있으면). 호출자가 401/404 등을 구분해 사용자 메시지를 분기하는 데 쓴다.
+        status: Option<u16>,
+    },
     #[error("{0}")]
     Other(String),
 }

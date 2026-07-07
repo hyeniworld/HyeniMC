@@ -2,12 +2,11 @@
 
 use std::path::{Path, PathBuf};
 
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager};
 
 use hyenimc_launcher::hyeni as hy;
 use hyenimc_launcher::workermods;
 
-use crate::account::CryptoState;
 use crate::commands::DbState;
 
 /// 승인 서버 도메인 (기존 shared/config/server-config.ts와 동일)
@@ -57,29 +56,21 @@ pub async fn worker_mods_check(
 #[tauri::command]
 pub async fn worker_mods_install(
     app: AppHandle,
-    db: State<'_, DbState>,
-    crypto: State<'_, CryptoState>,
     profile_path: String,
     updates: Vec<workermods::WorkerModUpdate>,
-    account_id: Option<String>,
 ) -> Result<Vec<String>, String> {
     let base = crate::pack::worker_base()?;
+    let profile_dir = PathBuf::from(&profile_path);
 
-    // 토큰: 지정 계정 또는 가장 최근 사용 계정 (다운로드 인증 필수)
-    let aid = match account_id {
-        Some(a) => a,
-        None => {
-            let conn = db.0.lock().unwrap();
-            hyenimc_core::account::list_accounts(&conn)
-                .map_err(|e| e.to_string())?
-                .first()
-                .map(|a| a.id.clone())
-                .ok_or_else(|| "필수 모드 다운로드에 로그인이 필요합니다".to_string())?
-        }
-    };
-    let token = crate::account::get_valid_tokens(&db, &crypto, &aid).await?.access_token;
+    // 다운로드 인증 토큰 = HyeniHelper config 토큰(딥링크 /인증). game_launch·Electron과 동일 출처.
+    // (기존엔 MS 계정 access_token을 보내 Worker가 401로 거부 — 오이식 수정.
+    //  Worker /download/v2는 config token을 TOKEN_CHECK_API_URL 화이트리스트로 검증한다.)
+    let token = hy::read_hyenihelper_token(&profile_dir).ok_or_else(|| {
+        "모드 업데이트를 위한 인증이 필요합니다.\n\nDiscord에서 /인증 명령어로 인증하세요.".to_string()
+    })?;
 
     let settings = {
+        let db = app.state::<DbState>();
         let conn = db.0.lock().unwrap();
         hyenimc_core::settings::get_settings(&conn).map_err(|e| e.to_string())?
     };

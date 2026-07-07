@@ -45,6 +45,24 @@ fn main() {
                 }
             }
         }))
+        // 파일+콘솔 로깅 (기존 Go 데몬의 상세 로그 대체). log:: 매크로가 여기로 흐른다.
+        // 파일은 OS 로그 디렉터리(Windows %APPDATA%\<id>\logs, macOS ~/Library/Logs/<id>).
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                // Builder::new()는 기본 타깃(Stdout + LogDir)을 이미 포함하고 .target()은 append다.
+                // clear_targets()로 기본 타깃을 지우지 않으면 Stdout이 2개가 되어 모든 로그가 2번씩 찍힌다.
+                .clear_targets()
+                .target(tauri_plugin_log::Target::new(
+                    tauri_plugin_log::TargetKind::Stdout,
+                ))
+                .target(tauri_plugin_log::Target::new(
+                    tauri_plugin_log::TargetKind::LogDir {
+                        file_name: Some("hyenimc".into()),
+                    },
+                ))
+                .level(log::LevelFilter::Info)
+                .build(),
+        )
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
@@ -60,7 +78,7 @@ fn main() {
 
             // 기존 DB in-place 접속 — 실패 시 명시적 에러 (silent 초기화 금지)
             let conn = open_legacy_db().map_err(|e| {
-                eprintln!("[db] legacy DB open failed: {e}");
+                log::error!("[db] legacy DB open failed: {e}");
                 e
             })?;
             app.manage(commands::DbState(Mutex::new(conn)));
@@ -76,7 +94,7 @@ fn main() {
             let device_id = hyenimc_core::crypto::load_or_create_device_id(&data_dir)?;
             app.manage(account::CryptoState { key, device_id });
 
-            println!("[db] legacy DB connected");
+            log::info!("[db] legacy DB connected");
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

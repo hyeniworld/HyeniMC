@@ -1,7 +1,7 @@
 //! 게임 실행/설치 커맨드 (M2b) — 기존 game.ts IPC 핸들러 대응.
 //! 이벤트: download:progress / game:log / game:started / game:stopped (기존 렌더러 리스너와 동일 이름)
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 use std::time::Instant;
 
@@ -23,11 +23,29 @@ struct RunningEntry {
 #[derive(Default)]
 pub struct GameState {
     running: Mutex<HashMap<String, RunningEntry>>,
+    /// 실행 준비(다운로드~spawn 이전) 진행 중인 프로필 — 렌더러 이중 트리거 방어(레이스프리).
+    /// `running`은 spawn 성공 후에야 채워지므로, 그 이전 구간의 중복 호출은 이 집합으로 막는다.
+    launching: Mutex<HashSet<String>>,
     /// 프로필별 최근 로그 링버퍼(최대 500줄) — 종료 후에도 보존(크래시 리포트용)
     pub log_buffers: Mutex<HashMap<String, Vec<String>>>,
 }
 
 const MAX_LOG_LINES: usize = 500;
+
+/// game_launch 진입 시 `launching`에 등록하고, 함수 종료(성공/에러 무관) 시 자동 해제하는 RAII 가드.
+/// 여러 `?` 조기 반환 경로에서도 누수 없이 정리된다.
+struct LaunchGuard {
+    app: AppHandle,
+    profile_id: String,
+}
+
+impl Drop for LaunchGuard {
+    fn drop(&mut self) {
+        if let Some(gs) = self.app.try_state::<GameState>() {
+            gs.launching.lock().unwrap().remove(&self.profile_id);
+        }
+    }
+}
 
 impl GameState {
     pub fn push_log(&self, profile_id: &str, line: String) {
@@ -137,13 +155,21 @@ async fn ensure_profile_version(
     let app2 = app.clone();
     let profile_id = profile.id.clone();
     let detail = ensure_version(&http, url.as_deref(), &version_id, dirs, cfg, move |p| {
+        // 렌더러(useDownloadProgress)는 `percent`로 모달 표시를 트리거하고 `totalTasks`/`completedTasks`로
+        // 바를 채운다. 기존 `completed`/`total`만 보내면 total이 '현재 파일 바이트'로 오해석되어 바가 안 뜬다.
+        let percent = if p.total > 0 {
+            (p.completed as f64 / p.total as f64) * 100.0
+        } else {
+            0.0
+        };
         let _ = app2.emit(
             "download:progress",
             serde_json::json!({
                 "profileId": profile_id,
                 "phase": p.phase,
-                "completed": p.completed,
-                "total": p.total,
+                "percent": percent,
+                "totalTasks": p.total,
+                "completedTasks": p.completed,
                 "currentFile": p.current_file,
             }),
         );
@@ -286,6 +312,18 @@ pub async fn game_launch(
         return Err(format!("프로필 {profile_id}이(가) 이미 실행 중입니다"));
     }
 
+    // 중복 실행 준비 방지 — 더블클릭 등으로 인한 동시 실행 방어. 렌더러 가드(isLaunching state)는
+    // 비동기라 같은 tick 중복을 못 막으므로 서버측 레이스프리 가드로 보강(중복 다운로드·이중 spawn 방지).
+    // 이미 준비 중이면 에러 대신 조용히 무시(진행 중인 실행이 이벤트를 몰아주므로 중복 모달 방지).
+    let _launch_guard = {
+        let mut launching = game_state.launching.lock().unwrap();
+        if !launching.insert(profile_id.clone()) {
+            log::warn!("게임 실행 중복 호출 무시(이미 준비 중): {profile_id}");
+            return Ok(());
+        }
+        LaunchGuard { app: app.clone(), profile_id: profile_id.clone() }
+    };
+
     // 계정 필수 — 오프라인 미지원(정품 온라인 서버 전용). 다운로드 전에 차단.
     // 미선택뿐 아니라 '선택된 id가 삭제되어 실존하지 않는 경우'도 여기서 명확히 거른다.
     match &account_id {
@@ -312,6 +350,14 @@ pub async fn game_launch(
     };
     let dirs = game_dirs_for(&profile)?;
     let cfg = download_config(&settings);
+
+    log::info!(
+        "게임 실행 시작: profile={profile_id} game_version={} loader={} loader_version={:?} dir={}",
+        profile.game_version,
+        profile.loader_type,
+        profile.loader_version,
+        profile.game_directory
+    );
 
     // ⓪ 실행 전 팩 게이트 (breaking 차단 / 서버 접근 불가 시 정책)
     crate::pack::pre_launch_pack_gate(&dirs, &settings).await?;
@@ -393,9 +439,16 @@ pub async fn game_launch(
             .await
             .map_err(|e| e.to_string())?;
             if !updates.is_empty() {
-                let token = hyenimc_launcher::hyeni::read_hyenihelper_token(&game_dir).ok_or_else(
-                    || "모드 업데이트를 위한 인증이 필요합니다.\n\nDiscord에서 /인증 명령어로 인증하세요.".to_string(),
-                )?;
+                let token = match hyenimc_launcher::hyeni::read_hyenihelper_token(&game_dir) {
+                    Some(t) => t,
+                    None => {
+                        log::warn!(
+                            "워커 모드 {}건 업데이트 필요하나 인증 토큰 없음 (config/hyenihelper-config.json) — 실행 중단",
+                            updates.len()
+                        );
+                        return Err("모드 업데이트를 위한 인증이 필요합니다.\n\nDiscord에서 /인증 명령어로 인증하세요.".to_string());
+                    }
+                };
                 let app_log = app.clone();
                 let pid = profile_id.clone();
                 hyenimc_launcher::workermods::install_updates(
@@ -403,7 +456,17 @@ pub async fn game_launch(
                     move |name, pct| {
                         let _ = app_log.emit(
                             "game:log",
-                            serde_json::json!({ "profileId": pid, "line": format!("[worker-mods] {name} {pct}%") }),
+                            serde_json::json!({ "profileId": &pid, "line": format!("[worker-mods] {name} {pct}%") }),
+                        );
+                        // 워커 모드 단계도 진행률 바에 표시 (베이스 다운로드와 동일 이벤트)
+                        let _ = app_log.emit(
+                            "download:progress",
+                            serde_json::json!({
+                                "profileId": &pid,
+                                "phase": "worker-mods",
+                                "percent": pct,
+                                "currentFile": name,
+                            }),
                         );
                     },
                 )
