@@ -99,7 +99,7 @@ func (r *ModRepository) Get(id string) (*domain.Mod, error) {
 	var sourceModID, sourceFileID sql.NullString
 	
 	err := r.db.QueryRow(`
-		SELECT id, profile_id, file_name, file_path, file_hash, file_size,
+		SELECT id, profile_id, file_name, file_path, COALESCE(file_hash, '') AS file_hash, file_size,
 			mod_id, name, version, description, authors, enabled, source,
 			source_mod_id, source_file_id,
 			last_modified, created_at, updated_at
@@ -136,7 +136,7 @@ func (r *ModRepository) Get(id string) (*domain.Mod, error) {
 // ListByProfile retrieves all mods for a profile
 func (r *ModRepository) ListByProfile(profileID string) ([]*domain.Mod, error) {
 	rows, err := r.db.Query(`
-		SELECT id, profile_id, file_name, file_path, file_hash, file_size,
+		SELECT id, profile_id, file_name, file_path, COALESCE(file_hash, '') AS file_hash, file_size,
 			mod_id, name, version, description, authors, enabled, source,
 			source_mod_id, source_file_id,
 			last_modified, created_at, updated_at
@@ -213,7 +213,7 @@ func (r *ModRepository) GetByFileName(profileID, fileName string) (*domain.Mod, 
 	var sourceModID, sourceFileID sql.NullString
 	
 	err := r.db.QueryRow(`
-		SELECT id, profile_id, file_name, file_path, file_hash, file_size,
+		SELECT id, profile_id, file_name, file_path, COALESCE(file_hash, '') AS file_hash, file_size,
 			mod_id, name, version, description, authors, enabled, source,
 			source_mod_id, source_file_id,
 			last_modified, created_at, updated_at
