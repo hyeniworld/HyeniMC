@@ -184,6 +184,17 @@ pub async fn loader_get_versions(
             list.reverse();
             Ok(list)
         }
+        "forge" => {
+            let all = hyenimc_launcher::loader::forge_versions(&http, &game_version)
+                .await
+                .map_err(|e| e.to_string())?;
+            let mut list: Vec<_> = all
+                .into_iter()
+                .map(|v| hyenimc_launcher::loader::LoaderVersion { stable: true, version: v })
+                .collect();
+            list.reverse();
+            Ok(list)
+        }
         other => Err(format!("지원하지 않는 로더: {other}")),
     }
 }
@@ -284,6 +295,16 @@ pub async fn game_launch(
             let app_log = app.clone();
             let pid = profile_id.clone();
             hyenimc_launcher::loader::install_neoforge(&http, &loader_version, &java_path, &dirs, &cfg, move |line| {
+                let _ = app_log.emit("game:log", serde_json::json!({ "profileId": pid, "line": line }));
+            })
+            .await
+            .map_err(|e| e.to_string())?
+        }
+        "forge" if !loader_version.is_empty() => {
+            let _ = app.emit("game:log", serde_json::json!({ "profileId": profile_id, "line": "[loader] Forge 설치 확인 중..." }));
+            let app_log = app.clone();
+            let pid = profile_id.clone();
+            hyenimc_launcher::loader::install_forge(&http, &loader_version, &java_path, &dirs, &cfg, move |line| {
                 let _ = app_log.emit("game:log", serde_json::json!({ "profileId": pid, "line": line }));
             })
             .await

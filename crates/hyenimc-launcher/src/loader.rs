@@ -1,4 +1,4 @@
-//! 모드로더 설치 — Fabric(meta API profile json) / NeoForge(installer --install-client).
+//! 모드로더 설치 — Fabric(meta API profile json) / NeoForge·Forge(installer client).
 //! TS fabric-loader.ts / neoforge-loader.ts 의미 포팅.
 
 use serde::{Deserialize, Serialize};
@@ -11,6 +11,7 @@ use crate::LauncherError;
 
 const FABRIC_META: &str = "https://meta.fabricmc.net/v2/versions/loader";
 const NEOFORGE_MAVEN: &str = "https://maven.neoforged.net/releases/net/neoforged/neoforge";
+const FORGE_MAVEN: &str = "https://maven.minecraftforge.net/net/minecraftforge/forge";
 const FABRIC_FALLBACK_REPOS: [&str; 2] =
     ["https://maven.fabricmc.net/", "https://repo1.maven.org/maven2/"];
 
@@ -27,6 +28,19 @@ pub fn fabric_version_id(game: &str, loader: &str) -> String {
 
 pub fn neoforge_version_id(version: &str) -> String {
     format!("neoforge-{version}")
+}
+
+/// Forge maven 버전 `1.20.1-47.4.20` → installer가 생성하는 버전 id `1.20.1-forge-47.4.20`.
+pub fn forge_version_id(forge_maven_version: &str) -> String {
+    match forge_maven_version.split_once('-') {
+        Some((mc, build)) => format!("{mc}-forge-{build}"),
+        None => forge_maven_version.to_string(),
+    }
+}
+
+/// Forge maven 버전이 주어진 MC 버전용인지 — `<mc>-<build>` 프리픽스 매칭.
+pub fn forge_matches_mc(forge_version: &str, mc_version: &str) -> bool {
+    forge_version.starts_with(&format!("{mc_version}-"))
 }
 
 /// MC 버전 → 매칭할 NeoForge 버전 프리픽스(끝에 `.` 포함).
@@ -161,16 +175,21 @@ pub async fn install_fabric(
     Ok(version_id)
 }
 
-/// NeoForge 설치 — installer jar를 받아 --install-client 실행. 반환: 버전 id.
-pub async fn install_neoforge(
+/// Forge 계열(NeoForge/Forge) installer 공통 실행 로직.
+/// installer jar 다운로드 → `java -jar … <install_arg> <instance_dir>` → 버전 json 생성 확인.
+#[allow(clippy::too_many_arguments)]
+async fn run_forge_family_installer(
     http: &reqwest::Client,
-    neoforge_version: &str,
+    installer_url: String,
+    installer_filename: String,
+    install_arg: &str,
+    version_id: String,
+    loader_label: &str,
     java_path: &str,
     dirs: &GameDirs,
     cfg: &DownloadConfig,
     mut on_log: impl FnMut(String) + Send + 'static,
 ) -> Result<String, LauncherError> {
-    let version_id = neoforge_version_id(neoforge_version);
     if dirs.version_json(&version_id).exists() {
         return Ok(version_id);
     }
@@ -182,14 +201,11 @@ pub async fn install_neoforge(
         tokio::fs::write(&profiles_path, r#"{"profiles":{}}"#).await?;
     }
 
-    let temp_dir = dirs.instance_dir.join(".temp");
-    let installer = temp_dir.join(format!("neoforge-{neoforge_version}-installer.jar"));
+    let installer = dirs.instance_dir.join(".temp").join(&installer_filename);
     download_all(
         http,
         vec![DownloadTask {
-            url: format!(
-                "{NEOFORGE_MAVEN}/{neoforge_version}/neoforge-{neoforge_version}-installer.jar"
-            ),
+            url: installer_url,
             dest: installer.clone(),
             sha1: None,
             sha256: None,
@@ -204,7 +220,7 @@ pub async fn install_neoforge(
     cmd.args([
         "-jar",
         &installer.display().to_string(),
-        "--install-client",
+        install_arg,
         &dirs.instance_dir.display().to_string(),
     ])
     .stdout(std::process::Stdio::piped())
@@ -218,23 +234,89 @@ pub async fn install_neoforge(
         .chain(String::from_utf8_lossy(&output.stderr).lines())
     {
         if !line.trim().is_empty() {
-            on_log(format!("[neoforge-installer] {line}"));
+            on_log(format!("[{loader_label}-installer] {line}"));
         }
     }
     let _ = tokio::fs::remove_file(&installer).await;
 
     if !output.status.success() {
         return Err(LauncherError::Other(format!(
-            "NeoForge installer 실패 (exit {:?})",
+            "{loader_label} installer 실패 (exit {:?})",
             output.status.code()
         )));
     }
     if !dirs.version_json(&version_id).exists() {
-        return Err(LauncherError::Other(
-            "NeoForge installer가 버전 json을 생성하지 않음".into(),
-        ));
+        return Err(LauncherError::Other(format!(
+            "{loader_label} installer가 버전 json을 생성하지 않음"
+        )));
     }
     Ok(version_id)
+}
+
+/// NeoForge 설치 — installer jar를 받아 `--install-client` 실행. 반환: 버전 id.
+pub async fn install_neoforge(
+    http: &reqwest::Client,
+    neoforge_version: &str,
+    java_path: &str,
+    dirs: &GameDirs,
+    cfg: &DownloadConfig,
+    on_log: impl FnMut(String) + Send + 'static,
+) -> Result<String, LauncherError> {
+    run_forge_family_installer(
+        http,
+        format!("{NEOFORGE_MAVEN}/{neoforge_version}/neoforge-{neoforge_version}-installer.jar"),
+        format!("neoforge-{neoforge_version}-installer.jar"),
+        "--install-client",
+        neoforge_version_id(neoforge_version),
+        "NeoForge",
+        java_path,
+        dirs,
+        cfg,
+        on_log,
+    )
+    .await
+}
+
+/// Forge maven-metadata에서 주어진 MC 버전용 버전 목록(최신 정렬 전, maven 원순).
+pub async fn forge_versions(
+    http: &reqwest::Client,
+    mc_version: &str,
+) -> Result<Vec<String>, LauncherError> {
+    let xml = http
+        .get(format!("{FORGE_MAVEN}/maven-metadata.xml"))
+        .send()
+        .await?
+        .error_for_status()?
+        .text()
+        .await?;
+    Ok(parse_maven_versions(&xml)
+        .into_iter()
+        .filter(|v| forge_matches_mc(v, mc_version))
+        .collect())
+}
+
+/// Forge 설치 — installer jar를 받아 `--installClient` 실행. 반환: 버전 id.
+pub async fn install_forge(
+    http: &reqwest::Client,
+    forge_version: &str,
+    java_path: &str,
+    dirs: &GameDirs,
+    cfg: &DownloadConfig,
+    on_log: impl FnMut(String) + Send + 'static,
+) -> Result<String, LauncherError> {
+    run_forge_family_installer(
+        http,
+        format!("{FORGE_MAVEN}/{forge_version}/forge-{forge_version}-installer.jar"),
+        format!("forge-{forge_version}-installer.jar"),
+        "--installClient",
+        forge_version_id(forge_version),
+        "Forge",
+        java_path,
+        dirs,
+        cfg,
+        on_log,
+    )
+    .await
 }
 
 #[cfg(test)]
@@ -267,6 +349,18 @@ mod tests {
         assert!(!neoforge_matches_mc("26.1.2.78", "26.1"));
         assert!(neoforge_matches_mc("26.1.2.78", "26.1.2"));
         assert!(!neoforge_matches_mc("26.1.1.9", "26.1.2"));
+    }
+
+    #[test]
+    fn forge_version_id_and_matching() {
+        // maven `<mc>-<build>` → installer id `<mc>-forge-<build>`
+        assert_eq!(forge_version_id("1.20.1-47.4.20"), "1.20.1-forge-47.4.20");
+        assert_eq!(forge_version_id("26.2-65.0.2"), "26.2-forge-65.0.2");
+        // MC prefix 매칭('-' 경계로 1.20.1 vs 1.20.10 구분)
+        assert!(forge_matches_mc("1.20.1-47.4.20", "1.20.1"));
+        assert!(!forge_matches_mc("1.20.10-47.4.20", "1.20.1"));
+        assert!(forge_matches_mc("26.2-65.0.2", "26.2"));
+        assert!(!forge_matches_mc("1.19.2-43.2.0", "1.20.1"));
     }
 
     #[test]

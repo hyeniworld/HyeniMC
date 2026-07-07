@@ -23,6 +23,11 @@ async fn main() {
             let list = hyenimc_launcher::loader::fabric_loader_versions(&http, &mc).await.unwrap();
             println!("fabric {}개, 샘플 {:?}", list.len(), list.iter().take(3).collect::<Vec<_>>());
         }
+        "forge" => {
+            let list = hyenimc_launcher::loader::forge_versions(&http, &mc).await.unwrap();
+            println!("forge {mc} 매칭 {}개", list.len());
+            println!("최신 샘플: {:?}", list.iter().rev().take(5).collect::<Vec<_>>());
+        }
         other => eprintln!("알 수 없는 로더: {other}"),
     }
 }

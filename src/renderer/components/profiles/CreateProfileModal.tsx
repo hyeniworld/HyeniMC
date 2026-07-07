@@ -434,6 +434,7 @@ export function CreateProfileModal({ isOpen, onClose, onSuccess, initialModpackI
                 <option value="vanilla">바닐라</option>
                 <option value="fabric">Fabric</option>
                 <option value="neoforge">NeoForge</option>
+                <option value="forge">Forge</option>
               </select>
             </div>
           </div>
@@ -443,7 +444,7 @@ export function CreateProfileModal({ isOpen, onClose, onSuccess, initialModpackI
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="text-sm font-semibold text-gray-300">
-                  {formData.loaderType === 'fabric' ? 'Fabric' : 'NeoForge'} 버전
+                  {formData.loaderType === 'fabric' ? 'Fabric' : formData.loaderType === 'forge' ? 'Forge' : 'NeoForge'} 버전
                 </label>
                 <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer hover:text-gray-300 transition-colors">
                   <input
