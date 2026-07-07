@@ -86,21 +86,37 @@ pub struct WorkerModUpdate {
 
 /// 파일명에서 버전 추출 — 마지막 `x.y.z(-suffix)?` 세그먼트.
 /// "hyenihelper-fabric-1.21.1-1.0.5" → "1.0.5", "FastSuite-1.21.1-6.0.5" → "6.0.5"
+/// pre-release 접미사(버전 뒤에 붙는 `-SNAPSHOT`/`-beta` 등). 로더명(neoforge 등)과 구분.
+const PRERELEASE_SUFFIXES: [&str; 6] = ["snapshot", "beta", "rc", "alpha", "pre", "dev"];
+
 pub fn parse_mod_version(file_stem: &str) -> Option<String> {
     // x.y.z(3자리)를 우선하되, 없으면 x.y(2자리)도 허용.
-    // 예: `HyeniAdditionalFunctions-neoforge-1.0-SNAPSHOT` → "1.0" (3자리 부재).
-    let mut last3: Option<String> = None;
-    let mut last2: Option<String> = None;
-    for seg in file_stem.split('-') {
+    // 버전 세그먼트 뒤에 pre-release 접미사(-SNAPSHOT 등)가 오면 표시용으로 붙인다.
+    // 예: `HyeniAdditionalFunctions-neoforge-1.0-SNAPSHOT` → "1.0-SNAPSHOT".
+    let segs: Vec<&str> = file_stem.split('-').collect();
+    let mut best: Option<usize> = None;
+    let mut best_is3 = false;
+    for (i, seg) in segs.iter().enumerate() {
         let core = seg.split('+').next().unwrap_or(seg);
         let parts: Vec<&str> = core.split('.').collect();
-        if parts.len() >= 3 && parts.iter().take(3).all(|p| p.parse::<u32>().is_ok()) {
-            last3 = Some(core.to_string());
-        } else if parts.len() == 2 && parts.iter().all(|p| p.parse::<u32>().is_ok()) {
-            last2 = Some(core.to_string());
+        let is3 = parts.len() >= 3 && parts.iter().take(3).all(|p| p.parse::<u32>().is_ok());
+        let is2 = parts.len() == 2 && parts.iter().all(|p| p.parse::<u32>().is_ok());
+        if is3 {
+            best = Some(i);
+            best_is3 = true;
+        } else if is2 && !best_is3 {
+            best = Some(i);
         }
     }
-    last3.or(last2)
+    let idx = best?;
+    let mut version = segs[idx].split('+').next().unwrap_or(segs[idx]).to_string();
+    if let Some(next) = segs.get(idx + 1) {
+        let lower = next.to_lowercase();
+        if PRERELEASE_SUFFIXES.iter().any(|p| lower.starts_with(p)) {
+            version = format!("{version}-{next}");
+        }
+    }
+    Some(version)
 }
 
 fn version_key(v: &str) -> Vec<u32> {
@@ -353,20 +369,22 @@ mod tests {
 
     #[test]
     fn parses_x_y_snapshot_version() {
-        // HAF `-1.0-SNAPSHOT`처럼 x.y.z(3자리)가 없고 x.y만 있는 경우도 인식
-        assert_eq!(parse_mod_version("HyeniAdditionalFunctions-neoforge-1.0-SNAPSHOT").as_deref(), Some("1.0"));
-        // 3자리가 있으면 그쪽을 우선
+        // HAF `-1.0-SNAPSHOT`: x.y(2자리) + pre-release 접미사를 표시용으로 포함
+        assert_eq!(parse_mod_version("HyeniAdditionalFunctions-neoforge-1.0-SNAPSHOT").as_deref(), Some("1.0-SNAPSHOT"));
+        // 3자리가 있으면 그쪽을 우선, 로더명(neoforge)은 접미사로 붙지 않음
         assert_eq!(parse_mod_version("hyenihelper-neoforge-1.21.1-1.0.1").as_deref(), Some("1.0.1"));
         assert_eq!(parse_mod_version("HyeniAdditionalFunctions-neoforge-1.0.2").as_deref(), Some("1.0.2"));
+        // SNAPSHOT은 숫자 비교 시 무시되어 업데이트 감지 정상
+        assert!(is_newer_version("1.0.5", "1.0-SNAPSHOT"));
     }
 
     #[test]
     fn installed_detected_even_when_version_unparseable() {
-        // SNAPSHOT jar도 설치로 인식(파일 존재 기준)
+        // SNAPSHOT jar도 설치로 인식(파일 존재 기준) + 표시 버전에 접미사 포함
         let tmp = tempfile::tempdir().unwrap();
         std::fs::write(tmp.path().join("HyeniAdditionalFunctions-neoforge-1.0-SNAPSHOT.jar"), b"x").unwrap();
         assert!(!find_mod_files(tmp.path(), "hyeniadditionalfunctions").is_empty());
-        assert_eq!(local_mod_version(tmp.path(), "hyeniadditionalfunctions").as_deref(), Some("1.0"));
+        assert_eq!(local_mod_version(tmp.path(), "hyeniadditionalfunctions").as_deref(), Some("1.0-SNAPSHOT"));
     }
 
     #[test]

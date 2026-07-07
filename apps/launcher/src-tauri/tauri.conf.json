@@ -19,7 +19,8 @@
         "height": 900,
         "minWidth": 1024,
         "minHeight": 700,
-        "titleBarStyle": "Overlay"
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
       }
     ],
     "security": {

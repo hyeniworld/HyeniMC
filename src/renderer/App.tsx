@@ -124,15 +124,13 @@ function MainLayout() {
       {/* Header */}
       <header className={`border-b border-gray-800 bg-gray-900/80 backdrop-blur-md z-50 shadow-lg flex-shrink-0 transition-all duration-300 ${updateAvailable ? 'mt-[68px]' : ''}`}>
         <div className="container mx-auto px-6 py-4 relative">
-          {/* macOS: Draggable area for window movement - covers entire header */}
-          {isMacOS && (
-            <div 
-              className="absolute inset-0" 
-              style={{ WebkitAppRegion: 'drag' } as any}
-            />
-          )}
-          
-          <div className="flex items-center justify-between relative z-10">
+          {/* 헤더 빈 영역 드래그로 창 이동. data-tauri-drag-region=Tauri, WebkitAppRegion=Electron.
+              Tauri는 인터랙티브 자식(button/a/input)을 자동 제외하므로 컨테이너에 직접 지정. */}
+          <div
+            className="flex items-center justify-between relative z-10"
+            {...(isMacOS ? { 'data-tauri-drag-region': true } : {})}
+            style={isMacOS ? ({ WebkitAppRegion: 'drag' } as any) : undefined}
+          >
             <div className={`flex items-center gap-3 ${isMacOS ? 'ml-20' : ''}`}>
               <div className="w-10 h-10 bg-gradient-to-br from-hyeni-pink-600 via-hyeni-pink-500 to-hyeni-pink-600 rounded-xl shadow-lg flex items-center justify-center">
                 <Sparkles className="w-6 h-6" />
