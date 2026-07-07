@@ -367,6 +367,16 @@ export const ProfileDetailPage: React.FC = () => {
         {activeTab === 'shaderpacks' && profileId && <ShaderPackList profileId={profileId} />}
         {activeTab === 'settings' && <ProfileSettingsTab profile={profile} onUpdate={loadProfile} />}
       </div>
+
+      <ConfirmModal
+        open={showStopConfirm}
+        title="게임 중단"
+        message="정말로 게임을 중단하시겠습니까?"
+        confirmLabel="중단"
+        danger
+        onConfirm={performStop}
+        onCancel={() => setShowStopConfirm(false)}
+      />
     </div>
   );
 };
@@ -609,16 +619,6 @@ const OverviewTab: React.FC<{ profile: any }> = ({ profile }) => {
           </div>
         </div>
       )}
-
-      <ConfirmModal
-        open={showStopConfirm}
-        title="게임 중단"
-        message="정말로 게임을 중단하시겠습니까?"
-        confirmLabel="중단"
-        danger
-        onConfirm={performStop}
-        onCancel={() => setShowStopConfirm(false)}
-      />
     </div>
   );
 };
