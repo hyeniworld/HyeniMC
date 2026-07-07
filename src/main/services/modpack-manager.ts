@@ -1,5 +1,6 @@
 import { ModrinthAPI } from './modrinth-api';
 import { downloadRpc } from '../grpc/clients';
+import { metadataManager, InstalledModMeta } from './metadata-manager';
 import axios from 'axios';
 import * as path from 'path';
 import * as fs from 'fs/promises';
@@ -303,6 +304,9 @@ export class ModpackManager {
       });
 
       const files = manifest.files || [];
+      // 다운로드한 Modrinth 모드의 출처 메타 수집 → export 시 CDN 링크 피닝(jar 동봉 방지)
+      const modMetaEntries: Record<string, InstalledModMeta> = {};
+      const metaNowIso = new Date().toISOString();
       for (let i = 0; i < files.length; i++) {
         // 취소 체크
         if (this.activeInstalls.get(profileId)?.cancelled) {
@@ -363,8 +367,43 @@ export class ModpackManager {
               }
             );
           });
+
+          // 출처 메타 기록 (Modrinth CDN URL에서 projectId/versionId 추출) — mods/ 파일만.
+          // 이게 있어야 export에서 jar 동봉 대신 CDN 링크로 피닝된다(수동 +모드검색과 동일 취급).
+          const mr = parseModrinthCdnUrl(url);
+          const isModPath = relativePath.startsWith('mods/') || relativePath.startsWith('mods\\');
+          if (mr && isModPath) {
+            modMetaEntries[path.basename(relativePath)] = {
+              source: 'modrinth',
+              sourceModId: mr.projectId,
+              sourceFileId: mr.versionId,
+              versionNumber: mr.versionId,
+              installedAt: metaNowIso,
+            };
+          }
         } catch (error) {
           console.error(`[ModpackManager] Failed to download ${relativePath}:`, error);
+        }
+      }
+
+      // 4.5 다운로드한 Modrinth 모드들의 출처 메타를 mods 통합 메타에 일괄 기록(1회 쓰기).
+      //     export 시 hyenipack이 jar 동봉 대신 CDN 링크로 피닝하게 하는 핵심.
+      if (Object.keys(modMetaEntries).length > 0) {
+        try {
+          const modsMetaDir = path.join(instanceDir, 'mods');
+          let unified = await metadataManager.readUnifiedMetadata(modsMetaDir);
+          if (!unified) {
+            unified = await metadataManager.createUnifiedMetadata(modsMetaDir, {
+              source: 'manual',
+              modpackName: manifest.name,
+              modpackVersion: manifest.versionId,
+            });
+          }
+          Object.assign(unified.mods, modMetaEntries);
+          await metadataManager.writeUnifiedMetadata(modsMetaDir, unified);
+          console.log(`[ModpackManager] Recorded source metadata for ${Object.keys(modMetaEntries).length} mods (export 링크 피닝용)`);
+        } catch (e) {
+          console.error('[ModpackManager] Failed to write mod source metadata:', e);
         }
       }
 
@@ -998,6 +1037,9 @@ export class ModpackManager {
     });
 
     const files = manifest.files || [];
+    // 출처 메타 수집 → export CDN 링크 피닝(jar 동봉 방지). 파일 import 경로도 온라인과 동일 처리.
+    const modMetaEntries: Record<string, InstalledModMeta> = {};
+    const metaNowIso = new Date().toISOString();
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       const progress = 30 + Math.floor(((i + 1) / files.length) * 50);
@@ -1013,12 +1055,45 @@ export class ModpackManager {
       await fs.mkdir(path.dirname(filePath), { recursive: true });
 
       try {
-        const response = await axios.get(file.downloads?.[0], {
+        const url = file.downloads?.[0];
+        const response = await axios.get(url, {
           responseType: 'arraybuffer',
         });
         await fs.writeFile(filePath, response.data);
+
+        const mr = url ? parseModrinthCdnUrl(url) : null;
+        const isModPath = relativePath.startsWith('mods/') || relativePath.startsWith('mods\\');
+        if (mr && isModPath) {
+          modMetaEntries[path.basename(relativePath)] = {
+            source: 'modrinth',
+            sourceModId: mr.projectId,
+            sourceFileId: mr.versionId,
+            versionNumber: mr.versionId,
+            installedAt: metaNowIso,
+          };
+        }
       } catch (error) {
         console.error(`[ModpackManager] Failed to download ${relativePath}:`, error);
+      }
+    }
+
+    // 다운로드한 Modrinth 모드들의 출처 메타를 mods 통합 메타에 1회 기록 (export 링크 피닝용).
+    if (Object.keys(modMetaEntries).length > 0) {
+      try {
+        const modsMetaDir = path.join(instanceDir, 'mods');
+        let unified = await metadataManager.readUnifiedMetadata(modsMetaDir);
+        if (!unified) {
+          unified = await metadataManager.createUnifiedMetadata(modsMetaDir, {
+            source: 'manual',
+            modpackName: manifest.name,
+            modpackVersion: manifest.versionId,
+          });
+        }
+        Object.assign(unified.mods, modMetaEntries);
+        await metadataManager.writeUnifiedMetadata(modsMetaDir, unified);
+        console.log(`[ModpackManager] Recorded source metadata for ${Object.keys(modMetaEntries).length} mods (file import)`);
+      } catch (e) {
+        console.error('[ModpackManager] Failed to write mod source metadata:', e);
       }
     }
 
@@ -1163,6 +1238,16 @@ export class ModpackManager {
  * Normalize relative paths from manifests to prevent leading separators
  * and strip optional leading 'minecraft/' used by some pack formats.
  */
+/**
+ * Modrinth CDN URL에서 projectId/versionId 추출.
+ * 형식: https://cdn.modrinth.com/data/{projectId}/versions/{versionId}/{fileName}
+ * (export 시 hyenipack이 이 정보로 CDN 링크를 피닝해 jar 동봉을 생략한다)
+ */
+function parseModrinthCdnUrl(url: string): { projectId: string; versionId: string } | null {
+  const m = url.match(/cdn\.modrinth\.com\/data\/([^/]+)\/versions\/([^/]+)\//);
+  return m ? { projectId: m[1], versionId: m[2] } : null;
+}
+
 function normalizeRelativePath(p: string): string {
   let rp = p.replace(/^[\\/]+/, '');
   if (rp.startsWith('minecraft/')) rp = rp.substring('minecraft/'.length);
