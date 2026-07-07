@@ -14,7 +14,7 @@ import { useWorkerModUpdates } from '../hooks/useWorkerModUpdates';
 import { useDownloadStore } from '../store/downloadStore';
 import { useToast } from '../contexts/ToastContext';
 import { IPC_EVENTS } from '../../shared/constants/ipc';
-import { Package, Trash2 } from 'lucide-react';
+import { Package, Trash2, Loader2 } from 'lucide-react';
 
 type TabType = 'overview' | 'mods' | 'resourcepacks' | 'shaderpacks' | 'settings';
 
@@ -474,16 +474,19 @@ const OverviewTab: React.FC<{ profile: any }> = ({ profile }) => {
     setShowExportModal(true);
   };
 
+  const [deleting, setDeleting] = useState(false);
+
   const handleDelete = async () => {
     if (!profile?.id) return;
-    
+    setDeleting(true);
     try {
       await window.electronAPI.profile.delete(profile.id);
       toast.success('성공', '프로필이 삭제되었습니다.');
-      navigate('/');
+      navigate('/'); // 성공 시 이 페이지 언마운트 → 스피너 자연 종료
     } catch (error) {
       console.error('Failed to delete profile:', error);
       toast.error('오류', '프로필 삭제에 실패했습니다.');
+      setDeleting(false);
     }
   };
 
@@ -602,17 +605,16 @@ const OverviewTab: React.FC<{ profile: any }> = ({ profile }) => {
             </p>
             <div className="flex gap-3">
               <button
-                onClick={() => {
-                  handleDelete();
-                  setShowDeleteConfirm(false);
-                }}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded-lg font-medium transition-colors"
+                onClick={() => handleDelete()}
+                disabled={deleting}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded-lg font-medium transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
               >
-                삭제
+                {deleting ? (<><Loader2 className="w-4 h-4 animate-spin" /> 삭제 중...</>) : '삭제'}
               </button>
               <button
                 onClick={() => setShowDeleteConfirm(false)}
-                className="flex-1 btn-secondary"
+                disabled={deleting}
+                className="flex-1 btn-secondary disabled:opacity-60"
               >
                 취소
               </button>

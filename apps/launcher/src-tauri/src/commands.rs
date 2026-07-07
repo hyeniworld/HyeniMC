@@ -76,14 +76,33 @@ pub fn profile_update(
 }
 
 #[tauri::command]
-pub fn profile_delete(db: State<DbState>, id: String) -> Result<bool, String> {
-    let conn = db.0.lock().unwrap();
-    if let Ok(Some(p)) = hyenimc_core::profile::get_profile(&conn, &id) {
-        if !p.game_directory.is_empty() {
-            let _ = std::fs::remove_dir_all(&p.game_directory); // best-effort
-        }
+pub async fn profile_delete(db: State<'_, DbState>, id: String) -> Result<bool, String> {
+    // 1) game_directory 읽기 (짧은 락)
+    let game_dir = {
+        let conn = db.0.lock().unwrap();
+        hyenimc_core::profile::get_profile(&conn, &id)
+            .ok()
+            .flatten()
+            .map(|p| p.game_directory)
+            .filter(|d| !d.is_empty())
+    };
+
+    // 2) 파일 먼저 삭제 — blocking 풀에서(락 미보유 → UI/다른 DB 작업 안 막힘, 프리즈 해소).
+    //    순서가 중요: 파일→DB. 삭제 도중 앱을 강제 종료하면 DB 행이 아직 남아 프로필이 그대로
+    //    보이고 다시 삭제할 수 있다. 만약 DB를 먼저 지우면 "기록 없는 잔여 파일(orphan)"이 남는다.
+    if let Some(dir) = game_dir {
+        let _ = tauri::async_runtime::spawn_blocking(move || {
+            let _ = std::fs::remove_dir_all(&dir);
+        })
+        .await;
     }
-    hyenimc_core::profile::delete_profile(&conn, &id).map_err(|e| e.to_string())
+
+    // 3) 파일 정리 후 DB 행 삭제 (짧은 락)
+    let deleted = {
+        let conn = db.0.lock().unwrap();
+        hyenimc_core::profile::delete_profile(&conn, &id).map_err(|e| e.to_string())?
+    };
+    Ok(deleted)
 }
 
 #[tauri::command]

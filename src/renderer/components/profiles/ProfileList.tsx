@@ -26,6 +26,7 @@ export function ProfileList() {
   const [exportingProfile, setExportingProfile] = useState<any>(null);
   const [confirmStopId, setConfirmStopId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const showDownload = useDownloadStore(s => s.show);
   const setDl = useDownloadStore(s => s.setProgress);
   const resetDownload = useDownloadStore(s => s.reset);
@@ -204,6 +205,7 @@ export function ProfileList() {
 
   const performDelete = async (profileId: string) => {
     setConfirmDeleteId(null);
+    setDeletingId(profileId);
     try {
       await window.electronAPI.profile.delete(profileId);
       toast.success('삭제 완료', '프로필이 삭제되었습니다.');
@@ -212,6 +214,8 @@ export function ProfileList() {
       console.error('Failed to delete profile:', err);
       const errorMsg = err instanceof Error ? err.message : '프로필 삭제에 실패했습니다.';
       toast.error('삭제 실패', errorMsg);
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -300,13 +304,25 @@ export function ProfileList() {
         /* Profile Grid */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {profiles.map((profile) => (
-            <div 
-              key={profile.id} 
-              onClick={() => navigate(`/profile/${profile.id}`)}
+            <div
+              key={profile.id}
+              onClick={() => { if (deletingId === profile.id) return; navigate(`/profile/${profile.id}`); }}
               className={`card hover:border-hyeni-pink-500 hover:shadow-lg hover:shadow-hyeni-pink-500/10 transition-all duration-200 group cursor-pointer relative ${
                 profile.favorite ? 'ring-2 ring-yellow-400/50 bg-gradient-to-br from-yellow-900/10' : ''
               }`}
             >
+              {/* 삭제 중 오버레이 (파일 정리 동안 표시 — 프리즈 대신 명시적 피드백) */}
+              {deletingId === profile.id && (
+                <div
+                  className="absolute inset-0 bg-gray-900/70 backdrop-blur-sm rounded-xl flex items-center justify-center z-30"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center gap-2 text-gray-200 text-sm font-medium">
+                    <Loader2 className="w-4 h-4 animate-spin" /> 삭제 중...
+                  </div>
+                </div>
+              )}
+
               {/* Favorite Badge */}
               {profile.favorite && (
                 <div className="absolute top-0 left-0 px-2 py-0.5 bg-yellow-400 text-black text-xs font-semibold rounded-br">
