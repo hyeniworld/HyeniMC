@@ -32,6 +32,34 @@ pub struct InstalledMod {
     pub file_size: u64,
 }
 
+/// jar 내부 메타에서 추출한 표시용 정보(캐시 miss 시 개별 파싱에 사용).
+#[derive(Debug, Clone, Default)]
+pub struct ModMetadata {
+    pub name: String,
+    pub version: String,
+    pub mod_id: String,
+    pub description: String,
+    pub authors: Vec<String>,
+}
+
+/// 개별 jar 메타 파싱. `canonical_name`은 `.disabled` 제거된 파일명(`X.jar`).
+/// 메타가 없으면 name은 파일명, version은 파일명에서 추론.
+pub fn parse_mod_metadata(jar_path: &Path, canonical_name: &str) -> ModMetadata {
+    let meta = parse_jar_metadata(jar_path).unwrap_or_default();
+    let stem = canonical_name.trim_end_matches(".jar");
+    ModMetadata {
+        name: if meta.name.is_empty() {
+            canonical_name.to_string()
+        } else {
+            meta.name
+        },
+        version: resolve_version(meta.version, stem),
+        mod_id: meta.mod_id,
+        description: meta.description,
+        authors: meta.authors,
+    }
+}
+
 /// mods 디렉터리의 설치 모드 목록. 디렉터리가 없으면 빈 목록.
 pub fn list_mods(mods_dir: &Path) -> Vec<InstalledMod> {
     let Ok(entries) = fs::read_dir(mods_dir) else {
@@ -53,15 +81,13 @@ pub fn list_mods(mods_dir: &Path) -> Vec<InstalledMod> {
                 return None;
             }
             let file_size = entry.metadata().map(|m| m.len()).unwrap_or(0);
-            let meta = parse_jar_metadata(&path).unwrap_or_default();
-            let stem = canonical.trim_end_matches(".jar");
-            let version = resolve_version(meta.version, stem);
+            let m = parse_mod_metadata(&path, &canonical);
             Some(InstalledMod {
-                name: if meta.name.is_empty() { canonical.clone() } else { meta.name },
-                mod_id: meta.mod_id,
-                description: meta.description,
-                authors: meta.authors,
-                version,
+                name: m.name,
+                mod_id: m.mod_id,
+                description: m.description,
+                authors: m.authors,
+                version: m.version,
                 file_name: canonical,
                 enabled,
                 file_size,

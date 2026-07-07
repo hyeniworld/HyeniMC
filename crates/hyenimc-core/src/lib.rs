@@ -6,6 +6,7 @@
 pub mod account;
 pub mod crypto;
 pub mod db;
+pub mod mod_cache;
 pub mod paths;
 pub mod profile;
 pub mod settings;
