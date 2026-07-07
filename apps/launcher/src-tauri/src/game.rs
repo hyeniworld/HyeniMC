@@ -485,8 +485,14 @@ pub async fn game_launch(
     let natives_dir = hyenimc_launcher::natives::extract_natives(&dirs.version_dir(&version_id), &native_jars)
         .map_err(|e| e.to_string())?;
     let (classpath, missing) = build_classpath(&detail, &dirs);
+    log::info!(
+        "실행 준비: version_id={version_id} java={java_path} classpath_libs={} 누락={}",
+        classpath.split(if cfg!(windows) { ';' } else { ':' }).count(),
+        missing.len()
+    );
     if !missing.is_empty() {
-        eprintln!("[game] 누락 라이브러리 {}개: {:?}", missing.len(), missing);
+        // 누락 라이브러리는 로더 실행 실패의 흔한 원인 — 로그 파일에 남겨 진단 가능하게.
+        log::warn!("[game] 누락 라이브러리 {}개: {:?}", missing.len(), missing);
     }
 
     // 계정 필수(위에서 None 차단). 실계정 토큰 확보(만료 임박 시 자동 갱신).
@@ -541,6 +547,9 @@ pub async fn game_launch(
         &args,
         &dirs.instance_dir,
         move |line| {
+            // 로더/MC의 stdout·stderr를 런처 로그 파일에도 남긴다(Electron 동작 복원).
+            // 로더 실패 시 실제 예외/스택이 stderr로 나오는데 이게 없으면 진단 불가.
+            log::info!("[game] {line}");
             app_log.state::<GameState>().push_log(&pid_for_log, line.clone());
             let _ = app_log.emit(
                 "game:log",
