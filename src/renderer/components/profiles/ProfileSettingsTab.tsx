@@ -219,14 +219,15 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
       
       if (result.success && result.versions) {
         setLoaderVersions(result.versions);
-        
-        // Check if profile has a loader version that's not in the current list
+
+        // 프로필에 저장된 로더 버전이 안정 목록에 없으면(=불안정 버전) 자동으로 불안정 포함.
+        // 단, 현재 선택한 로더가 프로필의 로더와 같을 때만 — 다른 로더로 바꾼 경우
+        // 저장 버전은 애초에 이 목록에 없는 게 정상이므로 자동 체크하면 안 된다(무한 유발).
         const profileLoaderVersion = profile?.loaderVersion;
+        const isSameLoaderAsProfile = loaderType === profile?.loaderType;
         const versionExists = result.versions.find((v: any) => v.version === profileLoaderVersion);
-        
-        if (profileLoaderVersion && !versionExists && !includeUnstableVersions) {
-          // Profile has a version that's not in stable list
-          // Automatically enable unstable versions to find it
+
+        if (isSameLoaderAsProfile && profileLoaderVersion && !versionExists && !includeUnstableVersions) {
           console.log(`[ProfileSettings] Loader version ${profileLoaderVersion} not found in stable list, enabling unstable versions`);
           setIncludeUnstableVersions(true);
           return; // useEffect will trigger reload with unstable versions

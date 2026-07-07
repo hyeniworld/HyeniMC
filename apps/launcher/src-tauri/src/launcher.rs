@@ -60,16 +60,14 @@ pub async fn launcher_check_updates(
             version: None,
             notes: None,
         }),
-        // 업데이트 서버 미구성/네트워크 실패는 "업데이트 없음"으로 완만 처리(개발 중 무해)
-        Err(e) => {
-            eprintln!("[updater] check 실패: {e}");
-            Ok(UpdateCheckResult {
-                success: false,
-                available: false,
-                version: None,
-                notes: None,
-            })
-        }
+        // 아직 릴리스가 없으면 GitHub Releases의 latest.json이 404 → 여기로 온다.
+        // 정상 상황(업데이트 없음)이므로 조용히 처리 — 릴리스가 올라오면 자동 동작.
+        Err(_) => Ok(UpdateCheckResult {
+            success: true,
+            available: false,
+            version: None,
+            notes: None,
+        }),
     }
 }
 
