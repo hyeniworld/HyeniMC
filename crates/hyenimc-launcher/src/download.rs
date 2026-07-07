@@ -60,6 +60,10 @@ fn sha256_file(path: &std::path::Path) -> std::io::Result<String> {
 }
 
 /// 기대 체크섬(sha1/sha256 중 존재하는 것)과 파일 대조. 기대치가 없으면 Ok(true).
+///
+/// sha1/sha256이 모두 없고 size만 있으면 파일 크기만 비교(빠름). Mojang assets objects는
+/// 파일명이 콘텐츠 SHA1이라(=immutable) 존재+크기로 충분 — 8525개를 매번 전량 읽어
+/// SHA1 재계산하면 tokio 워커를 오래 점유해 다운로드가 0%에서 멈춘 것처럼 보인다.
 fn checksums_match(path: &std::path::Path, task: &DownloadTask) -> std::io::Result<bool> {
     if let Some(expected) = &task.sha1 {
         if !sha1_file(path)?.eq_ignore_ascii_case(expected) {
@@ -69,6 +73,13 @@ fn checksums_match(path: &std::path::Path, task: &DownloadTask) -> std::io::Resu
     if let Some(expected) = &task.sha256 {
         if !sha256_file(path)?.eq_ignore_ascii_case(expected) {
             return Ok(false);
+        }
+    }
+    if task.sha1.is_none() && task.sha256.is_none() {
+        if let Some(expected_size) = task.size {
+            if std::fs::metadata(path)?.len() != expected_size {
+                return Ok(false);
+            }
         }
     }
     Ok(true)
@@ -230,6 +241,21 @@ mod tests {
     fn sha1_hex(data: &[u8]) -> String {
         use sha1::{Digest, Sha1};
         hex::encode(Sha1::digest(data))
+    }
+
+    #[test]
+    fn checksums_match_by_size_when_no_hash() {
+        // assets objects 경로: sha1/sha256 없이 size만으로 검증(빠른 스킵)
+        let dir = tempfile::tempdir().unwrap();
+        let f = dir.path().join("obj");
+        std::fs::write(&f, b"hello").unwrap();
+        let ok = DownloadTask { size: Some(5), ..Default::default() };
+        assert!(checksums_match(&f, &ok).unwrap());
+        let bad = DownloadTask { size: Some(99), ..Default::default() };
+        assert!(!checksums_match(&f, &bad).unwrap());
+        // 기대치 전혀 없으면 존재만으로 통과
+        let none = DownloadTask::default();
+        assert!(checksums_match(&f, &none).unwrap());
     }
 
     #[tokio::test]

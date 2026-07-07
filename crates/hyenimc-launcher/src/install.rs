@@ -61,7 +61,6 @@ struct AssetIndexFile {
 #[derive(Debug, Deserialize)]
 struct AssetObject {
     hash: String,
-    #[allow(dead_code)]
     size: u64,
 }
 
@@ -221,9 +220,10 @@ pub async fn ensure_version(
                         .join("objects")
                         .join(prefix)
                         .join(&obj.hash),
-                    sha1: Some(obj.hash.clone()),
+                    // objects는 파일명이 콘텐츠 SHA1(immutable) — 존재+크기로 검증(전량 SHA1 재계산 회피)
+                    sha1: None,
                     sha256: None,
-                    size: None,
+                    size: Some(obj.size),
                 }
             })
             .collect();
