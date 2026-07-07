@@ -103,6 +103,19 @@ pub fn write_hyenihelper_config(
     Ok(true)
 }
 
+/// HyeniHelper config에 저장된 사용자 토큰(딥링크 /인증으로 기록됨) 읽기.
+/// 워커 모드 업데이트 설치 인증에 쓰인다(TS getUserToken 대응). 없으면 None.
+pub fn read_hyenihelper_token(game_dir: &Path) -> Option<String> {
+    let config_file = game_dir.join("config").join("hyenihelper-config.json");
+    let text = std::fs::read_to_string(config_file).ok()?;
+    let value: serde_json::Value = serde_json::from_str(&text).ok()?;
+    value
+        .get("token")
+        .and_then(|t| t.as_str())
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+}
+
 /// hyenimc://auth?token=X&server=A,B 파싱 (순수)
 pub fn parse_auth_url(url: &str) -> Option<(String, Vec<String>)> {
     let rest = url.strip_prefix("hyenimc://auth")?;
@@ -219,6 +232,19 @@ mod tests {
         )
         .unwrap();
         assert_eq!(v3["token"], "tok-3");
+
+        // read_hyenihelper_token: 기록된 토큰을 그대로 읽음
+        assert_eq!(read_hyenihelper_token(tmp.path()).as_deref(), Some("tok-3"));
+    }
+
+    #[test]
+    fn read_token_missing_or_empty_is_none() {
+        let tmp = tempfile::tempdir().unwrap();
+        assert_eq!(read_hyenihelper_token(tmp.path()), None); // config 없음
+        let config_dir = tmp.path().join("config");
+        std::fs::create_dir_all(&config_dir).unwrap();
+        std::fs::write(config_dir.join("hyenihelper-config.json"), r#"{"token":""}"#).unwrap();
+        assert_eq!(read_hyenihelper_token(tmp.path()), None); // 빈 토큰
     }
 
     #[test]

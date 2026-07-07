@@ -371,6 +371,48 @@ pub async fn game_launch(
         _ => profile.game_version.clone(),
     };
 
+    // ③.5 워커 모드 자동 업데이트 (혜니월드 서버 프로필) — Electron launch 흐름과 동일.
+    // 서버 접속에 필요한 모드에 업데이트가 있으면 설치하고, 인증(config token)이 없으면
+    // 실행을 중단한다(딥링크 /인증 필요).
+    {
+        let game_dir = std::path::PathBuf::from(&profile.game_directory);
+        if crate::hyeni::should_check(&game_dir, profile.server_address.as_deref()) {
+            let _ = app.emit(
+                "game:log",
+                serde_json::json!({ "profileId": profile_id, "line": "[worker-mods] 모드 업데이트 확인 중..." }),
+            );
+            let base = crate::pack::worker_base()?;
+            let mods_dir = game_dir.join("mods");
+            let updates = hyenimc_launcher::workermods::check_all_updates(
+                &http,
+                &base,
+                &mods_dir,
+                &profile.game_version,
+                &profile.loader_type,
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+            if !updates.is_empty() {
+                let token = hyenimc_launcher::hyeni::read_hyenihelper_token(&game_dir).ok_or_else(
+                    || "모드 업데이트를 위한 인증이 필요합니다.\n\nDiscord에서 /인증 명령어로 인증하세요.".to_string(),
+                )?;
+                let app_log = app.clone();
+                let pid = profile_id.clone();
+                hyenimc_launcher::workermods::install_updates(
+                    &http, &base, &mods_dir, &updates, &token, &cfg,
+                    move |name, pct| {
+                        let _ = app_log.emit(
+                            "game:log",
+                            serde_json::json!({ "profileId": pid, "line": format!("[worker-mods] {name} {pct}%") }),
+                        );
+                    },
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+            }
+        }
+    }
+
     // 로더 프로필이면 병합된 상세를 다시 로드
     let detail = hyenimc_launcher::install::load_version_detail(&dirs, &version_id)
         .map_err(|e| e.to_string())?;

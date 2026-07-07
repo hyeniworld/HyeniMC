@@ -27,7 +27,7 @@ pub fn is_authorized_server(address: &str) -> bool {
 }
 
 /// 트리거 판정 — 프로필 serverAddress 우선, 없으면 servers.dat에 승인 서버 존재 여부(TS 우선순위)
-fn should_check(profile_dir: &Path, server_address: Option<&str>) -> bool {
+pub fn should_check(profile_dir: &Path, server_address: Option<&str>) -> bool {
     match server_address {
         Some(addr) if !addr.is_empty() => is_authorized_server(addr),
         _ => hy::servers_dat_ips(&profile_dir.join("servers.dat"))
