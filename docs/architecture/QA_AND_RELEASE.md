@@ -47,7 +47,7 @@ npm run build:tauri   # 배포 번들 (arm64/x64 dmg + nsis)
 
 ## 배포 파이프라인 (M6 잔여 — 인프라 결정 필요)
 
-1. **updater 서버**: tauri.conf.json의 `endpoints`가 현재 placeholder(`hyenimc-releases.invalid`). GitHub Releases 또는 R2로 교체 필요. 서명 키는 `~/.tauri/hyenimc.key`(비번 없음 — **프로덕션 전 재생성 검토**).
+1. **updater 서버**: tauri.conf.json의 `endpoints`는 **GitHub Releases**(`github.com/hyeniworld/HyeniMC/releases/latest/download/latest.json`) — Electron판(electron-updater)과 동일 서버. 릴리스 전엔 404→조용히 no-update. 실동작하려면 릴리스에 **`latest.json`(Tauri 서명 포맷) + 서명된 번들**을 asset으로 업로드해야 함. 서명 키는 `~/.tauri/hyenimc.key`(비번 없음 — **프로덕션 전 재생성 검토**). electron-updater의 `latest.yml`과 공존 가능(다른 파일).
 2. **코드 서명**: Windows(Authenticode)/macOS(Developer ID + notarization) — 교체 설치/Gatekeeper에 필수.
 3. **번들 산출**: `npm run build:tauri` → arm64/x64 dmg + nsis. universal은 제외(경정리 방침).
 4. **브릿지 릴리스**: 기존 Electron 사용자를 Tauri로 넘기는 마지막 electron-updater 릴리스(설계 §6).
