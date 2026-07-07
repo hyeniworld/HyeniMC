@@ -380,9 +380,8 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
   const loaderTypeOptions = [
     { value: 'vanilla', label: 'Vanilla (바닐라)' },
     { value: 'fabric', label: 'Fabric' },
-    { value: 'forge', label: 'Forge' },
     { value: 'neoforge', label: 'NeoForge' },
-    { value: 'quilt', label: 'Quilt' },
+    { value: 'forge', label: 'Forge' },
   ];
 
   return (

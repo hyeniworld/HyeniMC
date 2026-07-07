@@ -162,12 +162,13 @@ pub async fn java_detect() -> Vec<hyenimc_launcher::java::JavaInstallation> {
 pub async fn loader_get_versions(
     loader_type: String,
     game_version: String,
+    include_unstable: bool,
 ) -> Result<Vec<hyenimc_launcher::loader::LoaderVersion>, String> {
     let http = reqwest::Client::new();
-    match loader_type.as_str() {
+    let mut list: Vec<hyenimc_launcher::loader::LoaderVersion> = match loader_type.as_str() {
         "fabric" => hyenimc_launcher::loader::fabric_loader_versions(&http, &game_version)
             .await
-            .map_err(|e| e.to_string()),
+            .map_err(|e| e.to_string())?,
         "neoforge" => {
             let all = hyenimc_launcher::loader::neoforge_versions(&http)
                 .await
@@ -182,7 +183,7 @@ pub async fn loader_get_versions(
                 .collect();
             // 최신 우선 (렌더러가 첫 항목을 자동 선택)
             list.reverse();
-            Ok(list)
+            list
         }
         "forge" => {
             let all = hyenimc_launcher::loader::forge_versions(&http, &game_version)
@@ -190,13 +191,22 @@ pub async fn loader_get_versions(
                 .map_err(|e| e.to_string())?;
             let mut list: Vec<_> = all
                 .into_iter()
-                .map(|v| hyenimc_launcher::loader::LoaderVersion { stable: true, version: v })
+                .map(|v| hyenimc_launcher::loader::LoaderVersion {
+                    // Forge는 beta/rc 라벨을 버전에 포함 — 그 외는 안정
+                    stable: !(v.contains("beta") || v.contains("rc")),
+                    version: v,
+                })
                 .collect();
             list.reverse();
-            Ok(list)
+            list
         }
-        other => Err(format!("지원하지 않는 로더: {other}")),
+        other => return Err(format!("지원하지 않는 로더: {other}")),
+    };
+    // 불안정 미포함이면 stable만 (사용자 '불안정 버전 포함' 체크박스)
+    if !include_unstable {
+        list.retain(|v| v.stable);
     }
+    Ok(list)
 }
 
 #[tauri::command]

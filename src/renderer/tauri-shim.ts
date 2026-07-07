@@ -35,10 +35,20 @@ function installTauriShim(): void {
     return value;
   };
 
+  // Rust는 타임스탬프를 초(Unix) i64로 반환 — 렌더러는 new Date(ms)를 기대하므로
+  // Electron main(profile.ts)과 동일하게 초→ISO 문자열로 변환한다(생성일 1970 표시 방지).
+  const toRendererProfile = (p: any) =>
+    p && {
+      ...p,
+      createdAt: p.createdAt ? new Date(p.createdAt * 1000).toISOString() : undefined,
+      updatedAt: p.updatedAt ? new Date(p.updatedAt * 1000).toISOString() : undefined,
+      lastPlayed: p.lastPlayed ? new Date(p.lastPlayed * 1000).toISOString() : undefined,
+    };
+
   const api: any = {
     profile: {
-      list: () => invoke('profile_list'),
-      get: (id: string) => invoke('profile_get', { id }),
+      list: async () => ((await invoke('profile_list')) as any[]).map(toRendererProfile),
+      get: async (id: string) => toRendererProfile(await invoke('profile_get', { id })),
       create: (data: unknown) => invoke('profile_create', { data }),
       update: (id: string, data: unknown) => invoke('profile_update', { id, data }),
       delete: (id: string) => invoke('profile_delete', { id }),
@@ -84,11 +94,16 @@ function installTauriShim(): void {
       detect: () => invoke('java_detect'),
       getInstallations: () => invoke('java_detect'),
     },
-    // preload 계약: getVersions는 {versions: [{version, stable}...]} 형태 반환 (CreateProfileModal)
+    // preload 계약: {success, versions:[{version, stable}...]} (CreateProfileModal은 versions만,
+    // ProfileSettingsTab은 result.success도 확인하므로 success 필수)
     loader: {
-      getVersions: async (loaderType: string, gameVersion: string, _includeUnstable?: boolean) => {
-        const versions = await invoke('loader_get_versions', { loaderType, gameVersion });
-        return { versions };
+      getVersions: async (loaderType: string, gameVersion: string, includeUnstable?: boolean) => {
+        const versions = await invoke('loader_get_versions', {
+          loaderType,
+          gameVersion,
+          includeUnstable: !!includeUnstable,
+        });
+        return { success: true, versions };
       },
     },
     // preload 계약(hyenipack.import(filePath, profileId, instanceDir) + {success} envelope) 그대로 유지
