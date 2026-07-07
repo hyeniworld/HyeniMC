@@ -209,6 +209,19 @@ function installTauriShim(): void {
     openLogs: (profileId: string) => invoke('crash_open_logs', { profileId }),
   };
 
+  // 설치된 모드 목록/토글/삭제 (사용자도 조회·on/off 가능 — 검색/설치/업데이트만 제작자 전용)
+  api.mod = {
+    list: (profileId: string) => invoke('mod_list', { profileId }),
+    toggle: async (profileId: string, fileName: string, enabled: boolean) => {
+      await invoke('mod_toggle', { profileId, fileName, enabled });
+      return { success: true };
+    },
+    remove: async (profileId: string, fileName: string) => {
+      await invoke('mod_remove', { profileId, fileName });
+      return { success: true };
+    },
+  };
+
   // 런처 자체 업데이트 (preload launcher 계약)
   api.launcher = {
     getVersion: () => invoke('launcher_get_version'),
@@ -227,7 +240,7 @@ function installTauriShim(): void {
   // 제작자 전용/미사용 카테고리 스텁 — 사용자 런처 UI에선 해당 기능이 숨겨짐(M6b).
   // hyeni.installUpdate는 worker mods로 통합됐으므로 no-op 성공 처리.
   const STUB_CATEGORIES = [
-    'mod', 'modpack', 'hyeni', 'dialog', 'fs', 'errorDialog',
+    'modpack', 'hyeni', 'dialog', 'fs', 'errorDialog',
   ];
   for (const cat of STUB_CATEGORIES) {
     api[cat] = {};

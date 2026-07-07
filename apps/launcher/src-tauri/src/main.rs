@@ -7,6 +7,7 @@ mod crash;
 mod game;
 mod hyeni;
 mod launcher;
+mod mods;
 mod resources;
 mod pack;
 
@@ -116,6 +117,9 @@ fn main() {
             resources::file_watch_stop,
             crash::crash_export_report,
             crash::crash_open_logs,
+            mods::mod_list,
+            mods::mod_toggle,
+            mods::mod_remove,
             launcher::launcher_get_version,
             launcher::launcher_check_updates,
             launcher::launcher_download_update,
