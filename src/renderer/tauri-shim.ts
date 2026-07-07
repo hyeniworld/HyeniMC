@@ -174,8 +174,16 @@ function installTauriShim(): void {
 
   // preload 계약: checkUpdates(profilePath, gameVersion, loaderType, serverAddress?) / installMultiple(profilePath, updates)
   api.workerMods = {
-    checkUpdates: (profilePath: string, gameVersion: string, loaderType: string, serverAddress?: string) =>
-      invoke('worker_mods_check', { profilePath, gameVersion, loaderType, serverAddress }),
+    checkUpdates: async (profilePath: string, gameVersion: string, loaderType: string, serverAddress?: string) => {
+      const updates = (await invoke('worker_mods_check', {
+        profilePath,
+        gameVersion,
+        loaderType,
+        serverAddress,
+      })) as any[];
+      // Rust는 modName/loaderType으로 주지만 렌더러(ModUpdateItem)는 name/loader를 표시하므로 매핑.
+      return updates.map((u) => ({ ...u, name: u.modName, loader: u.loaderType }));
+    },
     installMultiple: (profilePath: string, updates: unknown[]) =>
       invoke('worker_mods_install', { profilePath, updates }),
   };
