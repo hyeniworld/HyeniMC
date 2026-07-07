@@ -87,15 +87,20 @@ pub struct WorkerModUpdate {
 /// 파일명에서 버전 추출 — 마지막 `x.y.z(-suffix)?` 세그먼트.
 /// "hyenihelper-fabric-1.21.1-1.0.5" → "1.0.5", "FastSuite-1.21.1-6.0.5" → "6.0.5"
 pub fn parse_mod_version(file_stem: &str) -> Option<String> {
-    let mut last: Option<String> = None;
+    // x.y.z(3자리)를 우선하되, 없으면 x.y(2자리)도 허용.
+    // 예: `HyeniAdditionalFunctions-neoforge-1.0-SNAPSHOT` → "1.0" (3자리 부재).
+    let mut last3: Option<String> = None;
+    let mut last2: Option<String> = None;
     for seg in file_stem.split('-') {
         let core = seg.split('+').next().unwrap_or(seg);
         let parts: Vec<&str> = core.split('.').collect();
         if parts.len() >= 3 && parts.iter().take(3).all(|p| p.parse::<u32>().is_ok()) {
-            last = Some(core.to_string());
+            last3 = Some(core.to_string());
+        } else if parts.len() == 2 && parts.iter().all(|p| p.parse::<u32>().is_ok()) {
+            last2 = Some(core.to_string());
         }
     }
-    last
+    last3.or(last2)
 }
 
 fn version_key(v: &str) -> Vec<u32> {
@@ -175,10 +180,14 @@ pub async fn check_all_updates(
             continue;
         };
 
+        // 설치 여부는 파일 존재로 판정 — 버전 파싱이 실패해도(예: `-1.0-SNAPSHOT` 등
+        // 비정형 버전) 설치된 모드를 '미설치'로 오인하지 않게 한다.
+        let installed = !find_mod_files(mods_dir, &item.id).is_empty();
         let local = local_mod_version(mods_dir, &item.id);
-        let needs_update = match &local {
-            None => true,
-            Some(lv) => is_newer_version(&latest.version, lv),
+        let needs_update = match (installed, &local) {
+            (false, _) => true,                                   // 미설치 → 신규
+            (true, Some(lv)) => is_newer_version(&latest.version, lv),
+            (true, None) => true, // 설치됐으나 버전 미상 → 업데이트 권장(최신으로)
         };
         if !needs_update {
             continue;
@@ -191,7 +200,7 @@ pub async fn check_all_updates(
                 .clone()
                 .or(item.name.clone())
                 .unwrap_or_else(|| item.id.clone()),
-            is_installed: local.is_some(),
+            is_installed: installed,
             current_version: local,
             latest_version: latest.version.clone(),
             category: item.category.clone(),
@@ -340,6 +349,24 @@ mod tests {
         std::fs::write(tmp.path().join("other-mod-2.0.0.jar"), b"x").unwrap();
         assert_eq!(local_mod_version(tmp.path(), "hyenihelper").as_deref(), Some("1.0.4"));
         assert_eq!(local_mod_version(tmp.path(), "hyenicore"), None);
+    }
+
+    #[test]
+    fn parses_x_y_snapshot_version() {
+        // HAF `-1.0-SNAPSHOT`처럼 x.y.z(3자리)가 없고 x.y만 있는 경우도 인식
+        assert_eq!(parse_mod_version("HyeniAdditionalFunctions-neoforge-1.0-SNAPSHOT").as_deref(), Some("1.0"));
+        // 3자리가 있으면 그쪽을 우선
+        assert_eq!(parse_mod_version("hyenihelper-neoforge-1.21.1-1.0.1").as_deref(), Some("1.0.1"));
+        assert_eq!(parse_mod_version("HyeniAdditionalFunctions-neoforge-1.0.2").as_deref(), Some("1.0.2"));
+    }
+
+    #[test]
+    fn installed_detected_even_when_version_unparseable() {
+        // SNAPSHOT jar도 설치로 인식(파일 존재 기준)
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("HyeniAdditionalFunctions-neoforge-1.0-SNAPSHOT.jar"), b"x").unwrap();
+        assert!(!find_mod_files(tmp.path(), "hyeniadditionalfunctions").is_empty());
+        assert_eq!(local_mod_version(tmp.path(), "hyeniadditionalfunctions").as_deref(), Some("1.0"));
     }
 
     #[test]
