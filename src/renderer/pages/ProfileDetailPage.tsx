@@ -6,6 +6,7 @@ import { ResourcePackList } from '../components/resourcepacks/ResourcePackList';
 import { ShaderPackList } from '../components/shaderpacks/ShaderPackList';
 import { ProfileSettingsTab } from '../components/profiles/ProfileSettingsTab';
 import { ExportHyeniPackModal } from '../components/profiles/ExportHyeniPackModal';
+import { ConfirmModal } from '../components/common/ConfirmModal';
 import { isCreatorMode } from '../utils/appMode';
 import { WorkerModUpdatePanel } from '../components/worker-mods/WorkerModUpdatePanel';
 import { useWorkerModUpdates } from '../hooks/useWorkerModUpdates';
@@ -28,6 +29,7 @@ export const ProfileDetailPage: React.FC = () => {
   const [isLaunching, setIsLaunching] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showStopConfirm, setShowStopConfirm] = useState(false);
   const showDownload = useDownloadStore(s => s.show);
   const setDl = useDownloadStore(s => s.setProgress);
   const resetDownload = useDownloadStore(s => s.reset);
@@ -202,13 +204,11 @@ export const ProfileDetailPage: React.FC = () => {
     };
   }, [handleLaunch]);
 
-  const handleStop = async () => {
+  const handleStop = () => setShowStopConfirm(true);
+
+  const performStop = async () => {
+    setShowStopConfirm(false);
     if (!profileId) return;
-
-    if (!confirm('정말로 게임을 중단하시겠습니까?')) {
-      return;
-    }
-
     try {
       await window.electronAPI.game.stop(profileId);
       // State will be updated by event listener
@@ -609,6 +609,16 @@ const OverviewTab: React.FC<{ profile: any }> = ({ profile }) => {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        open={showStopConfirm}
+        title="게임 중단"
+        message="정말로 게임을 중단하시겠습니까?"
+        confirmLabel="중단"
+        danger
+        onConfirm={performStop}
+        onCancel={() => setShowStopConfirm(false)}
+      />
     </div>
   );
 };

@@ -8,6 +8,7 @@ import { useAccount } from '../../App';
 import { useToast } from '../../contexts/ToastContext';
 import { sortProfiles } from '../../utils/profileSorter';
 import { DecorationCharacter } from '../common/HyeniDecorations';
+import { ConfirmModal } from '../common/ConfirmModal';
 import { isAuthorizedServer } from '@shared/config/server-config';
 
 export function ProfileList() {
@@ -22,6 +23,8 @@ export function ProfileList() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportingProfile, setExportingProfile] = useState<any>(null);
+  const [confirmStopId, setConfirmStopId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const showDownload = useDownloadStore(s => s.show);
   const setDl = useDownloadStore(s => s.setProgress);
   const resetDownload = useDownloadStore(s => s.reset);
@@ -176,11 +179,10 @@ export function ProfileList() {
     }
   };
 
-  const handleStop = async (profileId: string) => {
-    if (!confirm('정말로 게임을 중단하시겠습니까?')) {
-      return;
-    }
+  const handleStop = (profileId: string) => setConfirmStopId(profileId);
 
+  const performStop = async (profileId: string) => {
+    setConfirmStopId(null);
     try {
       await window.electronAPI.game.stop(profileId);
       toast.success('게임 중단', '게임이 종료되었습니다.');
@@ -191,11 +193,10 @@ export function ProfileList() {
     }
   };
 
-  const handleDelete = async (profileId: string) => {
-    if (!confirm('정말로 이 프로필을 삭제하시겠습니까?')) {
-      return;
-    }
+  const handleDelete = (profileId: string) => setConfirmDeleteId(profileId);
 
+  const performDelete = async (profileId: string) => {
+    setConfirmDeleteId(null);
     try {
       await window.electronAPI.profile.delete(profileId);
       toast.success('삭제 완료', '프로필이 삭제되었습니다.');
@@ -475,6 +476,25 @@ export function ProfileList() {
           profileName={exportingProfile.name}
         />
       )}
+
+      <ConfirmModal
+        open={confirmStopId !== null}
+        title="게임 중단"
+        message="정말로 게임을 중단하시겠습니까?"
+        confirmLabel="중단"
+        danger
+        onConfirm={() => confirmStopId && performStop(confirmStopId)}
+        onCancel={() => setConfirmStopId(null)}
+      />
+      <ConfirmModal
+        open={confirmDeleteId !== null}
+        title="프로필 삭제"
+        message="정말로 이 프로필을 삭제하시겠습니까? 모든 데이터가 영구 삭제됩니다."
+        confirmLabel="삭제"
+        danger
+        onConfirm={() => confirmDeleteId && performDelete(confirmDeleteId)}
+        onCancel={() => setConfirmDeleteId(null)}
+      />
     </div>
   );
 }

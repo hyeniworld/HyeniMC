@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useToast } from '../../contexts/ToastContext';
 import { User, Trash2, LogIn, ChevronDown, RefreshCw } from 'lucide-react';
+import { ConfirmModal } from '../common/ConfirmModal';
 
 interface Account {
   id: string;
@@ -16,11 +17,16 @@ interface AccountManagerProps {
   onAccountChange: (accountId: string | undefined) => void;
 }
 
+// Tauri invoke 에러는 문자열로 전달되어 error.message가 없을 수 있다 — 실제 사유를 노출.
+const errText = (e: any, fallback: string): string =>
+  e?.message || (typeof e === 'string' ? e : fallback);
+
 export function AccountManager({ selectedAccountId, onAccountChange }: AccountManagerProps) {
   const toast = useToast();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
 
   useEffect(() => {
     loadAccounts();
@@ -54,13 +60,8 @@ export function AccountManager({ selectedAccountId, onAccountChange }: AccountMa
     }
   };
 
-  const handleRemoveAccount = async (accountId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    
-    if (!confirm('이 계정을 삭제하시겠습니까?')) {
-      return;
-    }
-
+  const performRemove = async (accountId: string) => {
+    setConfirmRemoveId(null);
     try {
       await window.electronAPI.account.remove(accountId);
       if (selectedAccountId === accountId) {
@@ -68,20 +69,21 @@ export function AccountManager({ selectedAccountId, onAccountChange }: AccountMa
       }
       await loadAccounts();
     } catch (error: any) {
-      toast.error('삭제 실패', error.message || '계정 삭제에 실패했습니다');
+      toast.error('삭제 실패', errText(error, '계정 삭제에 실패했습니다'));
     }
   };
 
   const handleRefreshAccount = async (accountId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setLoading(true);
-    
+
     try {
       await window.electronAPI.account.refresh(accountId);
       await loadAccounts();
       toast.success('계정 갱신 완료', 'Microsoft에서 최신 정보를 가져왔습니다');
     } catch (error: any) {
-      toast.error('갱신 실패', error.message || '계정 갱신에 실패했습니다');
+      // Rust 에러는 문자열로 오므로 error.message가 없을 수 있음 — 실제 사유 노출
+      toast.error('갱신 실패', errText(error, '계정 갱신에 실패했습니다'));
     } finally {
       setLoading(false);
     }
@@ -101,7 +103,7 @@ export function AccountManager({ selectedAccountId, onAccountChange }: AccountMa
             <>
               {selectedAccount.uuid ? (
                 <img
-                  src={`https://crafatar.com/avatars/${selectedAccount.uuid}?size=32&overlay&t=${Math.floor(Date.now() / 3600000)}`}
+                  src={`https://mc-heads.net/avatar/${selectedAccount.uuid}/32`}
                   alt={selectedAccount.name}
                   className="w-6 h-6 rounded"
                   onError={(e) => {
@@ -157,7 +159,7 @@ export function AccountManager({ selectedAccountId, onAccountChange }: AccountMa
                     <div className="flex items-center gap-2">
                       {account.uuid ? (
                         <img
-                          src={`https://crafatar.com/avatars/${account.uuid}?size=32&overlay&t=${Math.floor(Date.now() / 3600000)}`}
+                          src={`https://mc-heads.net/avatar/${account.uuid}/32`}
                           alt={account.name}
                           className="w-8 h-8 rounded"
                           onError={(e) => {
@@ -192,7 +194,10 @@ export function AccountManager({ selectedAccountId, onAccountChange }: AccountMa
                         </button>
                       )}
                       <button
-                        onClick={(e) => handleRemoveAccount(account.id, e)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setConfirmRemoveId(account.id);
+                        }}
                         className="p-1 hover:bg-red-600/20 rounded text-red-400 hover:text-red-300"
                         title="계정 삭제"
                       >
@@ -224,6 +229,16 @@ export function AccountManager({ selectedAccountId, onAccountChange }: AccountMa
           </>
         )}
       </div>
+
+      <ConfirmModal
+        open={confirmRemoveId !== null}
+        title="계정 삭제"
+        message="이 계정을 삭제하시겠습니까?"
+        confirmLabel="삭제"
+        danger
+        onConfirm={() => confirmRemoveId && performRemove(confirmRemoveId)}
+        onCancel={() => setConfirmRemoveId(null)}
+      />
     </>
   );
 }

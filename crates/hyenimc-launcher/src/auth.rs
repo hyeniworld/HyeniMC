@@ -165,8 +165,21 @@ pub async fn refresh_ms_token(
             ("scope", "XboxLive.signin offline_access"),
         ])
         .send()
-        .await?
-        .error_for_status()?;
+        .await?;
+    // MS 오류(invalid_grant=refresh 토큰 만료 등)의 실제 사유를 노출 —
+    // error_for_status는 상태코드만 남겨 원인 진단이 불가하다.
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        let hint = if body.contains("invalid_grant") {
+            " (다시 로그인해야 합니다)"
+        } else {
+            ""
+        };
+        return Err(LauncherError::Other(format!(
+            "Microsoft 토큰 갱신 실패 [{status}]{hint}: {body}"
+        )));
+    }
     Ok(resp.json().await?)
 }
 

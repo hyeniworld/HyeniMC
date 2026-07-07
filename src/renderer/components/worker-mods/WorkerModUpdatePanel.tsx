@@ -23,9 +23,13 @@ export const WorkerModUpdatePanel: React.FC<WorkerModUpdatePanelProps> = ({
   onInstall,
   onDismiss
 }) => {
-  // Installed mods are auto-selected and cannot be unselected
+  // 설치된 업데이트 + 신규 필수 모드는 기본 선택(서버 접속에 필요하므로 자동 체크)
   const [selectedMods, setSelectedMods] = useState<Set<string>>(
-    new Set(updates.filter(u => u.isInstalled).map(u => u.modId))
+    new Set(
+      updates
+        .filter(u => u.isInstalled || u.category === 'required')
+        .map(u => u.modId)
+    )
   );
 
   // Categorize updates

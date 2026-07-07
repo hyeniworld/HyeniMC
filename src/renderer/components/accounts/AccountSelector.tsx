@@ -117,7 +117,7 @@ export function AccountSelector({ selectedAccountId, onSelect }: AccountSelector
               <div className="flex items-center gap-2">
                 {account.uuid ? (
                   <img
-                    src={`https://crafatar.com/avatars/${account.uuid}?size=32&overlay&t=${Math.floor(Date.now() / 3600000)}`}
+                    src={`https://mc-heads.net/avatar/${account.uuid}/32`}
                     alt={account.name}
                     className="w-8 h-8 rounded"
                     onError={(e) => {
