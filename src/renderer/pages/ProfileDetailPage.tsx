@@ -8,6 +8,7 @@ import { ProfileSettingsTab } from '../components/profiles/ProfileSettingsTab';
 import { ExportHyeniPackModal } from '../components/profiles/ExportHyeniPackModal';
 import { ConfirmModal } from '../components/common/ConfirmModal';
 import { isCreatorMode } from '../utils/appMode';
+import { errorText } from '../utils/errorText';
 import { WorkerModUpdatePanel } from '../components/worker-mods/WorkerModUpdatePanel';
 import { useWorkerModUpdates } from '../hooks/useWorkerModUpdates';
 import { useDownloadStore } from '../store/downloadStore';
@@ -180,7 +181,7 @@ export const ProfileDetailPage: React.FC = () => {
       setIsLaunching(false);
       
       // 에러 상태 설정
-      const errorMsg = error instanceof Error ? error.message : '게임 실행에 실패했습니다.';
+      const errorMsg = errorText(error, '게임 실행에 실패했습니다.');
       setDl({ error: errorMsg });
       toast.error('실행 실패', errorMsg);
       

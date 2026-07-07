@@ -9,6 +9,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { sortProfiles } from '../../utils/profileSorter';
 import { DecorationCharacter } from '../common/HyeniDecorations';
 import { ConfirmModal } from '../common/ConfirmModal';
+import { errorText } from '../../utils/errorText';
 import { isAuthorizedServer } from '@shared/config/server-config';
 
 export function ProfileList() {
@@ -116,6 +117,12 @@ export function ProfileList() {
       const profile = profiles.find(p => p.id === profileId);
       if (!profile) return;
 
+      // 계정 필수 — 오프라인 미지원(정품 서버 전용). 실행 준비 전에 안내.
+      if (!selectedAccountId) {
+        toast.warning('로그인 필요', 'Microsoft 계정으로 로그인해야 게임을 실행할 수 있습니다.');
+        return;
+      }
+
       // Check if already running
       if (runningProfiles.has(profileId)) {
         toast.warning('이미 실행 중', '이 프로필은 이미 실행 중입니다.');
@@ -141,7 +148,7 @@ export function ProfileList() {
         
         // global modal will auto-hide on game:started via hook
       } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : '알 수 없는 오류';
+        const errorMsg = errorText(err, '게임 실행에 실패했습니다.');
         setDl({ error: errorMsg });
         
         // Remove from launching on error
@@ -160,7 +167,7 @@ export function ProfileList() {
       }
   } catch (err) {
       console.error('Failed to launch profile:', err);
-      const errorMsg = err instanceof Error ? err.message : '알 수 없는 오류';
+      const errorMsg = errorText(err, '게임 실행에 실패했습니다.');
       
       // Remove from launching on error
       setLaunchingProfiles(prev => {

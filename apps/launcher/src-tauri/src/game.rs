@@ -286,9 +286,23 @@ pub async fn game_launch(
         return Err(format!("프로필 {profile_id}이(가) 이미 실행 중입니다"));
     }
 
-    // 계정 필수 — 오프라인 계정 미지원(정품 온라인 서버 전용). 다운로드 전에 차단.
-    if account_id.is_none() {
-        return Err("Microsoft 계정으로 로그인해야 게임을 실행할 수 있습니다.".into());
+    // 계정 필수 — 오프라인 미지원(정품 온라인 서버 전용). 다운로드 전에 차단.
+    // 미선택뿐 아니라 '선택된 id가 삭제되어 실존하지 않는 경우'도 여기서 명확히 거른다.
+    match &account_id {
+        None => {
+            return Err("Microsoft 계정으로 로그인해야 게임을 실행할 수 있습니다.".into());
+        }
+        Some(aid) => {
+            let exists = {
+                let conn = db.0.lock().unwrap();
+                hyenimc_core::account::get_account(&conn, aid)
+                    .map_err(|e| e.to_string())?
+                    .is_some()
+            };
+            if !exists {
+                return Err("선택한 계정을 찾을 수 없습니다. Microsoft 계정으로 다시 로그인해주세요.".into());
+            }
+        }
     }
 
     let (profile, settings) = {
