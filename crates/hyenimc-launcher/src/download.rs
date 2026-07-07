@@ -2,7 +2,6 @@
 //! 세마포어 병렬, SHA1 검증(불일치 시 삭제 후 재시도), 지수 백오프, .part 임시 파일.
 
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -134,8 +133,16 @@ async fn download_one(
     task: &DownloadTask,
     cfg: &DownloadConfig,
 ) -> Result<(), LauncherError> {
-    // 이미 존재 + 체크섬 일치(또는 기대치 없음) → 스킵, 불일치 → 재다운로드
-    if task.dest.exists() && checksums_match(&task.dest, task).unwrap_or(false) {
+    // 이미 존재 + 체크섬 일치(또는 기대치 없음) → 스킵, 불일치 → 재다운로드.
+    // 존재/체크섬 판정은 동기 파일 IO(대용량 SHA1 포함 가능)이므로 blocking 풀로 넘겨
+    // async executor 워커를 막지 않는다(수천 개 에셋 스킵 시 정체 방지).
+    let (dest, task_for_check) = (task.dest.clone(), task.clone());
+    let skip = tokio::task::spawn_blocking(move || {
+        dest.exists() && checksums_match(&dest, &task_for_check).unwrap_or(false)
+    })
+    .await
+    .unwrap_or(false);
+    if skip {
         return Ok(());
     }
     let mut attempt = 0u32;
@@ -166,35 +173,40 @@ pub async fn download_all(
     cfg: &DownloadConfig,
     on_progress: impl Fn(Progress) + Send + Sync,
 ) -> Result<(), LauncherError> {
+    use futures::stream::{FuturesUnordered, StreamExt};
+
     let total = tasks.len();
     let sem = Arc::new(Semaphore::new(cfg.max_parallel.max(1)));
-    let completed = Arc::new(AtomicUsize::new(0));
-    let bytes = Arc::new(AtomicU64::new(0));
 
-    let mut handles = Vec::with_capacity(total);
+    // FuturesUnordered로 동시 실행하며 완료되는 태스크마다 즉시 진행률 방출(Go와 동일한
+    // 증분 진행률). download_one의 스킵 판정(SHA1/크기)은 spawn_blocking으로 분리돼
+    // executor 워커를 막지 않는다 — 수천 개 에셋도 정체 없이 흐른다.
+    let mut futs = FuturesUnordered::new();
     for task in tasks {
         let sem = sem.clone();
         let client = client.clone();
         let cfg = cfg.clone();
-        handles.push(async move {
-            let _permit = sem.acquire().await.expect("semaphore closed");
-            download_one(&client, &task, &cfg).await.map(|_| task)
+        futs.push(async move {
+            let _permit = sem.acquire_owned().await.expect("semaphore closed");
+            let result = download_one(&client, &task, &cfg).await;
+            (result, task)
         });
     }
 
-    let results = futures::future::join_all(handles).await;
+    let mut completed = 0usize;
+    let mut bytes = 0u64;
     let mut first_err = None;
-    for r in results {
-        match r {
-            Ok(task) => {
-                let done = completed.fetch_add(1, Ordering::SeqCst) + 1;
+    while let Some((result, task)) = futs.next().await {
+        match result {
+            Ok(()) => {
+                completed += 1;
                 if let Some(sz) = task.size {
-                    bytes.fetch_add(sz, Ordering::SeqCst);
+                    bytes += sz;
                 }
                 on_progress(Progress {
-                    completed: done,
+                    completed,
                     total,
-                    bytes_done: bytes.load(Ordering::SeqCst),
+                    bytes_done: bytes,
                     current_file: task
                         .dest
                         .file_name()
