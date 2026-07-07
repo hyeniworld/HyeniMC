@@ -96,6 +96,7 @@ fn main() {
             commands::system_get_path,
             game::java_detect,
             game::java_get_cached,
+            game::java_get_recommended,
             game::version_list_minecraft,
             game::loader_get_versions,
             game::game_download_version,

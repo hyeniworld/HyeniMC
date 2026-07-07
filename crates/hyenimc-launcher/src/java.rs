@@ -42,6 +42,44 @@ fn normalize_arch(arch: &str) -> String {
     .to_string()
 }
 
+/// MC 버전에 필요한 최소 Java 메이저 버전 (신·구 버전 체계 모두).
+/// - 26.1+ → 25 / 26.0 → 21 (신버전 체계)
+/// - 1.20.5+ · 1.21.x → 21 / 1.18~1.20.4 → 17 / 1.17 → 16 / 그 이하 → 8
+pub fn recommended_java_major(mc_version: &str) -> u32 {
+    if let Some(rest) = mc_version.strip_prefix("1.") {
+        let mut it = rest.split('.');
+        let minor: u32 = it.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+        let patch: u32 = it.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+        if minor >= 21 {
+            21
+        } else if minor == 20 && patch >= 5 {
+            21
+        } else if minor >= 18 {
+            17
+        } else if minor == 17 {
+            16
+        } else {
+            8
+        }
+    } else {
+        // 신버전 체계 (26.x+): 26.1부터 Java 25 강제
+        let mut it = mc_version.split('.');
+        let major: u32 = it.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+        let minor: u32 = it.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+        if major >= 27 {
+            25
+        } else if major == 26 {
+            if minor >= 1 {
+                25
+            } else {
+                21
+            }
+        } else {
+            21
+        }
+    }
+}
+
 /// "1.8.0_392" → 8, "21.0.5" → 21, "17" → 17
 pub fn parse_major(version: &str) -> u32 {
     let mut parts = version.split(['.', '_', '-']);
@@ -208,6 +246,23 @@ mod tests {
         assert_eq!(parse_major("1.8.0_392"), 8);
         assert_eq!(parse_major("21.0.5"), 21);
         assert_eq!(parse_major("17"), 17);
+    }
+
+    #[test]
+    fn recommended_java_by_mc_version() {
+        // 구버전 체계
+        assert_eq!(recommended_java_major("1.16.5"), 8);
+        assert_eq!(recommended_java_major("1.17.1"), 16);
+        assert_eq!(recommended_java_major("1.18.2"), 17);
+        assert_eq!(recommended_java_major("1.20.1"), 17);
+        assert_eq!(recommended_java_major("1.20.4"), 17);
+        assert_eq!(recommended_java_major("1.20.5"), 21);
+        assert_eq!(recommended_java_major("1.21.1"), 21);
+        assert_eq!(recommended_java_major("1.21.11"), 21);
+        // 신버전 체계 — 26.1부터 Java 25
+        assert_eq!(recommended_java_major("26.1"), 25);
+        assert_eq!(recommended_java_major("26.1.2"), 25);
+        assert_eq!(recommended_java_major("26.2"), 25);
     }
 
     #[tokio::test]

@@ -558,6 +558,21 @@ export function CreateProfileModal({ isOpen, onClose, onSuccess, initialModpackI
                     );
                   })()}
                 </div>
+                {/* 권장 버전 이상이 하나도 없으면 설치 안내 (예: 26.1+는 Java 25 강제) */}
+                {!javaInstallations.some(j => j.majorVersion >= recommendedJava) && (
+                  <div className="flex items-center justify-between gap-2 bg-yellow-900/20 border border-yellow-800 rounded-lg p-2 mt-1">
+                    <span className="text-xs text-yellow-300">
+                      이 버전은 Java {recommendedJava} 이상이 필요합니다. 설치되어 있지 않습니다.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => window.electronAPI.shell.openExternal(`https://adoptium.net/temurin/releases/?version=${recommendedJava}`)}
+                      className="shrink-0 px-2 py-1 text-xs bg-yellow-700 hover:bg-yellow-600 rounded"
+                    >
+                      Java {recommendedJava} 다운로드
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="bg-red-900/20 border border-red-800 rounded-lg p-3">

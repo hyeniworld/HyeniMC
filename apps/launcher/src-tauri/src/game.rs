@@ -181,6 +181,12 @@ pub async fn java_get_cached(
     Ok(list)
 }
 
+/// MC 버전에 필요한 최소 Java 메이저 버전 (26.1+ → 25 등).
+#[tauri::command]
+pub fn java_get_recommended(game_version: String) -> u32 {
+    hyenimc_launcher::java::recommended_java_major(&game_version)
+}
+
 #[tauri::command]
 pub async fn loader_get_versions(
     loader_type: String,

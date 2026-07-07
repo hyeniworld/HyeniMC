@@ -95,6 +95,7 @@ function installTauriShim(): void {
       detect: (_force?: boolean) => invoke('java_detect'),
       getCached: () => invoke('java_get_cached'),
       getInstallations: () => invoke('java_get_cached'),
+      getRecommended: (gameVersion: string) => invoke('java_get_recommended', { gameVersion }),
     },
     // preload 계약: {success, versions:[{version, stable}...]} (CreateProfileModal은 versions만,
     // ProfileSettingsTab은 result.success도 확인하므로 success 필수)
