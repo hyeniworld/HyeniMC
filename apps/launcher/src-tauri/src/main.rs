@@ -66,6 +66,7 @@ fn main() {
             app.manage(game::GameState::default());
             app.manage(resources::WatchState::default());
             app.manage(launcher::PendingUpdate::default());
+            app.manage(game::JavaCache::default());
 
             // 암호화 컨텍스트 (.key / .device_id — 기존 Go 판과 동일 파일)
             let data_dir = hyenimc_core::paths::legacy_data_dir()
@@ -94,6 +95,7 @@ fn main() {
             commands::system_memory,
             commands::system_get_path,
             game::java_detect,
+            game::java_get_cached,
             game::version_list_minecraft,
             game::loader_get_versions,
             game::game_download_version,

@@ -91,8 +91,10 @@ function installTauriShim(): void {
       },
     },
     java: {
-      detect: () => invoke('java_detect'),
-      getInstallations: () => invoke('java_detect'),
+      // detect(force)는 항상 재감지+캐시 갱신, getCached는 캐시 우선(초기 화면 미감지 방지)
+      detect: (_force?: boolean) => invoke('java_detect'),
+      getCached: () => invoke('java_get_cached'),
+      getInstallations: () => invoke('java_get_cached'),
     },
     // preload 계약: {success, versions:[{version, stable}...]} (CreateProfileModal은 versions만,
     // ProfileSettingsTab은 result.success도 확인하므로 success 필수)

@@ -153,9 +153,32 @@ async fn ensure_profile_version(
     Ok(detail)
 }
 
+/// Java 감지 결과 캐시 — Electron판이 앱 시작 시 감지 후 캐시(getCached)하던 것과 동등.
+/// Tauri는 setup에서 감지하지 않으므로, 첫 조회 시 감지→캐시하는 lazy 방식.
+#[derive(Default)]
+pub struct JavaCache(pub Mutex<Option<Vec<hyenimc_launcher::java::JavaInstallation>>>);
+
+/// 강제 재감지 — 결과를 캐시에 갱신 (SettingsPage '재감지' / 프로필 생성·설정).
 #[tauri::command]
-pub async fn java_detect() -> Vec<hyenimc_launcher::java::JavaInstallation> {
-    hyenimc_launcher::java::detect_java_installations().await
+pub async fn java_detect(
+    cache: State<'_, JavaCache>,
+) -> Result<Vec<hyenimc_launcher::java::JavaInstallation>, String> {
+    let list = hyenimc_launcher::java::detect_java_installations().await;
+    *cache.0.lock().unwrap() = Some(list.clone());
+    Ok(list)
+}
+
+/// 캐시 우선 조회 — 없으면 1회 감지 후 캐시(초기 화면에서 미감지 방지).
+#[tauri::command]
+pub async fn java_get_cached(
+    cache: State<'_, JavaCache>,
+) -> Result<Vec<hyenimc_launcher::java::JavaInstallation>, String> {
+    if let Some(list) = cache.0.lock().unwrap().clone() {
+        return Ok(list);
+    }
+    let list = hyenimc_launcher::java::detect_java_installations().await;
+    *cache.0.lock().unwrap() = Some(list.clone());
+    Ok(list)
 }
 
 #[tauri::command]

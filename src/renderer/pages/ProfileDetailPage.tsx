@@ -434,20 +434,23 @@ const OverviewTab: React.FC<{ profile: any }> = ({ profile }) => {
   };
 
   const handleShowLogs = async () => {
-    if (!profile?.id) {
+    // 저장된 실제 인스턴스 경로 우선(userData 재구성보다 정확)
+    const dir = profile?.gameDirectory || (await getInstancePath().catch(() => ''));
+    if (!dir) {
       toast.error('오류', '프로필 정보가 올바르지 않습니다.');
       return;
     }
-
-    try {
-      const instancePath = await getInstancePath();
-      const logPath = `${instancePath}/logs/latest.log`;
-      console.log('[Overview] Opening log:', logPath);
-      await window.electronAPI.shell.openPath(logPath);
-    } catch (error) {
-      console.error('Failed to open logs:', error);
-      toast.error('오류', '로그 파일을 찾을 수 없습니다. 게임을 한 번 실행해주세요.');
+    // latest.log → logs 폴더 → 인스턴스 폴더 순으로 폴백(게임 미실행 시 로그 파일이 없을 수 있음)
+    const candidates = [`${dir}/logs/latest.log`, `${dir}/logs`, dir];
+    for (const target of candidates) {
+      try {
+        await window.electronAPI.shell.openPath(target);
+        return;
+      } catch (error) {
+        console.warn('[Overview] openPath 실패, 폴백:', target, error);
+      }
     }
+    toast.error('오류', '로그를 찾을 수 없습니다. 게임을 한 번 실행해주세요.');
   };
 
   const handleExport = () => {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useToast } from '../../contexts/ToastContext';
-import { User, UserPlus, Trash2, LogIn, RefreshCw } from 'lucide-react';
+import { User, Trash2, LogIn, RefreshCw } from 'lucide-react';
 
 interface Account {
   id: string;
@@ -19,8 +19,6 @@ interface AccountSelectorProps {
 export function AccountSelector({ selectedAccountId, onSelect }: AccountSelectorProps) {
   const toast = useToast();
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [showOfflineModal, setShowOfflineModal] = useState(false);
-  const [offlineUsername, setOfflineUsername] = useState('');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -44,26 +42,6 @@ export function AccountSelector({ selectedAccountId, onSelect }: AccountSelector
       onSelect(account.id);
     } catch (error: any) {
       toast.error('로그인 실패', error.message || 'Microsoft 로그인에 실패했습니다');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleAddOffline = async () => {
-    if (!offlineUsername.trim()) {
-      toast.warning('입력 필요', '사용자 이름을 입력해주세요');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const account = await window.electronAPI.account.addOffline(offlineUsername.trim());
-      await loadAccounts();
-      onSelect(account.id);
-      setShowOfflineModal(false);
-      setOfflineUsername('');
-    } catch (error: any) {
-      toast.error('추가 실패', error.message || '오프라인 계정 추가에 실패했습니다');
     } finally {
       setLoading(false);
     }
@@ -107,24 +85,14 @@ export function AccountSelector({ selectedAccountId, onSelect }: AccountSelector
           <User className="inline w-4 h-4 mr-1" />
           계정 선택
         </label>
-        <div className="flex gap-2">
-          <button
-            onClick={handleMicrosoftLogin}
-            disabled={loading}
-            className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-700 rounded flex items-center gap-1 disabled:opacity-50"
-          >
-            <LogIn className="w-3 h-3" />
-            Microsoft 로그인
-          </button>
-          <button
-            onClick={() => setShowOfflineModal(true)}
-            disabled={loading}
-            className="px-3 py-1 text-xs bg-gray-600 hover:bg-gray-700 rounded flex items-center gap-1 disabled:opacity-50"
-          >
-            <UserPlus className="w-3 h-3" />
-            오프라인 계정
-          </button>
-        </div>
+        <button
+          onClick={handleMicrosoftLogin}
+          disabled={loading}
+          className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-700 rounded flex items-center gap-1 disabled:opacity-50"
+        >
+          <LogIn className="w-3 h-3" />
+          Microsoft 로그인
+        </button>
       </div>
 
       {/* Account List */}
@@ -182,11 +150,7 @@ export function AccountSelector({ selectedAccountId, onSelect }: AccountSelector
                 <div>
                   <div className="font-medium text-sm">{account.name}</div>
                   <div className="text-xs text-gray-400">
-                    {account.type === 'microsoft' ? (
-                      <span className="text-blue-400">🔐 Microsoft</span>
-                    ) : (
-                      <span className="text-gray-500">오프라인</span>
-                    )}
+                    <span className="text-blue-400">🔐 Microsoft</span>
                   </div>
                 </div>
               </div>
@@ -215,47 +179,6 @@ export function AccountSelector({ selectedAccountId, onSelect }: AccountSelector
           </div>
         ))}
       </div>
-
-      {/* Add Offline Account Modal */}
-      {showOfflineModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="card max-w-md w-full">
-            <h3 className="text-xl font-bold mb-4">오프라인 계정 추가</h3>
-            <p className="text-sm text-gray-400 mb-4">
-              오프라인 계정은 싱글플레이 또는 크랙 서버에서만 사용할 수 있습니다.
-            </p>
-            <input
-              type="text"
-              value={offlineUsername}
-              onChange={(e) => setOfflineUsername(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleAddOffline()}
-              placeholder="사용자 이름"
-              className="input mb-4"
-              maxLength={16}
-              autoFocus
-            />
-            <div className="flex gap-2 justify-end">
-              <button
-                onClick={() => {
-                  setShowOfflineModal(false);
-                  setOfflineUsername('');
-                }}
-                className="btn-secondary"
-                disabled={loading}
-              >
-                취소
-              </button>
-              <button
-                onClick={handleAddOffline}
-                className="btn-primary"
-                disabled={loading || !offlineUsername.trim()}
-              >
-                추가
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
