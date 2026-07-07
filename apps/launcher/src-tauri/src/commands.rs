@@ -19,12 +19,28 @@ fn now_secs() -> i64 {
 
 #[tauri::command]
 pub fn profile_list(db: State<DbState>) -> Result<Vec<hyenimc_core::Profile>, String> {
-    hyenimc_core::list_profiles(&db.0.lock().unwrap()).map_err(|e| e.to_string())
+    let conn = db.0.lock().unwrap();
+    let mut profiles = hyenimc_core::list_profiles(&conn).map_err(|e| e.to_string())?;
+    // 플레이 시간/통계는 profile_stats 테이블이 원본(profiles.total_play_time은 미사용) —
+    // Electron(Go)과 동일하게 stats 값으로 채운다.
+    for p in &mut profiles {
+        if let Ok(stats) = hyenimc_core::stats::get_stats(&conn, &p.id) {
+            p.total_play_time = stats.total_play_time;
+        }
+    }
+    Ok(profiles)
 }
 
 #[tauri::command]
 pub fn profile_get(db: State<DbState>, id: String) -> Result<Option<hyenimc_core::Profile>, String> {
-    hyenimc_core::profile::get_profile(&db.0.lock().unwrap(), &id).map_err(|e| e.to_string())
+    let conn = db.0.lock().unwrap();
+    let mut profile = hyenimc_core::profile::get_profile(&conn, &id).map_err(|e| e.to_string())?;
+    if let Some(p) = profile.as_mut() {
+        if let Ok(stats) = hyenimc_core::stats::get_stats(&conn, &p.id) {
+            p.total_play_time = stats.total_play_time;
+        }
+    }
+    Ok(profile)
 }
 
 #[tauri::command]
