@@ -133,11 +133,33 @@ pub enum ArgumentValue {
     Many(Vec<String>),
 }
 
-/// inheritsFrom 병합 — 자식 값 우선, 라이브러리는 자식 + 부모 합집합,
-/// 인자는 부모 → 자식 순 연결 (TS loadVersionJson 의미).
+/// 라이브러리 maven 좌표 `group:artifact:version[:classifier]`에서 `group:artifact` 키.
+fn library_key(name: &str) -> Option<String> {
+    let mut parts = name.splitn(3, ':');
+    let group = parts.next()?;
+    let artifact = parts.next()?;
+    Some(format!("{group}:{artifact}"))
+}
+
+/// inheritsFrom 병합 — TS game-launcher.ts 의미와 동일:
+/// - 라이브러리: `[자식, …중복 아닌 부모]` (같은 group:artifact는 자식 버전 우선, 부모 제거)
+/// - 인자(game/jvm): `[자식, 부모]` (자식 먼저)
 pub fn merge_inherited(child: VersionDetail, parent: VersionDetail) -> VersionDetail {
+    // 자식 라이브러리 우선 + 같은 group:artifact를 가진 부모 라이브러리는 제거(버전 충돌 방지)
+    let child_keys: std::collections::HashSet<String> = child
+        .libraries
+        .iter()
+        .filter_map(|l| library_key(&l.name))
+        .collect();
     let mut libraries = child.libraries.clone();
-    libraries.extend(parent.libraries);
+    for lib in parent.libraries {
+        let dup = library_key(&lib.name)
+            .map(|k| child_keys.contains(&k))
+            .unwrap_or(false);
+        if !dup {
+            libraries.push(lib);
+        }
+    }
     VersionDetail {
         id: child.id,
         // 보존 — 클라이언트 jar는 부모 버전 것을 쓰므로(TS buildClasspath 의미) 병합 후에도 필요
@@ -149,8 +171,8 @@ pub fn merge_inherited(child: VersionDetail, parent: VersionDetail) -> VersionDe
         libraries,
         arguments: match (child.arguments, parent.arguments) {
             (Some(c), Some(p)) => Some(Arguments {
-                game: p.game.into_iter().chain(c.game).collect(),
-                jvm: p.jvm.into_iter().chain(c.jvm).collect(),
+                game: c.game.into_iter().chain(p.game).collect(),
+                jvm: c.jvm.into_iter().chain(p.jvm).collect(),
             }),
             (c, p) => c.or(p),
         },
@@ -213,5 +235,38 @@ mod tests {
         assert!(merged.downloads.is_some());
         assert_eq!(merged.id, "loader-1.21.1");
         assert!(merged.arguments.is_some());
+    }
+
+    #[test]
+    fn merge_dedups_parent_libs_by_group_artifact_child_wins() {
+        // 부모/자식이 같은 group:artifact를 다른 버전으로 가지면 자식 것만 남고 자식이 앞
+        let parent: VersionDetail = serde_json::from_str(
+            r#"{"id":"1.21.1","libraries":[{"name":"com.foo:bar:1.0"},{"name":"com.p:only:1"}],
+                "arguments":{"game":["--parentGame"],"jvm":["-Dparent"]}}"#,
+        )
+        .unwrap();
+        let child: VersionDetail = serde_json::from_str(
+            r#"{"id":"loader","inheritsFrom":"1.21.1","libraries":[{"name":"com.foo:bar:2.0"}],
+                "arguments":{"game":["--childGame"],"jvm":["-Dchild"]}}"#,
+        )
+        .unwrap();
+        let merged = merge_inherited(child, parent);
+        // com.foo:bar는 자식(2.0)만, com.p:only는 부모 유지 → 2개
+        assert_eq!(merged.libraries.len(), 2);
+        assert_eq!(merged.libraries[0].name, "com.foo:bar:2.0"); // 자식 먼저
+        assert_eq!(merged.libraries[1].name, "com.p:only:1");
+        // 인자는 자식 먼저
+        let args = merged.arguments.unwrap();
+        let plains = |entries: &[ArgumentEntry]| -> Vec<String> {
+            entries
+                .iter()
+                .filter_map(|e| match e {
+                    ArgumentEntry::Plain(s) => Some(s.clone()),
+                    _ => None,
+                })
+                .collect()
+        };
+        assert_eq!(plains(&args.jvm), vec!["-Dchild", "-Dparent"]);
+        assert_eq!(plains(&args.game), vec!["--childGame", "--parentGame"]);
     }
 }
