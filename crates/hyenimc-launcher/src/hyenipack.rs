@@ -483,7 +483,13 @@ pub async fn check_pack_update(
         worker_base.trim_end_matches('/'),
         meta.hyenipack_id
     );
-    let latest: LatestInfo = http.get(&url).send().await?.error_for_status()?.json().await?;
+    let resp = http.get(&url).send().await?;
+    // 404 = 이 팩이 업데이트 서버에 없음(로컬에서 만든 미배포 팩 / 관리 대상 아님).
+    // "연결 불가"(네트워크 오류)와 구분해 업데이트 없음으로 취급 → 실행 차단하지 않는다.
+    if resp.status() == reqwest::StatusCode::NOT_FOUND {
+        return Ok(None);
+    }
+    let latest: LatestInfo = resp.error_for_status()?.json().await?;
     if latest.version == meta.version {
         return Ok(None);
     }
