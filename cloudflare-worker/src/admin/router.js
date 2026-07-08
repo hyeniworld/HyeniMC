@@ -1,9 +1,7 @@
-/**
- * 관리 API 라우터. /admin/api/* 요청을 받아 처리한다.
- * Cloudflare Access JWT 인증 미들웨어를 통과해야 핸들러에 도달한다.
- */
-
 import { verifyAccessJwt } from './access.js';
+import { handleMods } from './mods.js';
+import { handlePacks } from './packs.js';
+import { rebuildRegistry } from './registry.js';
 
 export function adminJson(obj, status = 200) {
   return new Response(JSON.stringify(obj), {
@@ -12,17 +10,31 @@ export function adminJson(obj, status = 200) {
   });
 }
 
+/** 인증 이후의 순수 라우팅(테스트에서 직접 호출). */
+export async function dispatchAdmin(request, env) {
+  const path = new URL(request.url).pathname;
+  const method = request.method;
+
+  if (method === 'GET' && path === '/admin/api/ping') {
+    return adminJson({ ok: true });
+  }
+  if (method === 'POST' && path === '/admin/api/registry/rebuild') {
+    const reg = await rebuildRegistry(env);
+    return adminJson({ ok: true, count: reg.mods.length });
+  }
+  if (path.startsWith('/admin/api/modpacks')) {
+    return await handlePacks(request, env);
+  }
+  if (path.startsWith('/admin/api/mods')) {
+    return await handleMods(request, env);
+  }
+  return adminJson({ error: 'Not Found' }, 404);
+}
+
 export async function handleAdminApi(request, env, ctx) {
   const identity = await verifyAccessJwt(request, env);
   if (!identity) {
     return adminJson({ error: 'Unauthorized', message: 'Access 인증이 필요합니다.' }, 401);
   }
-
-  const path = new URL(request.url).pathname;
-
-  if (request.method === 'GET' && path === '/admin/api/ping') {
-    return adminJson({ ok: true });
-  }
-
-  return adminJson({ error: 'Not Found' }, 404);
+  return await dispatchAdmin(request, env);
 }
