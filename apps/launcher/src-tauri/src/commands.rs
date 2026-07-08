@@ -113,12 +113,12 @@ pub async fn profile_delete(
         if delete_failed {
             let conn = db.0.lock().unwrap();
             let _ = conn.execute(
-                "UPDATE profiles SET installation_status = 'incomplete' WHERE id = ?1",
+                "UPDATE profiles SET installation_status = 'delete-failed' WHERE id = ?1",
                 [&id],
             );
             return Err(
                 "프로필 파일을 완전히 삭제하지 못했습니다. 다른 프로그램이 파일을 사용 중일 수 있습니다. \
-                 프로필이 '불완전' 상태로 표시되며, 잠시 후 다시 삭제를 시도하세요."
+                 프로필이 '삭제 실패' 상태로 표시되며, 잠시 후 다시 삭제를 시도하세요."
                     .into(),
             );
         }

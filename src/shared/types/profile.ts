@@ -4,7 +4,7 @@
 
 export type LoaderType = 'vanilla' | 'fabric' | 'forge' | 'neoforge' | 'quilt';
 
-export type InstallationStatus = 'complete' | 'installing' | 'failed' | 'incomplete';
+export type InstallationStatus = 'complete' | 'installing' | 'failed' | 'incomplete' | 'delete-failed';
 
 export interface Profile {
   id: string;

@@ -345,14 +345,18 @@ export const ProfileDetailPage: React.FC = () => {
                   {profile.installationStatus === 'installing' && '설치 진행 중'}
                   {profile.installationStatus === 'incomplete' && '설치 미완료'}
                   {profile.installationStatus === 'failed' && '설치 실패'}
+                  {profile.installationStatus === 'delete-failed' && '삭제 실패'}
                 </h3>
                 <p className="text-sm text-gray-300 mb-2">
                   {profile.installationStatus === 'installing' && '이 프로필은 현재 모드팩 설치가 진행 중입니다. 설치가 완료될 때까지 기다려주세요.'}
                   {profile.installationStatus === 'incomplete' && '이 프로필은 모드팩 설치가 완료되지 않았습니다. 런처를 닫는 등의 이유로 설치가 중단되었을 수 있습니다.'}
                   {profile.installationStatus === 'failed' && '이 프로필의 모드팩 설치가 실패했습니다. 네트워크 연결을 확인하거나 다시 시도해주세요.'}
+                  {profile.installationStatus === 'delete-failed' && '이 프로필은 삭제 도중 일부 파일이 지워지지 않아 불완전한 상태입니다. 다른 프로그램이 파일을 사용 중일 수 있으니, 잠시 후 다시 삭제해주세요.'}
                 </p>
                 <p className="text-sm text-gray-400">
-                  이 프로필로는 게임을 실행할 수 없습니다. 프로필을 삭제하고 다시 생성해주세요.
+                  {profile.installationStatus === 'delete-failed'
+                    ? '이 프로필은 사용할 수 없습니다. 다시 삭제해주세요.'
+                    : '이 프로필로는 게임을 실행할 수 없습니다. 프로필을 삭제하고 다시 생성해주세요.'}
                 </p>
               </div>
             </div>
@@ -362,7 +366,7 @@ export const ProfileDetailPage: React.FC = () => {
 
       {/* Content */}
       <div className="flex-1 overflow-auto">
-        {activeTab === 'overview' && <OverviewTab profile={profile} onReload={loadProfile} />}
+        {activeTab === 'overview' && <OverviewTab profile={profile} onReload={loadProfile} isRunning={isRunning} />}
         {activeTab === 'mods' && profileId && <ModList profileId={profileId} />}
         {activeTab === 'resourcepacks' && profileId && <ResourcePackList profileId={profileId} />}
         {activeTab === 'shaderpacks' && profileId && <ShaderPackList profileId={profileId} />}
@@ -383,7 +387,7 @@ export const ProfileDetailPage: React.FC = () => {
 };
 
 // Overview Tab
-const OverviewTab: React.FC<{ profile: any; onReload: () => void }> = ({ profile, onReload }) => {
+const OverviewTab: React.FC<{ profile: any; onReload: () => void; isRunning: boolean }> = ({ profile, onReload, isRunning }) => {
   const toast = useToast();
   const navigate = useNavigate();
   const [profilePath, setProfilePath] = useState<string>('');
@@ -572,15 +576,19 @@ const OverviewTab: React.FC<{ profile: any; onReload: () => void }> = ({ profile
             <div className="text-xs text-gray-400">모드팩 파일로 저장</div>
           </button>
           )}
-          <button 
+          <button
             onClick={() => setShowDeleteConfirm(true)}
-            className="p-4 border border-gray-700 rounded-lg hover:bg-red-900 hover:border-red-800 transition-colors text-left"
+            disabled={isRunning}
+            title={isRunning ? '게임 실행 중에는 삭제할 수 없습니다. 먼저 게임을 종료하세요.' : undefined}
+            className="p-4 border border-gray-700 rounded-lg hover:bg-red-900 hover:border-red-800 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:border-gray-700"
           >
             <div className="flex items-center gap-2 text-2xl mb-2">
               <Trash2 className="w-6 h-6 text-red-400" />
             </div>
             <div className="font-medium text-gray-200">프로필 삭제</div>
-            <div className="text-xs text-gray-400">영구적으로 제거</div>
+            <div className="text-xs text-gray-400">
+              {isRunning ? '게임 종료 후 가능' : '영구적으로 제거'}
+            </div>
           </button>
         </div>
       </div>

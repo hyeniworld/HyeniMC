@@ -340,6 +340,7 @@ export function ProfileList() {
                     {profile.installationStatus === 'installing' && '설치 중'}
                     {profile.installationStatus === 'failed' && '설치 실패'}
                     {profile.installationStatus === 'incomplete' && '설치 미완료'}
+                    {profile.installationStatus === 'delete-failed' && '삭제 실패'}
                   </span>
                 </div>
               )}
@@ -401,9 +402,12 @@ export function ProfileList() {
                         {profile.installationStatus === 'installing' && '모드팩 설치가 진행 중이었습니다'}
                         {profile.installationStatus === 'failed' && '모드팩 설치에 실패했습니다'}
                         {profile.installationStatus === 'incomplete' && '모드팩이 정상적으로 설치되지 않았습니다'}
+                        {profile.installationStatus === 'delete-failed' && '삭제에 실패한 불완전한 프로필입니다'}
                       </p>
                       <p className="text-red-400">
-                        이 프로필은 플레이할 수 없습니다. 프로필을 삭제하고 다시 설치해주세요.
+                        {profile.installationStatus === 'delete-failed'
+                          ? '일부 파일이 지워지지 않았습니다. 잠시 후 다시 삭제해주세요.'
+                          : '이 프로필은 플레이할 수 없습니다. 프로필을 삭제하고 다시 설치해주세요.'}
                       </p>
                     </div>
                   </div>
