@@ -43,6 +43,7 @@ pub struct UpdateCheckResult {
 pub async fn launcher_check_updates(
     app: AppHandle,
     pending: tauri::State<'_, PendingUpdate>,
+    db: tauri::State<'_, crate::commands::DbState>,
 ) -> Result<UpdateCheckResult, String> {
     let current = app.package_info().version.to_string();
     let updater = app.updater().map_err(|e| e.to_string())?;
@@ -50,7 +51,14 @@ pub async fn launcher_check_updates(
         Ok(Some(update)) => {
             let version = update.version.clone();
             let notes = update.body.clone();
-            *pending.0.lock().unwrap() = Some(update);
+            // 설정의 '자동 다운로드'가 켜져 있으면 업데이트 발견 즉시 자동 다운로드(Electron autoUpdater 동일)
+            let auto_download = {
+                let conn = db.0.lock().unwrap();
+                hyenimc_core::settings::get_settings(&conn)
+                    .map(|s| s.update.auto_download)
+                    .unwrap_or(false)
+            };
+            *pending.0.lock().unwrap() = Some(update.clone());
             // useLauncherUpdate 훅은 반환값이 아니라 이벤트로 배너를 띄운다(Electron autoUpdater와 동일).
             let _ = app.emit(
                 "launcher:update-available",
@@ -61,6 +69,12 @@ pub async fn launcher_check_updates(
                     "required": false,
                 }),
             );
+            if auto_download {
+                let app2 = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    let _ = run_download(&app2, &update).await;
+                });
+            }
             Ok(UpdateCheckResult { success: true, available: true, version: Some(version), notes })
         }
         Ok(None) => {
@@ -76,17 +90,9 @@ pub async fn launcher_check_updates(
     }
 }
 
-#[tauri::command]
-pub async fn launcher_download_update(
-    app: AppHandle,
-    pending: tauri::State<'_, PendingUpdate>,
-) -> Result<bool, String> {
-    let update = pending.0.lock().unwrap().clone();
-    let Some(update) = update else {
-        return Err("다운로드할 업데이트가 없습니다 (먼저 확인하세요)".into());
-    };
+/// 업데이트 다운로드 + 진행률/완료/에러 이벤트 발행 (수동 다운로드·자동 다운로드 공용).
+async fn run_download(app: &AppHandle, update: &tauri_plugin_updater::Update) -> Result<(), String> {
     let version = update.version.clone();
-
     // 진행률 이벤트(launcher:download-progress) — 퍼센트 정수가 바뀔 때만 발행(과다 emit 방지).
     let transferred = Arc::new(AtomicU64::new(0));
     let last_pct = Arc::new(AtomicU64::new(u64::MAX));
@@ -120,7 +126,7 @@ pub async fn launcher_download_update(
     match result {
         Ok(_) => {
             let _ = app.emit("launcher:update-downloaded", serde_json::json!({ "version": version }));
-            Ok(true)
+            Ok(())
         }
         Err(e) => {
             let msg = e.to_string();
@@ -128,6 +134,19 @@ pub async fn launcher_download_update(
             Err(msg)
         }
     }
+}
+
+#[tauri::command]
+pub async fn launcher_download_update(
+    app: AppHandle,
+    pending: tauri::State<'_, PendingUpdate>,
+) -> Result<bool, String> {
+    let update = pending.0.lock().unwrap().clone();
+    let Some(update) = update else {
+        return Err("다운로드할 업데이트가 없습니다 (먼저 확인하세요)".into());
+    };
+    run_download(&app, &update).await?;
+    Ok(true)
 }
 
 #[tauri::command]

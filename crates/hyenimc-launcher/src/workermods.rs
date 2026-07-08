@@ -326,7 +326,20 @@ fn map_worker_download_error(e: LauncherError) -> LauncherError {
     }
 }
 
-/// 선택 업데이트 설치 — sha256 검증 다운로드 후 구버전 파일 제거.
+/// 모드별 설치 결과 — 렌더러(useWorkerModUpdates)가 `{modId, success, error}[]`로 소비.
+/// Electron WorkerModInstallResult와 동일 계약(한 모드 실패해도 나머지는 계속 시도).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstallResult {
+    pub mod_id: String,
+    pub success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// 선택 업데이트 설치 — sha256 검증 다운로드 후 구버전 파일 제거. 모드별로 성공/실패를 누적하며,
+/// 한 모드가 실패해도 전체를 중단하지 않는다(Electron installMultipleMods의 per-mod try/catch).
+/// 반환 Result의 Err은 mods 디렉터리 생성 실패 같은 설정 단계 오류에만 쓴다.
 pub async fn install_updates(
     http: &reqwest::Client,
     worker_base: &str,
@@ -335,9 +348,9 @@ pub async fn install_updates(
     token: &str,
     cfg: &DownloadConfig,
     on_progress: impl Fn(&str, u32) + Send + Sync,
-) -> Result<Vec<String>, LauncherError> {
+) -> Result<Vec<InstallResult>, LauncherError> {
     std::fs::create_dir_all(mods_dir)?;
-    let mut installed = Vec::new();
+    let mut results = Vec::new();
     for update in updates {
         log::info!(
             "워커 모드 설치: {} {} → {} ({}/{})",
@@ -355,7 +368,7 @@ pub async fn install_updates(
             .collect();
 
         let dest = mods_dir.join(&update.file);
-        download_all(
+        let dl = download_all(
             http,
             vec![DownloadTask {
                 url: download_url(worker_base, update, token),
@@ -368,15 +381,27 @@ pub async fn install_updates(
             |_| {},
         )
         .await
-        .map_err(map_worker_download_error)?;
+        .map_err(map_worker_download_error);
 
-        for old in old_files {
-            let _ = std::fs::remove_file(&old);
+        match dl {
+            Ok(_) => {
+                for old in old_files {
+                    let _ = std::fs::remove_file(&old);
+                }
+                on_progress(&update.mod_id, 100);
+                results.push(InstallResult { mod_id: update.mod_id.clone(), success: true, error: None });
+            }
+            Err(e) => {
+                log::warn!("워커 모드 설치 실패: {} — {e}", update.mod_id);
+                results.push(InstallResult {
+                    mod_id: update.mod_id.clone(),
+                    success: false,
+                    error: Some(e.to_string()),
+                });
+            }
         }
-        on_progress(&update.mod_id, 100);
-        installed.push(update.mod_id.clone());
     }
-    Ok(installed)
+    Ok(results)
 }
 
 #[cfg(test)]

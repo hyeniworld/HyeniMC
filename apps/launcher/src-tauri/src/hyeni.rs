@@ -45,7 +45,11 @@ pub async fn worker_mods_check(
     let profile_dir = PathBuf::from(&profile_path);
     // 기설치 워커 모드는 서버와 무관하게 항상 업데이트 확인(서버 미등록 시 구버전 방치 방지).
     // 신규(미설치) 모드는 인증 서버일 때만 — has_authorized_server로 check_all_updates에 위임.
-    let has_authorized_server = should_check(&profile_dir, server_address.as_deref());
+    // 수동 패널은 Electron checkAllModUpdates와 동일하게 프로필 serverAddress만 보고
+    // servers.dat 폴백은 하지 않는다(pre-launch 게이트와 다름).
+    let has_authorized_server = server_address
+        .as_deref()
+        .is_some_and(|s| !s.is_empty() && is_authorized_server(s));
     let base = crate::pack::worker_base()?;
     let http = reqwest::Client::new();
     // 수동 패널은 로더 버전 필터를 적용하지 않는다(Electron registry.checkAllModUpdates 동일).
@@ -68,7 +72,7 @@ pub async fn worker_mods_install(
     app: AppHandle,
     profile_path: String,
     updates: Vec<workermods::WorkerModUpdate>,
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<workermods::InstallResult>, String> {
     let base = crate::pack::worker_base()?;
     let profile_dir = PathBuf::from(&profile_path);
 
@@ -88,7 +92,7 @@ pub async fn worker_mods_install(
     let http = reqwest::Client::new();
 
     let app2 = app.clone();
-    let installed = workermods::install_updates(
+    let results = workermods::install_updates(
         &http,
         &base,
         &PathBuf::from(&profile_path).join("mods"),
@@ -107,9 +111,9 @@ pub async fn worker_mods_install(
 
     let _ = app.emit(
         "worker-mods:update-complete",
-        serde_json::json!({ "installed": installed }),
+        serde_json::json!({ "results": results }),
     );
-    Ok(installed)
+    Ok(results)
 }
 
 /// hyenimc:// 딥링크 처리 — main.rs의 on_open_url/single-instance에서 호출.
