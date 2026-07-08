@@ -370,9 +370,9 @@ pub async fn game_launch(
         profile.game_directory
     );
 
-    // ⓪ 실행 전 메모리 검증 (Electron GameLaunchValidator) — 시스템 메모리 초과 설정을 사전 차단해
-    //    JVM "Could not reserve enough space" 류 암호적 실패를 방지.
-    validate_memory(&app, &profile, &settings)?;
+    // ⓪ 실행 전 검증 (Electron GameLaunchValidator) — Java 설치/경로/버전 + 메모리 + 디렉터리를
+    //    spawn 이전에 확인해 잘못된 설정을 친절한 안내와 함께 차단(암호적 OS/JVM 오류 방지).
+    validate_launch(&app, &profile, &settings).await?;
 
     // ⓪ 실행 전 팩 게이트 (breaking 차단 / 서버 접근 불가 시 정책)
     crate::pack::pre_launch_pack_gate(&dirs, &settings).await?;
@@ -451,7 +451,8 @@ pub async fn game_launch(
                 &profile.game_version,
                 &profile.loader_type,
                 profile.loader_version.as_deref().unwrap_or(""),
-                true, // 이 블록은 should_check(인증 서버) 통과 시에만 진입
+                true, // include_all — 실행 전엔 적용 가능한 모든 모드 확인(Electron checkAllMods)
+                true, // has_authorized_server — 이 블록은 should_check 통과 시에만 진입
             )
             .await
             .map_err(|e| e.to_string())?;
@@ -661,14 +662,67 @@ fn now_secs() -> i64 {
         .unwrap_or(0)
 }
 
-/// 실행 전 메모리 검증 (Electron GameLaunchValidator.checkMemoryConfiguration).
-/// 시스템 메모리를 초과하는 설정은 JVM 할당 실패로 이어지므로 spawn 이전에 차단하고
-/// show-error-dialog로 원인/해결책을 안내한다.
-fn validate_memory(
+/// 실행 전 검증 이슈 하나 (Electron ValidationIssue 대응).
+struct LaunchIssue {
+    severity: &'static str, // "critical" | "error" | "warning"
+    title: String,
+    message: String,
+    solution: String,
+    action: &'static str,
+}
+
+/// 실행 전 검증 (Electron GameLaunchValidator.validateBeforeLaunch).
+/// Java 설치/경로/버전 + 메모리 + 게임 디렉터리를 검사해, warning은 로그로 남기고
+/// critical/error가 하나라도 있으면 첫 항목을 show-error-dialog로 안내하며 실행을 차단한다.
+/// (가용 메모리·게임 파일·디스크 공간은 Electron도 의도적으로 검사하지 않음 — 무동작이라 미포함)
+async fn validate_launch(
     app: &AppHandle,
     profile: &hyenimc_core::Profile,
     settings: &hyenimc_core::settings::GlobalSettings,
 ) -> Result<(), String> {
+    let mut issues: Vec<LaunchIssue> = Vec::new();
+
+    // 1. Java 설치 확인 (critical) — 하나도 없으면 실행 불가
+    if hyenimc_launcher::java::detect_java_installations().await.is_empty() {
+        issues.push(LaunchIssue {
+            severity: "critical",
+            title: "Java를 찾을 수 없습니다".into(),
+            message: "Minecraft를 실행하려면 Java가 필요합니다.".into(),
+            solution: "Java를 설치하거나 Java 경로를 수동으로 설정해주세요.".into(),
+            action: "openJavaInstallGuide",
+        });
+    }
+
+    // 2·3. Java 경로가 지정된 경우만(자동 선택이면 스킵) 경로 유효성 + 버전 확인
+    let java_path = profile.java_path.as_deref().filter(|p| !p.is_empty());
+    if let Some(jp) = java_path {
+        match hyenimc_launcher::java::probe(std::path::Path::new(jp)).await {
+            None => issues.push(LaunchIssue {
+                severity: "error",
+                title: "Java 경로가 잘못되었습니다".into(),
+                message: format!("설정된 Java 경로({jp})를 찾을 수 없거나 유효한 Java가 아닙니다."),
+                solution: "Java 경로를 다시 선택하거나 자동 선택으로 변경하세요.".into(),
+                action: "resetJavaPath",
+            }),
+            Some(inst) => {
+                let required = hyenimc_launcher::java::recommended_java_major(&profile.game_version);
+                if inst.major_version < required {
+                    issues.push(LaunchIssue {
+                        severity: "warning",
+                        title: "Java 버전이 권장 사양보다 낮습니다".into(),
+                        message: format!(
+                            "Minecraft {}은(는) Java {required} 이상을 권장하지만, 현재 Java {}이(가) 설정되어 있습니다.",
+                            profile.game_version, inst.major_version
+                        ),
+                        solution: format!("Java {required} 이상으로 변경하면 더 안정적입니다."),
+                        action: "fixJavaVersion",
+                    });
+                }
+            }
+        }
+    }
+
+    // 4. 메모리 (critical/error)
     let max_mem = profile.memory_max.unwrap_or(settings.java.memory_max).max(1) as u64;
     let min_mem = profile.memory_min.unwrap_or(settings.java.memory_min).max(1) as u64;
     let sys_mb = {
@@ -676,50 +730,107 @@ fn validate_memory(
         sys.refresh_memory();
         sys.total_memory() / (1024 * 1024)
     };
-    if sys_mb == 0 {
-        return Ok(()); // 시스템 메모리 확인 불가 — 검증 생략
+    if sys_mb > 0 {
+        if (max_mem as f64) > (sys_mb as f64) * 0.9 {
+            let suggested = (sys_mb as f64 * 0.7) as u64;
+            issues.push(LaunchIssue {
+                severity: "critical",
+                title: "메모리 설정이 시스템 메모리를 초과합니다".into(),
+                message: format!("최대 메모리 {max_mem}MB가 시스템 메모리 {sys_mb}MB의 {}%입니다.", max_mem * 100 / sys_mb),
+                solution: format!("최대 메모리를 {suggested}MB 이하로 줄이세요."),
+                action: "reduceMaxMemory",
+            });
+        } else if min_mem == max_mem && (min_mem as f64) > (sys_mb as f64) * 0.8 {
+            issues.push(LaunchIssue {
+                severity: "error",
+                title: "메모리 설정이 위험합니다".into(),
+                message: format!(
+                    "최소/최대 메모리가 모두 {min_mem}MB로 시스템 메모리 {sys_mb}MB의 {}%를 차지합니다.",
+                    min_mem * 100 / sys_mb
+                ),
+                solution: "최소 메모리를 줄이거나 최소≠최대로 설정하세요.".into(),
+                action: "fixDangerousMemory",
+            });
+        }
     }
-    let dialog = |title: &str, message: String, suggestion: String, action: &str| {
+
+    // 5. 게임 디렉터리 (error) — 없으면 생성, 쓰기 권한 확인
+    if let Some(issue) = check_game_directory(&profile.game_directory) {
+        issues.push(issue);
+    }
+
+    // warning은 실행을 막지 않고 로그로만 남긴다 (Electron 동일)
+    for w in issues.iter().filter(|i| i.severity == "warning") {
+        let _ = app.emit(
+            "game:log",
+            serde_json::json!({ "profileId": &profile.id, "line": format!("[검증 경고] {}: {}", w.title, w.message) }),
+        );
+    }
+
+    // critical/error가 하나라도 있으면 첫 critical(없으면 첫 error)로 차단 + 안내
+    let blocking = issues
+        .iter()
+        .find(|i| i.severity == "critical")
+        .or_else(|| issues.iter().find(|i| i.severity == "error"));
+    if let Some(issue) = blocking {
         let _ = app.emit(
             "show-error-dialog",
             serde_json::json!({
                 "type": "error",
-                "title": title,
-                "message": message,
-                "suggestions": [suggestion],
-                "actions": [{ "label": "메모리 설정 열기", "type": "primary", "action": action }],
+                "title": issue.title,
+                "message": issue.message,
+                "suggestions": [issue.solution],
+                "actions": [{ "label": "설정 열기", "type": "primary", "action": issue.action }],
             }),
         );
-    };
-
-    // 1. 최대 메모리가 시스템 메모리의 90% 초과 → 차단
-    if (max_mem as f64) > (sys_mb as f64) * 0.9 {
-        let suggested = (sys_mb as f64 * 0.7) as u64;
-        let pct = max_mem * 100 / sys_mb;
-        dialog(
-            "메모리 설정이 시스템 메모리를 초과합니다",
-            format!("최대 메모리 {max_mem}MB가 시스템 메모리 {sys_mb}MB의 {pct}%입니다."),
-            format!("설정에서 최대 메모리를 {suggested}MB 이하로 줄이세요."),
-            "reduceMaxMemory",
-        );
-        return Err(format!(
-            "최대 메모리({max_mem}MB)가 시스템 메모리({sys_mb}MB)의 90%를 초과합니다. 설정을 조정하세요."
-        ));
+        return Err(format!("{}: {}", issue.title, issue.message));
     }
-
-    // 2. 최소 = 최대이고 시스템 메모리 80% 초과 → 차단 (시작 즉시 전체 할당은 위험)
-    if min_mem == max_mem && (min_mem as f64) > (sys_mb as f64) * 0.8 {
-        let pct = min_mem * 100 / sys_mb;
-        dialog(
-            "메모리 설정이 위험합니다",
-            format!("최소/최대 메모리가 모두 {min_mem}MB로 시스템 메모리 {sys_mb}MB의 {pct}%를 차지합니다."),
-            "최소 메모리를 줄이거나 최소≠최대로 설정하세요.".to_string(),
-            "fixDangerousMemory",
-        );
-        return Err(format!(
-            "최소=최대 메모리({min_mem}MB)가 시스템 메모리({sys_mb}MB)의 80%를 초과합니다. 설정을 조정하세요."
-        ));
-    }
-
     Ok(())
+}
+
+/// 게임 디렉터리 검사: 존재/디렉터리 여부, 없으면 생성, 쓰기 권한(임시 파일). 문제 없으면 None.
+fn check_game_directory(game_dir: &str) -> Option<LaunchIssue> {
+    if game_dir.is_empty() {
+        return None; // 경로 미설정은 별도 경로로 처리
+    }
+    let path = std::path::Path::new(game_dir);
+    match std::fs::metadata(path) {
+        Ok(m) if !m.is_dir() => {
+            return Some(LaunchIssue {
+                severity: "error",
+                title: "게임 디렉터리가 유효하지 않습니다".into(),
+                message: format!("{game_dir}는 디렉터리가 아닙니다."),
+                solution: "올바른 경로를 선택하세요.".into(),
+                action: "selectGameDirectory",
+            });
+        }
+        Ok(_) => {}
+        Err(_) => {
+            // 없으면 생성 시도
+            if std::fs::create_dir_all(path).is_err() {
+                return Some(LaunchIssue {
+                    severity: "error",
+                    title: "게임 디렉터리를 생성할 수 없습니다".into(),
+                    message: format!("{game_dir} 경로를 생성할 수 없습니다."),
+                    solution: "디렉터리 권한을 확인하거나 다른 경로를 선택하세요.".into(),
+                    action: "selectDifferentDirectory",
+                });
+            }
+        }
+    }
+    // 쓰기 권한 확인 — 임시 파일 생성/삭제
+    let probe = path.join(".hyenimc-write-test");
+    match std::fs::File::create(&probe) {
+        Ok(_) => {
+            let _ = std::fs::remove_file(&probe);
+            None
+        }
+        Err(_) => Some(LaunchIssue {
+            severity: "error",
+            title: "게임 디렉터리 권한이 없습니다".into(),
+            message: format!("{game_dir}에 읽기/쓰기 권한이 없습니다."),
+            solution: "디렉터리 권한을 확인하거나 다른 경로를 선택하세요.".into(),
+            action: "fixPermissions",
+        }),
+    }
 }

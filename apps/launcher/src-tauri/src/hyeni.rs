@@ -56,6 +56,7 @@ pub async fn worker_mods_check(
         &game_version,
         &loader_type,
         "",
+        false, // include_all=false — 수동 패널은 게이트 적용(Electron checkAllModUpdates)
         has_authorized_server,
     )
     .await

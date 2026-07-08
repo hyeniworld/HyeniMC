@@ -100,6 +100,15 @@ pub struct Library {
     pub rules: Vec<Rule>,
     #[serde(default)]
     pub url: Option<String>, // maven 베이스 (로더 라이브러리)
+    /// natives jar 추출 시 제외 패턴 (버전 JSON `extract.exclude`). 공식 런처와 동일하게 데이터 기반.
+    #[serde(default)]
+    pub extract: Option<Extract>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Extract {
+    #[serde(default)]
+    pub exclude: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

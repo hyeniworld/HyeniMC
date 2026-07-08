@@ -91,7 +91,8 @@ pub fn parse_major(version: &str) -> u32 {
     }
 }
 
-async fn probe(java_path: &std::path::Path) -> Option<JavaInstallation> {
+/// 특정 java 실행 파일을 실행해 유효성/버전을 확인 (실행 전 검증에 사용). 유효한 Java가 아니면 None.
+pub async fn probe(java_path: &std::path::Path) -> Option<JavaInstallation> {
     // properties까지 한 번에 얻어 vendor/os.arch도 채운다(별도 호출 불필요).
     let output = tokio::process::Command::new(java_path)
         .arg("-XshowSettings:properties")

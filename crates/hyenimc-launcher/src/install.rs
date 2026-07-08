@@ -76,8 +76,9 @@ pub fn load_version_detail(dirs: &GameDirs, version_id: &str) -> Result<VersionD
     Ok(detail)
 }
 
-/// natives classifier 방식 라이브러리의 로컬 jar 경로 목록 (추출 입력).
-pub fn native_jars_for(detail: &VersionDetail, dirs: &GameDirs) -> Vec<PathBuf> {
+/// natives classifier 방식 라이브러리의 (로컬 jar 경로, extract.exclude 패턴) 목록 (추출 입력).
+/// exclude는 버전 JSON의 `extract.exclude`(공식 런처와 동일). 없으면 기존 안전 기본값 `["META-INF/"]`.
+pub fn native_jars_for(detail: &VersionDetail, dirs: &GameDirs) -> Vec<(PathBuf, Vec<String>)> {
     let os_key = native_classifier_key();
     let mut out = Vec::new();
     for lib in &detail.libraries {
@@ -91,7 +92,12 @@ pub fn native_jars_for(detail: &VersionDetail, dirs: &GameDirs) -> Vec<PathBuf> 
             if let Some(classifiers) = &downloads.classifiers {
                 if let Some(artifact) = classifiers.get(&classifier) {
                     if let Some(p) = &artifact.path {
-                        out.push(dirs.shared_libraries.join(p));
+                        let exclude = lib
+                            .extract
+                            .as_ref()
+                            .map(|e| e.exclude.clone())
+                            .unwrap_or_else(|| vec!["META-INF/".to_string()]);
+                        out.push((dirs.shared_libraries.join(p), exclude));
                     }
                 }
             }
@@ -399,6 +405,10 @@ mod tests {
             shared_assets: tmp.path().join("sa"),
         };
         let jars = native_jars_for(&detail, &dirs);
-        assert_eq!(jars, vec![tmp.path().join("sl").join("l/n.jar")]);
+        // extract 필드 없음 → 안전 기본값 ["META-INF/"]
+        assert_eq!(
+            jars,
+            vec![(tmp.path().join("sl").join("l/n.jar"), vec!["META-INF/".to_string()])]
+        );
     }
 }

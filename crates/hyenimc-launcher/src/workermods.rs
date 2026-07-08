@@ -185,8 +185,10 @@ pub fn local_mod_version(mods_dir: &Path, mod_id: &str) -> Option<String> {
 /// 워커 모드 업데이트 확인.
 /// - `loader_version`: 비면 로더 버전 호환 필터 미적용(수동 패널). 값이 있으면 min/maxLoaderVersion으로
 ///   불호환 모드를 제외(실행 전 자동 업데이트 — Electron checkAllMods와 동일).
-/// - `has_authorized_server`: 신규(미설치) 모드는 인증 서버 + required일 때만 포함. 기설치 모드는
-///   서버와 무관하게 항상 확인한다(Electron checkAllModUpdates — 서버 미등록이어도 구버전 방치 방지).
+/// - `include_all`: true면 적용 가능한 모든 모드를 확인(실행 전 자동 업데이트 — Electron checkAllMods).
+///   false면 아래 게이트를 적용(수동 패널 — Electron checkAllModUpdates).
+/// - `has_authorized_server`: (include_all=false일 때) 신규(미설치) 모드는 인증 서버 + required일 때만
+///   포함. 기설치 모드는 서버와 무관하게 항상 확인(서버 미등록이어도 구버전 방치 방지).
 pub async fn check_all_updates(
     http: &reqwest::Client,
     worker_base: &str,
@@ -194,6 +196,7 @@ pub async fn check_all_updates(
     game_version: &str,
     loader_type: &str,
     loader_version: &str,
+    include_all: bool,
     has_authorized_server: bool,
 ) -> Result<Vec<WorkerModUpdate>, LauncherError> {
     let registry: RegistryResponse = http
@@ -210,8 +213,9 @@ pub async fn check_all_updates(
         // 비정형 버전) 설치된 모드를 '미설치'로 오인하지 않게 한다.
         let installed = !find_mod_files(mods_dir, &item.id).is_empty();
 
-        // 게이트: 기설치 → 항상, 미설치 → (인증 서버 + required)일 때만 (Electron 동일)
-        if !should_include_mod(installed, &item.category, has_authorized_server) {
+        // 게이트: include_all(실행 전)은 모두 확인. 그 외(수동 패널)는 기설치 → 항상,
+        // 미설치 → (인증 서버 + required)일 때만 (Electron 동일)
+        if !include_all && !should_include_mod(installed, &item.category, has_authorized_server) {
             continue;
         }
 

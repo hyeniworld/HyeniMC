@@ -9,10 +9,15 @@ pub fn native_classifier_key() -> &'static str {
     crate::rules::os_name()
 }
 
-pub fn extract_natives(version_dir: &Path, jars: &[PathBuf]) -> Result<PathBuf, LauncherError> {
+/// natives jar들을 추출. 각 항목은 (jar 경로, 제외 패턴). 제외 패턴은 버전 JSON `extract.exclude`에서
+/// 오며(공식 런처 동일), 그 접두사로 시작하는 엔트리는 추출하지 않는다.
+pub fn extract_natives(
+    version_dir: &Path,
+    jars: &[(PathBuf, Vec<String>)],
+) -> Result<PathBuf, LauncherError> {
     let natives_dir = version_dir.join("natives");
     std::fs::create_dir_all(&natives_dir)?;
-    for jar in jars {
+    for (jar, exclude) in jars {
         let file = std::fs::File::open(jar)?;
         let mut zip =
             zip::ZipArchive::new(file).map_err(|e| LauncherError::Other(e.to_string()))?;
@@ -21,9 +26,8 @@ pub fn extract_natives(version_dir: &Path, jars: &[PathBuf]) -> Result<PathBuf, 
                 .by_index(i)
                 .map_err(|e| LauncherError::Other(e.to_string()))?;
             let name = entry.name().to_string();
-            // 실 Mojang/Fabric/NeoForge natives jar의 extract.exclude는 전부 ["META-INF/"] 하나뿐이라
-            // 이 접두사 제외가 데이터 기반과 동일 결과다(디렉터리 엔트리도 제외).
-            if name.starts_with("META-INF/") || name.ends_with('/') {
+            // 디렉터리 엔트리 + extract.exclude 접두사에 해당하면 건너뜀
+            if name.ends_with('/') || exclude.iter().any(|pat| name.starts_with(pat)) {
                 continue;
             }
             let out = natives_dir.join(&name);
@@ -63,11 +67,27 @@ mod tests {
         let vdir = dir.path().join("versions/1.21.1");
         std::fs::create_dir_all(&vdir).unwrap();
 
-        let out = extract_natives(&vdir, &[jar]).unwrap();
+        let out = extract_natives(&vdir, &[(jar, vec!["META-INF/".to_string()])]).unwrap();
 
         assert_eq!(out, vdir.join("natives"));
         assert_eq!(std::fs::read(out.join("libglfw.dylib")).unwrap(), b"native-bytes");
         assert_eq!(std::fs::read(out.join("sub/liblwjgl.dylib")).unwrap(), b"native2");
         assert!(!out.join("META-INF").exists());
+    }
+
+    #[test]
+    fn respects_custom_exclude_patterns() {
+        // 데이터 기반: exclude에 지정된 다른 접두사도 제외되는지
+        let dir = tempfile::tempdir().unwrap();
+        let jar = dir.path().join("n.jar");
+        make_zip(&jar);
+        let vdir = dir.path().join("v");
+        std::fs::create_dir_all(&vdir).unwrap();
+
+        // "sub/"를 제외 → sub/liblwjgl.dylib 미추출, META-INF는 제외 안 함(추출됨)
+        let out = extract_natives(&vdir, &[(jar, vec!["sub/".to_string()])]).unwrap();
+        assert!(out.join("libglfw.dylib").exists());
+        assert!(!out.join("sub").exists());
+        assert!(out.join("META-INF/MANIFEST.MF").exists());
     }
 }
