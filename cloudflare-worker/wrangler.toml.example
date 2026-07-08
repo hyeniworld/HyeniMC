@@ -1,6 +1,8 @@
 name = "hyenimc-worker"
 main = "src/index.js"
 compatibility_date = "2024-01-01"
+# @cloudflare/vitest-pool-workers 테스트 하니스 실행에 필요
+compatibility_flags = ["nodejs_compat"]
 
 # Worker URL (used by deployment scripts)
 # Update this to match your deployed Worker URL
