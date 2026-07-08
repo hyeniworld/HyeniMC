@@ -28,6 +28,13 @@ function req(method, path, body) {
   });
 }
 
+describe('GET /admin/api/modpacks/{id}/versions', () => {
+  it('rejects malformed percent-encoding in modpack id with 400 (not 500)', async () => {
+    const res = await handlePacks(req('GET', '/admin/api/modpacks/%/versions'), env);
+    expect(res.status).toBe(400);
+  });
+});
+
 describe('POST modpacks publish', () => {
   it('verifies sha256 and writes pack + snapshot + latest', async () => {
     const res = await handlePacks(await publishReq('hyenipack', '1.0.0', 'PACKDATA'), env);
@@ -51,6 +58,15 @@ describe('POST modpacks publish', () => {
     await handlePacks(await publishReq('hyenipack', '1.0.0', 'PACKDATA'), env);
     const res = await handlePacks(await publishReq('hyenipack', '1.0.0', 'PACKDATA'), env);
     expect(res.status).toBe(409);
+  });
+
+  it('rejects when latest field is missing from the form', async () => {
+    const fd = new FormData();
+    fd.set('pack', new File(['PACKDATA'], 'pack.hyenipack', { type: 'application/zip' }));
+    const res = await handlePacks(new Request('https://example.com/admin/api/modpacks/hyenipack/versions', {
+      method: 'POST', body: fd,
+    }), env);
+    expect(res.status).toBe(400);
   });
 });
 

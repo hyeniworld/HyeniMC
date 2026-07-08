@@ -44,7 +44,7 @@ export async function verifyAccessJwt(request, env, { fetchImpl = fetch } = {}) 
 
     // 클레임 검증
     const now = Math.floor(Date.now() / 1000);
-    if (payload.exp && payload.exp < now) return null;
+    if (!payload.exp || payload.exp < now) return null;
     if (payload.iss !== env.ACCESS_TEAM_DOMAIN) return null;
     const auds = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
     if (!auds.includes(env.ACCESS_AUD)) return null;

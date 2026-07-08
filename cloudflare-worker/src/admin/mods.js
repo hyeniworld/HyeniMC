@@ -6,6 +6,18 @@ import { rebuildRegistry } from './registry.js';
 
 export const MOD_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 export const VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
+export const LOADER_PATTERN = /^[a-z0-9]+$/;
+export const GAME_VERSION_PATTERN = /^\d+\.\d+(\.\d+)?$/;
+export const FILE_NAME_PATTERN = /^[A-Za-z0-9._+-]+\.jar$/;
+
+/** URIError 없이 안전하게 디코딩한다. 잘못된 %-이스케이프는 null로 반환해 400 처리하도록 한다. */
+function safeDecode(s) {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return null;
+  }
+}
 
 export async function handleMods(request, env) {
   const path = new URL(request.url).pathname;
@@ -17,8 +29,8 @@ export async function handleMods(request, env) {
 
   const versions = path.match(/^\/admin\/api\/mods\/([^/]+)\/versions$/);
   if (versions) {
-    const id = decodeURIComponent(versions[1]);
-    if (!MOD_ID_PATTERN.test(id)) return adminJson({ error: 'Invalid mod id' }, 400);
+    const id = safeDecode(versions[1]);
+    if (id === null || !MOD_ID_PATTERN.test(id)) return adminJson({ error: 'Invalid mod id' }, 400);
     if (method === 'GET') return await listModVersions(env, id);
     if (method === 'POST') return await publishModVersion(request, env, id);
   }
@@ -26,18 +38,18 @@ export async function handleMods(request, env) {
   // PATCH /admin/api/mods/{id}/latest  (롤백)
   const latestM = path.match(/^\/admin\/api\/mods\/([^/]+)\/latest$/);
   if (latestM && method === 'PATCH') {
-    const id = decodeURIComponent(latestM[1]);
-    if (!MOD_ID_PATTERN.test(id)) return adminJson({ error: 'Invalid mod id' }, 400);
+    const id = safeDecode(latestM[1]);
+    if (id === null || !MOD_ID_PATTERN.test(id)) return adminJson({ error: 'Invalid mod id' }, 400);
     return await rollbackMod(request, env, id);
   }
 
   // PATCH/DELETE /admin/api/mods/{id}/versions/{ver}
   const verM = path.match(/^\/admin\/api\/mods\/([^/]+)\/versions\/([^/]+)$/);
   if (verM) {
-    const id = decodeURIComponent(verM[1]);
-    const ver = decodeURIComponent(verM[2]);
-    if (!MOD_ID_PATTERN.test(id)) return adminJson({ error: 'Invalid mod id' }, 400);
-    if (!VERSION_PATTERN.test(ver)) return adminJson({ error: 'Invalid version' }, 400);
+    const id = safeDecode(verM[1]);
+    const ver = safeDecode(verM[2]);
+    if (id === null || !MOD_ID_PATTERN.test(id)) return adminJson({ error: 'Invalid mod id' }, 400);
+    if (ver === null || !VERSION_PATTERN.test(ver)) return adminJson({ error: 'Invalid version' }, 400);
     if (method === 'PATCH') return await editModVersion(request, env, id, ver);
     if (method === 'DELETE') return await deleteModVersion(env, id, ver);
   }
@@ -75,9 +87,13 @@ async function publishModVersion(request, env, id) {
     return adminJson({ error: 'multipart/form-data 본문이 필요합니다.' }, 400);
   }
 
+  const rawMeta = form.get('meta');
+  if (typeof rawMeta !== 'string') {
+    return adminJson({ error: 'meta 필드(JSON)가 필요합니다.' }, 400);
+  }
   let meta;
   try {
-    meta = JSON.parse(form.get('meta'));
+    meta = JSON.parse(rawMeta);
   } catch {
     return adminJson({ error: 'meta 필드(JSON)가 필요합니다.' }, 400);
   }
@@ -97,9 +113,18 @@ async function publishModVersion(request, env, id) {
     return adminJson({ error: '이미 존재하는 버전입니다.', message: `${id}@${meta.version}` }, 409);
   }
 
-  // 파일 파트 수집 + 검증(업로드 전에 모두 존재 확인)
+  // 파일 파트 수집 + 검증(업로드 전에 모두 존재/형식 확인)
   const prepared = [];
   for (const f of meta.files) {
+    if (!LOADER_PATTERN.test(f.loader || '')) {
+      return adminJson({ error: `잘못된 loader 형식: ${f.loader}` }, 400);
+    }
+    if (!GAME_VERSION_PATTERN.test(f.gameVersion || '')) {
+      return adminJson({ error: `잘못된 gameVersion 형식: ${f.gameVersion}` }, 400);
+    }
+    if (!FILE_NAME_PATTERN.test(f.fileName || '')) {
+      return adminJson({ error: `잘못된 fileName 형식: ${f.fileName}` }, 400);
+    }
     const part = form.get(f.fileField);
     if (!part || typeof part.arrayBuffer !== 'function') {
       return adminJson({ error: `파일 파트 누락: ${f.fileField}` }, 400);

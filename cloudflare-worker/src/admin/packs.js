@@ -7,6 +7,15 @@ import { sha256Hex } from './mods-format.js';
 const PACK_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
 
+/** URIError 없이 안전하게 디코딩한다. 잘못된 %-이스케이프는 null로 반환해 400 처리하도록 한다. */
+function safeDecode(s) {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return null;
+  }
+}
+
 export async function handlePacks(request, env) {
   const path = new URL(request.url).pathname;
   const method = request.method;
@@ -17,25 +26,25 @@ export async function handlePacks(request, env) {
 
   const versM = path.match(/^\/admin\/api\/modpacks\/([^/]+)\/versions$/);
   if (versM) {
-    const id = decodeURIComponent(versM[1]);
-    if (!PACK_ID_PATTERN.test(id)) return adminJson({ error: 'Invalid modpack id' }, 400);
+    const id = safeDecode(versM[1]);
+    if (id === null || !PACK_ID_PATTERN.test(id)) return adminJson({ error: 'Invalid modpack id' }, 400);
     if (method === 'GET') return await listPackVersions(env, id);
     if (method === 'POST') return await publishPackVersion(request, env, id);
   }
 
   const latestM = path.match(/^\/admin\/api\/modpacks\/([^/]+)\/latest$/);
   if (latestM && method === 'PATCH') {
-    const id = decodeURIComponent(latestM[1]);
-    if (!PACK_ID_PATTERN.test(id)) return adminJson({ error: 'Invalid modpack id' }, 400);
+    const id = safeDecode(latestM[1]);
+    if (id === null || !PACK_ID_PATTERN.test(id)) return adminJson({ error: 'Invalid modpack id' }, 400);
     return await rollbackPack(request, env, id);
   }
 
   const verM = path.match(/^\/admin\/api\/modpacks\/([^/]+)\/versions\/([^/]+)$/);
   if (verM) {
-    const id = decodeURIComponent(verM[1]);
-    const ver = decodeURIComponent(verM[2]);
-    if (!PACK_ID_PATTERN.test(id)) return adminJson({ error: 'Invalid modpack id' }, 400);
-    if (!VERSION_PATTERN.test(ver)) return adminJson({ error: 'Invalid version' }, 400);
+    const id = safeDecode(verM[1]);
+    const ver = safeDecode(verM[2]);
+    if (id === null || !PACK_ID_PATTERN.test(id)) return adminJson({ error: 'Invalid modpack id' }, 400);
+    if (ver === null || !VERSION_PATTERN.test(ver)) return adminJson({ error: 'Invalid version' }, 400);
     if (method === 'PATCH') return await editPackVersion(request, env, id, ver);
     if (method === 'DELETE') return await deletePackVersion(env, id, ver);
   }
@@ -72,8 +81,12 @@ async function publishPackVersion(request, env, id) {
   if (!packPart || typeof packPart.arrayBuffer !== 'function') {
     return adminJson({ error: 'pack 파일 파트가 필요합니다.' }, 400);
   }
+  const rawLatest = form.get('latest');
+  if (typeof rawLatest !== 'string') {
+    return adminJson({ error: 'latest 필드(JSON)가 필요합니다.' }, 400);
+  }
   let sidecar;
-  try { sidecar = JSON.parse(form.get('latest')); } catch {
+  try { sidecar = JSON.parse(rawLatest); } catch {
     return adminJson({ error: 'latest 필드(JSON)가 필요합니다.' }, 400);
   }
 

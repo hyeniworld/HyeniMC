@@ -52,4 +52,9 @@ describe('GET /admin/api/mods/{id}/versions', () => {
     const res = await handleMods(req('GET', '/admin/api/mods/Bad_ID/versions'), env);
     expect(res.status).toBe(400);
   });
+
+  it('rejects malformed percent-encoding in mod id with 400 (not 500)', async () => {
+    const res = await handleMods(req('GET', '/admin/api/mods/%/versions'), env);
+    expect(res.status).toBe(400);
+  });
 });

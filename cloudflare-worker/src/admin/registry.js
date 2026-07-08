@@ -5,7 +5,7 @@ import { isoNow } from './mods-format.js';
 export function buildRegistryEntry(latest, existingEntry) {
   const loaders = Object.entries(latest.loaders || {}).map(([type, data]) => {
     const gvKeys = Object.keys(data.gameVersions || {});
-    const first = data.gameVersions[gvKeys[0]] || {};
+    const first = (data.gameVersions || {})[gvKeys[0]] || {};
     return {
       type,
       minVersion: first.minLoaderVersion || '0.0.0',
@@ -33,7 +33,13 @@ export async function rebuildRegistry(env) {
   const modIds = await listPrefixes(env, 'mods/');
   const mods = [];
   for (const id of modIds) {
-    const latest = await getJson(env, `mods/${id}/latest.json`);
+    let latest;
+    try {
+      latest = await getJson(env, `mods/${id}/latest.json`);
+    } catch (e) {
+      console.error(`[registry] ${id}/latest.json 파싱 실패, 스킵:`, e.message);
+      continue; // 손상된 latest.json이 전체 rebuild를 막지 않도록 스킵
+    }
     if (!latest || !latest.modId) continue; // latest.json 없는 디렉터리 스킵
     mods.push(buildRegistryEntry(latest, existingById.get(id)));
   }

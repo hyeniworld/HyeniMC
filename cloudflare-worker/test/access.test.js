@@ -79,6 +79,12 @@ describe('verifyAccessJwt', () => {
     expect(result).toBeNull();
   });
 
+  it('rejects token with no exp claim', async () => {
+    const token = await makeJwt({ exp: undefined });
+    const result = await verifyAccessJwt(reqWithJwt(token), env, { fetchImpl: fakeFetch() });
+    expect(result).toBeNull();
+  });
+
   it('rejects tampered signature', async () => {
     const token = (await makeJwt({})).slice(0, -3) + 'AAA';
     const result = await verifyAccessJwt(reqWithJwt(token), env, { fetchImpl: fakeFetch() });

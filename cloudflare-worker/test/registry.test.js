@@ -76,4 +76,17 @@ describe('rebuildRegistry', () => {
     const reg = await rebuildRegistry(env);
     expect(reg.mods.find((m) => m.id === 'hyenihelper').description).toBe('보존됨');
   });
+
+  it('skips a mod with a corrupt latest.json instead of aborting the whole rebuild', async () => {
+    await putJson(env, 'mods/hyenihelper/latest.json', latestHH);
+    await env.RELEASES.put('mods/broken/latest.json', 'not json{', {
+      httpMetadata: { contentType: 'application/json' },
+    });
+
+    const reg = await rebuildRegistry(env);
+    expect(reg.mods.map((m) => m.id)).toEqual(['hyenihelper']);
+
+    const stored = await getJson(env, 'mods/registry.json');
+    expect(stored.mods.map((m) => m.id)).toEqual(['hyenihelper']);
+  });
 });
