@@ -88,8 +88,11 @@ fn row_to_profile(row: &rusqlite::Row<'_>) -> rusqlite::Result<Profile> {
 }
 
 pub fn list_profiles(conn: &Connection) -> Result<Vec<Profile>, CoreError> {
+    // 정렬: 즐겨찾기 → 최근 플레이 → 생성일 (프론트 sortProfiles와 동일 의도).
+    // last_played는 NULL이 뒤로(SQLite DESC에서 NULL이 최소값 → 마지막).
     let sql = format!(
-        "SELECT {PROFILE_COLUMNS} FROM profiles ORDER BY favorite DESC, updated_at DESC"
+        "SELECT {PROFILE_COLUMNS} FROM profiles \
+         ORDER BY favorite DESC, last_played DESC, created_at DESC"
     );
     let mut stmt = conn.prepare(&sql)?;
     let rows = stmt.query_map([], row_to_profile)?;

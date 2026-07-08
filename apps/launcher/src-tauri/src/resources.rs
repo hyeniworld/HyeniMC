@@ -240,10 +240,19 @@ pub fn file_watch_start(
     })
     .map_err(|e| e.to_string())?;
 
-    // 하위 폴더가 없을 수 있으므로 인스턴스 루트를 재귀 감시
-    watcher
-        .watch(&dir, notify::RecursiveMode::Recursive)
-        .map_err(|e| e.to_string())?;
+    // mods/resourcepacks/shaderpacks만 감시 — 인스턴스 전체 재귀 감시는 logs/saves 등 무관한
+    // 변경까지 콜백을 깨워 낭비다. 없으면 생성 후 비재귀 감시(팩은 폴더의 직계 자식).
+    let mut watched = 0;
+    for sub in ["mods", "resourcepacks", "shaderpacks"] {
+        let target = dir.join(sub);
+        let _ = std::fs::create_dir_all(&target);
+        if watcher.watch(&target, notify::RecursiveMode::NonRecursive).is_ok() {
+            watched += 1;
+        }
+    }
+    if watched == 0 {
+        return Err("감시할 폴더를 찾을 수 없습니다".into());
+    }
     watch_state.watchers.lock().unwrap().insert(profile_id, watcher);
     let _ = app;
     Ok(())

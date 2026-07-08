@@ -166,11 +166,14 @@ fn apply_auth(app: &AppHandle, token: &str, servers: &[String]) -> Result<(usize
             hy::has_hyenihelper(&game_dir.join("mods"))
                 && hy::write_hyenihelper_config(&game_dir, token, false).unwrap_or(false)
         } else {
-            // MODE 1: servers.dat 매칭 프로필에 무조건
+            // MODE 1: servers.dat 매칭 + HyeniHelper 설치 프로필에 무조건 덮어쓰기.
+            // (Electron handleAuthRequest와 동일 — HyeniHelper 없는 프로필엔 기록하지 않는다)
             let matches = servers
                 .iter()
                 .any(|s| hy::servers_dat_contains(&game_dir.join("servers.dat"), s));
-            matches && hy::write_hyenihelper_config(&game_dir, token, true).unwrap_or(false)
+            matches
+                && hy::has_hyenihelper(&game_dir.join("mods"))
+                && hy::write_hyenihelper_config(&game_dir, token, true).unwrap_or(false)
         };
         if applied {
             updated.push(profile.name.clone());
@@ -181,7 +184,10 @@ fn apply_auth(app: &AppHandle, token: &str, servers: &[String]) -> Result<(usize
         return Err(if servers.is_empty() {
             "HyeniHelper가 설치된 프로필을 찾을 수 없습니다".to_string()
         } else {
-            format!("서버({})가 등록된 프로필을 찾을 수 없습니다", servers.join(", "))
+            format!(
+                "서버({})가 등록되고 HyeniHelper가 설치된 프로필을 찾을 수 없습니다",
+                servers.join(", ")
+            )
         });
     }
     Ok((updated.len(), updated))

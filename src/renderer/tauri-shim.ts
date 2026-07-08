@@ -153,11 +153,12 @@ function installTauriShim(): void {
         return { success: true, versions };
       },
     },
-    // preload 계약(hyenipack.import(filePath, profileId, instanceDir) + {success} envelope) 그대로 유지
+    // preload 계약: hyenipack.import(filePath, profileId, accountId) — 3번째 인자는 accountId다.
+    // (CF 피닝 url 토큰 부착에 필요 — 기존엔 _instanceDir로 오해해 버려서 account_id가 None이 됐다)
     hyenipack: {
-      import: async (filePath: string, profileId: string, _instanceDir?: string) => {
+      import: async (filePath: string, profileId: string, accountId?: string) => {
         try {
-          await invoke('hyenipack_import', { profileId, filePath });
+          await invoke('hyenipack_import', { profileId, filePath, accountId });
           return { success: true };
         } catch (e) {
           return { success: false, error: String(e) };
