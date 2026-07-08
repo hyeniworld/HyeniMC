@@ -91,18 +91,42 @@ pub fn file_watch_start(
     let app2 = app.clone();
     let pid = profile_id.clone();
     let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
-        if let Ok(event) = res {
-            // resourcepacks/shaderpacks/mods 변경만 통지
-            if event.paths.iter().any(|p| {
-                p.components().any(|c| {
-                    matches!(
-                        c.as_os_str().to_str(),
-                        Some("resourcepacks") | Some("shaderpacks") | Some("mods")
-                    )
-                })
-            }) {
-                let _ = app2.emit("file:changed", serde_json::json!({ "profileId": pid }));
+        let Ok(event) = res else { return };
+        // 이벤트 종류 → 렌더러 action. Access/Other 등은 무시.
+        let action = match event.kind {
+            notify::EventKind::Create(_) => "add",
+            notify::EventKind::Modify(_) => "change",
+            notify::EventKind::Remove(_) => "remove",
+            _ => return,
+        };
+        for path in &event.paths {
+            // 어느 하위 폴더(mods/resourcepacks/shaderpacks)의 변경인지 판별
+            let Some(kind) = path.components().find_map(|c| match c.as_os_str().to_str() {
+                Some("mods") => Some("mods"),
+                Some("resourcepacks") => Some("resourcepacks"),
+                Some("shaderpacks") => Some("shaderpacks"),
+                _ => None,
+            }) else {
+                continue;
+            };
+            let file_name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default();
+            // 폴더 자체 이벤트나 빈 파일명은 건너뜀 (렌더러는 파일 단위로 처리)
+            if file_name.is_empty() || file_name == kind {
+                continue;
             }
+            // 렌더러(ModList/ResourcePackList/ShaderPackList)가 기대하는 페이로드
+            let _ = app2.emit(
+                "file:changed",
+                serde_json::json!({
+                    "profileId": pid,
+                    "type": kind,
+                    "action": action,
+                    "fileName": file_name,
+                }),
+            );
         }
     })
     .map_err(|e| e.to_string())?;

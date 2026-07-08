@@ -1,10 +1,12 @@
 //! 런처 자체 업데이트 커맨드 (M6) — tauri-plugin-updater 래핑.
 //! preload launcher 계약: getVersion / checkForUpdates / downloadUpdate / quitAndInstall.
 
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use serde::Serialize;
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter};
 use tauri_plugin_updater::UpdaterExt;
 
 /// 다운로드된 업데이트를 quitAndInstall까지 들고 있기 위한 보관소
@@ -42,48 +44,90 @@ pub async fn launcher_check_updates(
     app: AppHandle,
     pending: tauri::State<'_, PendingUpdate>,
 ) -> Result<UpdateCheckResult, String> {
+    let current = app.package_info().version.to_string();
     let updater = app.updater().map_err(|e| e.to_string())?;
     match updater.check().await {
         Ok(Some(update)) => {
-            let result = UpdateCheckResult {
-                success: true,
-                available: true,
-                version: Some(update.version.clone()),
-                notes: update.body.clone(),
-            };
+            let version = update.version.clone();
+            let notes = update.body.clone();
             *pending.0.lock().unwrap() = Some(update);
-            Ok(result)
+            // useLauncherUpdate 훅은 반환값이 아니라 이벤트로 배너를 띄운다(Electron autoUpdater와 동일).
+            let _ = app.emit(
+                "launcher:update-available",
+                serde_json::json!({
+                    "version": version,
+                    "releaseNotes": notes.clone().unwrap_or_default(),
+                    "releaseDate": "",
+                    "required": false,
+                }),
+            );
+            Ok(UpdateCheckResult { success: true, available: true, version: Some(version), notes })
         }
-        Ok(None) => Ok(UpdateCheckResult {
-            success: true,
-            available: false,
-            version: None,
-            notes: None,
-        }),
+        Ok(None) => {
+            let _ = app.emit("launcher:update-not-available", serde_json::json!({ "version": current }));
+            Ok(UpdateCheckResult { success: true, available: false, version: None, notes: None })
+        }
         // 아직 릴리스가 없으면 GitHub Releases의 latest.json이 404 → 여기로 온다.
-        // 정상 상황(업데이트 없음)이므로 조용히 처리 — 릴리스가 올라오면 자동 동작.
-        Err(_) => Ok(UpdateCheckResult {
-            success: true,
-            available: false,
-            version: None,
-            notes: None,
-        }),
+        // 정상 상황(업데이트 없음)이므로 조용히 처리(에러 배너 대신 not-available) — 릴리스가 올라오면 자동 동작.
+        Err(_) => {
+            let _ = app.emit("launcher:update-not-available", serde_json::json!({ "version": current }));
+            Ok(UpdateCheckResult { success: true, available: false, version: None, notes: None })
+        }
     }
 }
 
 #[tauri::command]
 pub async fn launcher_download_update(
+    app: AppHandle,
     pending: tauri::State<'_, PendingUpdate>,
 ) -> Result<bool, String> {
     let update = pending.0.lock().unwrap().clone();
     let Some(update) = update else {
         return Err("다운로드할 업데이트가 없습니다 (먼저 확인하세요)".into());
     };
-    update
-        .download(|_chunk, _total| {}, || {})
-        .await
-        .map_err(|e| e.to_string())?;
-    Ok(true)
+    let version = update.version.clone();
+
+    // 진행률 이벤트(launcher:download-progress) — 퍼센트 정수가 바뀔 때만 발행(과다 emit 방지).
+    let transferred = Arc::new(AtomicU64::new(0));
+    let last_pct = Arc::new(AtomicU64::new(u64::MAX));
+    let started = Instant::now();
+    let app_cb = app.clone();
+    let result = update
+        .download(
+            move |chunk, total| {
+                let t = transferred.fetch_add(chunk as u64, Ordering::Relaxed) + chunk as u64;
+                let total = total.unwrap_or(0);
+                let percent = if total > 0 { (t * 100 / total).min(100) } else { 0 };
+                if last_pct.swap(percent, Ordering::Relaxed) == percent {
+                    return;
+                }
+                let elapsed = started.elapsed().as_secs_f64().max(0.001);
+                let bps = (t as f64 / elapsed) as u64;
+                let _ = app_cb.emit(
+                    "launcher:download-progress",
+                    serde_json::json!({
+                        "percent": percent,
+                        "bytesPerSecond": bps,
+                        "transferred": t,
+                        "total": total,
+                    }),
+                );
+            },
+            || {},
+        )
+        .await;
+
+    match result {
+        Ok(_) => {
+            let _ = app.emit("launcher:update-downloaded", serde_json::json!({ "version": version }));
+            Ok(true)
+        }
+        Err(e) => {
+            let msg = e.to_string();
+            let _ = app.emit("launcher:update-error", serde_json::json!({ "message": msg.clone() }));
+            Err(msg)
+        }
+    }
 }
 
 #[tauri::command]
