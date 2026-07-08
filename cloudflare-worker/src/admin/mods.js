@@ -1,6 +1,6 @@
 /** 모드 관리 핸들러: 목록/버전/게시/롤백/편집/삭제. */
 import { adminJson } from './router.js';
-import { getJson, listVersions, putObject, putJson, objectExists } from './r2.js';
+import { getJson, listVersions, putObject, putJson, objectExists, deletePrefix } from './r2.js';
 import { sha256Hex, buildManifest, isoNow } from './mods-format.js';
 import { rebuildRegistry } from './registry.js';
 
@@ -21,6 +21,25 @@ export async function handleMods(request, env) {
     if (!MOD_ID_PATTERN.test(id)) return adminJson({ error: 'Invalid mod id' }, 400);
     if (method === 'GET') return await listModVersions(env, id);
     if (method === 'POST') return await publishModVersion(request, env, id);
+  }
+
+  // PATCH /admin/api/mods/{id}/latest  (롤백)
+  const latestM = path.match(/^\/admin\/api\/mods\/([^/]+)\/latest$/);
+  if (latestM && method === 'PATCH') {
+    const id = decodeURIComponent(latestM[1]);
+    if (!MOD_ID_PATTERN.test(id)) return adminJson({ error: 'Invalid mod id' }, 400);
+    return await rollbackMod(request, env, id);
+  }
+
+  // PATCH/DELETE /admin/api/mods/{id}/versions/{ver}
+  const verM = path.match(/^\/admin\/api\/mods\/([^/]+)\/versions\/([^/]+)$/);
+  if (verM) {
+    const id = decodeURIComponent(verM[1]);
+    const ver = decodeURIComponent(verM[2]);
+    if (!MOD_ID_PATTERN.test(id)) return adminJson({ error: 'Invalid mod id' }, 400);
+    if (!VERSION_PATTERN.test(ver)) return adminJson({ error: 'Invalid version' }, 400);
+    if (method === 'PATCH') return await editModVersion(request, env, id, ver);
+    if (method === 'DELETE') return await deleteModVersion(env, id, ver);
   }
 
   return adminJson({ error: 'Not Found' }, 404);
@@ -126,4 +145,65 @@ async function publishModVersion(request, env, id) {
     version: meta.version,
     files: prepared.map((f) => ({ file: f.fileName, sha256: f.sha256, size: f.size })),
   }, 201);
+}
+
+async function rollbackMod(request, env, id) {
+  let body;
+  try { body = await request.json(); } catch { return adminJson({ error: 'JSON 본문 필요' }, 400); }
+  const version = body.version;
+  if (!VERSION_PATTERN.test(version || '')) return adminJson({ error: 'Invalid version' }, 400);
+
+  const manifest = await getJson(env, `mods/${id}/versions/${version}/manifest.json`);
+  if (!manifest) return adminJson({ error: 'Not Found', message: `${id}@${version}` }, 404);
+
+  await putJson(env, `mods/${id}/latest.json`, manifest);
+  await rebuildRegistry(env);
+  return adminJson({ id, latestVersion: version });
+}
+
+async function editModVersion(request, env, id, ver) {
+  let body;
+  try { body = await request.json(); } catch { return adminJson({ error: 'JSON 본문 필요' }, 400); }
+
+  const manifest = await getJson(env, `mods/${id}/versions/${ver}/manifest.json`);
+  if (!manifest) return adminJson({ error: 'Not Found' }, 404);
+
+  // 불변 갱신
+  const updated = { ...manifest };
+  if (body.changelog !== undefined) updated.changelog = body.changelog;
+  if (body.category !== undefined) updated.category = body.category;
+
+  // loader별 min/maxLoaderVersion, dependencies 편집(모든 gameVersion에 적용)
+  if (body.minLoaderVersion !== undefined || body.maxLoaderVersion !== undefined || body.dependencies !== undefined) {
+    updated.loaders = JSON.parse(JSON.stringify(manifest.loaders));
+    for (const loader of Object.values(updated.loaders)) {
+      for (const gv of Object.values(loader.gameVersions)) {
+        if (body.minLoaderVersion !== undefined) gv.minLoaderVersion = body.minLoaderVersion;
+        if (body.maxLoaderVersion !== undefined) gv.maxLoaderVersion = body.maxLoaderVersion;
+        if (body.dependencies !== undefined) gv.dependencies = body.dependencies;
+      }
+    }
+  }
+
+  await putJson(env, `mods/${id}/versions/${ver}/manifest.json`, updated);
+
+  const latest = await getJson(env, `mods/${id}/latest.json`);
+  if (latest && latest.version === ver) {
+    await putJson(env, `mods/${id}/latest.json`, updated);
+  }
+  await rebuildRegistry(env);
+  return adminJson({ id, version: ver });
+}
+
+async function deleteModVersion(env, id, ver) {
+  const latest = await getJson(env, `mods/${id}/latest.json`);
+  if (latest && latest.version === ver) {
+    return adminJson({
+      error: '현재 latest 버전은 삭제할 수 없습니다. 먼저 다른 버전으로 롤백하세요.',
+    }, 409);
+  }
+  const removed = await deletePrefix(env, `mods/${id}/versions/${ver}/`);
+  if (removed === 0) return adminJson({ error: 'Not Found' }, 404);
+  await rebuildRegistry(env);
+  return adminJson({ id, deleted: ver, objects: removed });
 }
