@@ -87,8 +87,8 @@ function installTauriShim(): void {
         toRendererProfile(await invoke('profile_update', { id, data: toBackendPatch(data) })),
       delete: (id: string) => invoke('profile_delete', { id }),
       toggleFavorite: (id: string) => invoke('profile_toggle_favorite', { id }),
-      launch: (id: string, accountId?: string) =>
-        invoke('game_launch', { profileId: id, accountId }),
+      launch: (id: string, accountId?: string, force?: boolean) =>
+        invoke('game_launch', { profileId: id, accountId, force: force ?? false }),
       getStats: (profileId: string) => invoke('profile_get_stats', { profileId }),
       recordLaunch: (profileId: string) => invoke('profile_record_launch', { profileId }),
       recordPlayTime: (profileId: string, seconds: number) =>

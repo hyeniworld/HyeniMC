@@ -179,14 +179,7 @@ pub fn settings_get(db: State<DbState>) -> Result<GlobalSettings, String> {
 #[tauri::command]
 pub fn settings_update(db: State<DbState>, settings: serde_json::Value) -> Result<(), String> {
     let conn = db.0.lock().unwrap();
-    // 렌더러가 모르는 섹션(advanced 등)이 빠진 채 저장돼도 기존 값이 리셋되지 않도록 병합
-    let mut incoming = settings;
-    if incoming.is_object() && incoming.get("advanced").is_none() {
-        let current = hyenimc_core::settings::get_settings(&conn).map_err(|e| e.to_string())?;
-        incoming["advanced"] =
-            serde_json::to_value(&current.advanced).map_err(|e| e.to_string())?;
-    }
-    let parsed: GlobalSettings = serde_json::from_value(incoming).map_err(|e| e.to_string())?;
+    let parsed: GlobalSettings = serde_json::from_value(settings).map_err(|e| e.to_string())?;
     hyenimc_core::settings::update_settings(&conn, &parsed, now_secs()).map_err(|e| e.to_string())
 }
 

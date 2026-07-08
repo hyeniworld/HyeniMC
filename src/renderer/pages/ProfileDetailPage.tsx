@@ -18,6 +18,9 @@ import { Package, Trash2, Loader2 } from 'lucide-react';
 
 type TabType = 'overview' | 'mods' | 'resourcepacks' | 'shaderpacks' | 'settings';
 
+// Rust pack::FORCE_MARKER와 동일해야 함 — 업데이트 확인 실패(강제 실행 가능) 에러 접두사
+const FORCE_MARKER = 'FORCE_LAUNCH_AVAILABLE:';
+
 export const ProfileDetailPage: React.FC = () => {
   const { profileId } = useParams<{ profileId: string }>();
   const navigate = useNavigate();
@@ -31,6 +34,8 @@ export const ProfileDetailPage: React.FC = () => {
   const [showExportModal, setShowExportModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showStopConfirm, setShowStopConfirm] = useState(false);
+  // 업데이트 확인 실패 시 강제 실행 확인 다이얼로그 메시지
+  const [forceMsg, setForceMsg] = useState<string | null>(null);
   const showDownload = useDownloadStore(s => s.show);
   const setDl = useDownloadStore(s => s.setProgress);
   const resetDownload = useDownloadStore(s => s.reset);
@@ -130,7 +135,7 @@ export const ProfileDetailPage: React.FC = () => {
     }
   };
 
-  const handleLaunch = React.useCallback(async () => {
+  const handleLaunch = React.useCallback(async (force = false) => {
     if (!profileId) return;
 
     // 계정 필수 — 오프라인 미지원(정품 서버 전용). 다운로드 시작 전에 안내.
@@ -171,7 +176,7 @@ export const ProfileDetailPage: React.FC = () => {
     }, 60000);
 
     try {
-      await window.electronAPI.profile.launch(profileId, selectedAccountId);
+      await window.electronAPI.profile.launch(profileId, selectedAccountId, force);
       clearTimeout(timeoutId);
       // State will be updated by event listener
     } catch (error) {
@@ -179,12 +184,20 @@ export const ProfileDetailPage: React.FC = () => {
       console.error('Failed to launch:', error);
       setIsRunning(false);
       setIsLaunching(false);
-      
+
+      const raw = error instanceof Error ? error.message : String(error);
+      // 업데이트 확인 실패(강제 실행 가능) → 다운로드 모달/토스트 대신 [강제 실행]/[닫기] 확인
+      if (raw.includes(FORCE_MARKER)) {
+        resetDownload();
+        setForceMsg(raw.split(FORCE_MARKER)[1]?.trim() || '업데이트 서버에 연결할 수 없습니다.');
+        return;
+      }
+
       // 에러 상태 설정
       const errorMsg = errorText(error, '게임 실행에 실패했습니다.');
       setDl({ error: errorMsg });
       toast.error('실행 실패', errorMsg);
-      
+
       // 3초 후 자동으로 모달 닫기
       setTimeout(() => {
         resetDownload();
@@ -301,7 +314,7 @@ export const ProfileDetailPage: React.FC = () => {
             </button>
           ) : (
             <button
-              onClick={handleLaunch}
+              onClick={() => handleLaunch()}
               className="px-6 py-3 rounded-lg font-semibold transition-colors bg-green-600 hover:bg-green-700 text-white"
             >
               ▶ 게임 실행
@@ -373,6 +386,18 @@ export const ProfileDetailPage: React.FC = () => {
         {activeTab === 'settings' && <ProfileSettingsTab profile={profile} onUpdate={loadProfile} />}
       </div>
 
+      <ConfirmModal
+        open={forceMsg !== null}
+        title="업데이트 확인 실패"
+        message={`${forceMsg ?? ''}\n\n그래도 강제로 실행하시겠습니까?`}
+        confirmLabel="강제 실행"
+        danger
+        onConfirm={() => {
+          setForceMsg(null);
+          handleLaunch(true);
+        }}
+        onCancel={() => setForceMsg(null)}
+      />
       <ConfirmModal
         open={showStopConfirm}
         title="게임 중단"

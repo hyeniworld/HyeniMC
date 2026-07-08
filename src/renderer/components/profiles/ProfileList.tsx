@@ -12,6 +12,9 @@ import { ConfirmModal } from '../common/ConfirmModal';
 import { errorText } from '../../utils/errorText';
 import { isAuthorizedServer } from '@shared/config/server-config';
 
+// Rust pack::FORCE_MARKER와 동일해야 함 — 업데이트 확인 실패(강제 실행 가능) 에러 접두사
+const FORCE_MARKER = 'FORCE_LAUNCH_AVAILABLE:';
+
 export function ProfileList() {
   const navigate = useNavigate();
   const { selectedAccountId } = useAccount();
@@ -27,6 +30,8 @@ export function ProfileList() {
   const [confirmStopId, setConfirmStopId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  // 업데이트 확인 실패 시 강제 실행 확인 다이얼로그
+  const [forcePrompt, setForcePrompt] = useState<{ profileId: string; message: string } | null>(null);
   const showDownload = useDownloadStore(s => s.show);
   const setDl = useDownloadStore(s => s.setProgress);
   const resetDownload = useDownloadStore(s => s.reset);
@@ -113,7 +118,7 @@ export function ProfileList() {
     }
   };
 
-  const handleLaunch = async (profileId: string) => {
+  const handleLaunch = async (profileId: string, force = false) => {
     try {
       const profile = profiles.find(p => p.id === profileId);
       if (!profile) return;
@@ -144,25 +149,28 @@ export function ProfileList() {
       setDl({ phase: 'precheck', percent: 0, message: '실행 준비 중...', versionId: profile.name });
 
       try {
-        // Pass accountId to launch
-        await window.electronAPI.profile.launch(profileId, selectedAccountId);
-        
+        // Pass accountId + force to launch
+        await window.electronAPI.profile.launch(profileId, selectedAccountId, force);
+
         // global modal will auto-hide on game:started via hook
       } catch (err) {
-        const errorMsg = errorText(err, '게임 실행에 실패했습니다.');
-        setDl({ error: errorMsg });
-        
-        // Remove from launching on error
-        setLaunchingProfiles(prev => {
-          const ns = new Set(prev);
-          ns.delete(profileId);
-          return ns;
-        });
-        
-        // 3초 후 자동으로 모달 닫기
-        setTimeout(() => {
+        const raw = err instanceof Error ? err.message : String(err);
+        const clearLaunching = () =>
+          setLaunchingProfiles(prev => {
+            const ns = new Set(prev);
+            ns.delete(profileId);
+            return ns;
+          });
+        // 업데이트 확인 실패(강제 실행 가능) → 다운로드 모달 대신 [강제 실행]/[닫기] 확인 다이얼로그
+        if (raw.includes(FORCE_MARKER)) {
           resetDownload();
-        }, 3000);
+          clearLaunching();
+          setForcePrompt({ profileId, message: raw.split(FORCE_MARKER)[1]?.trim() || '업데이트 서버에 연결할 수 없습니다.' });
+          return;
+        }
+        setDl({ error: errorText(err, '게임 실행에 실패했습니다.') });
+        clearLaunching();
+        setTimeout(() => resetDownload(), 3000);
       } finally {
         // no local listeners to cleanup (global hook handles events)
       }
@@ -506,6 +514,19 @@ export function ProfileList() {
         />
       )}
 
+      <ConfirmModal
+        open={forcePrompt !== null}
+        title="업데이트 확인 실패"
+        message={`${forcePrompt?.message ?? ''}\n\n그래도 강제로 실행하시겠습니까?`}
+        confirmLabel="강제 실행"
+        danger
+        onConfirm={() => {
+          const id = forcePrompt?.profileId;
+          setForcePrompt(null);
+          if (id) handleLaunch(id, true);
+        }}
+        onCancel={() => setForcePrompt(null)}
+      />
       <ConfirmModal
         open={confirmStopId !== null}
         title="게임 중단"

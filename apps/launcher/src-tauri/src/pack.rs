@@ -169,24 +169,34 @@ pub async fn pack_apply_update(
 
 /// 실행 전 팩 게이트 (game_launch 내부 호출).
 /// Ok(()) = 실행 허용, Err = 차단(이유 포함).
-pub async fn pre_launch_pack_gate(
-    dirs: &GameDirs,
-    settings: &hyenimc_core::settings::GlobalSettings,
-) -> Result<(), String> {
+/// game_launch가 반환하는 "강제 실행 가능" 에러 접두사. 프론트가 이 접두사를 감지하면
+/// 안내 + [강제 실행]/[닫기] 확인 다이얼로그를 띄우고, 강제 시 force=true로 재실행한다.
+pub const FORCE_MARKER: &str = "FORCE_LAUNCH_AVAILABLE:";
+
+/// 강제 실행 가능한(= 업데이트 서버 접근 불가) 실패 메시지를 마커와 함께 만든다.
+pub fn forceable(msg: &str) -> String {
+    format!("{FORCE_MARKER}{msg}")
+}
+
+/// 실행 전 혜니팩 게이트.
+/// - `force=true`: 사용자가 강제 실행 선택 → 게이트 우회.
+/// - Worker(업데이트 확인 서버) 접근 불가/미설정: 강제 실행 가능 에러(프론트가 확인 다이얼로그).
+/// - breaking(호환성 파괴) 업데이트: 강제 불가 하드 차단(팩 업데이트로만 해소).
+pub async fn pre_launch_pack_gate(dirs: &GameDirs, force: bool) -> Result<(), String> {
     // 팩 미설치 프로필(바닐라 등)은 게이트 대상 아님
     if hyenipack::read_pack_meta(&dirs.instance_dir).is_none() {
         return Ok(());
     }
+    if force {
+        return Ok(()); // 사용자가 강제 실행 선택
+    }
 
-    // Worker URL 미설정 = 체크 불가 → 접근 불가와 동일 정책 (기본 차단 + force_launch 우회)
     let base = match worker_base() {
         Ok(b) => b,
-        Err(e) => {
-            return if settings.advanced.force_launch {
-                Ok(())
-            } else {
-                Err(format!("{e} — 팩 업데이트 확인 불가. 설정의 '강제 실행'으로 우회할 수 있습니다."))
-            };
+        Err(_) => {
+            return Err(forceable(
+                "업데이트 서버 주소가 설정되지 않아 팩 최신 여부를 확인할 수 없습니다.\n그대로 실행하면 서버 접속이 안 될 수 있습니다.",
+            ));
         }
     };
 
@@ -198,15 +208,10 @@ pub async fn pre_launch_pack_gate(
             update.latest_version
         )),
         Ok(Some(_)) => Ok(()), // non-breaking: 배너로 안내(렌더러), 실행 허용
-        Err(_) => {
-            // 서버 접근 불가
-            if settings.advanced.force_launch {
-                Ok(())
-            } else {
-                Err("업데이트 서버에 연결할 수 없습니다. 설정에서 '강제 실행'을 켜거나 잠시 후 다시 시도하세요."
-                    .into())
-            }
-        }
+        // 서버 접근 불가 → 강제 실행 가능(사용자 선택)
+        Err(_) => Err(forceable(
+            "업데이트 서버에 연결할 수 없어 팩 최신 여부를 확인하지 못했습니다.\n그대로 실행하면 서버 접속이 안 될 수 있습니다.",
+        )),
     }
 }
 

@@ -40,7 +40,7 @@ export function ConfirmModal({
         onClick={(e) => e.stopPropagation()}
       >
         <h3 className="text-lg font-bold mb-2 text-gray-100">{title}</h3>
-        {message && <p className="text-sm text-gray-400 mb-4">{message}</p>}
+        {message && <p className="text-sm text-gray-400 mb-4 whitespace-pre-line">{message}</p>}
         <div className="flex gap-2 justify-end">
           <button onClick={onCancel} className="px-4 py-2 text-sm rounded bg-gray-700 hover:bg-gray-600 text-gray-200">
             {cancelLabel}

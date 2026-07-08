@@ -323,7 +323,9 @@ pub async fn game_launch(
     crypto: State<'_, crate::account::CryptoState>,
     profile_id: String,
     account_id: Option<String>,
+    force: Option<bool>,
 ) -> Result<(), String> {
+    let force = force.unwrap_or(false);
     if game_state.running.lock().unwrap().contains_key(&profile_id) {
         return Err(format!("프로필 {profile_id}이(가) 이미 실행 중입니다"));
     }
@@ -380,7 +382,7 @@ pub async fn game_launch(
     validate_launch(&app, &profile, &settings).await?;
 
     // ⓪ 실행 전 팩 게이트 (breaking 차단 / 서버 접근 불가 시 정책)
-    crate::pack::pre_launch_pack_gate(&dirs, &settings).await?;
+    crate::pack::pre_launch_pack_gate(&dirs, force).await?;
 
     // ① 베이스 게임 설치 보장 (이미 설치면 SHA1 스킵으로 빠르게 통과)
     ensure_profile_version(&app, &profile, &dirs, &cfg).await?;
@@ -440,15 +442,22 @@ pub async fn game_launch(
     // ③.5 워커 모드 자동 업데이트 (혜니월드 서버 프로필) — Electron launch 흐름과 동일.
     // 서버 접속에 필요한 모드에 업데이트가 있으면 설치하고, 인증(config token)이 없으면
     // 실행을 중단한다(딥링크 /인증 필요).
+    // force(강제 실행) 시엔 이 확인을 건너뛴다 — 사용자가 위험을 감수하고 그대로 실행.
     {
         let game_dir = std::path::PathBuf::from(&profile.game_directory);
-        if crate::hyeni::should_check(&game_dir, profile.server_address.as_deref()) {
+        if !force && crate::hyeni::should_check(&game_dir, profile.server_address.as_deref()) {
             let _ = app.emit(
                 "game:log",
                 serde_json::json!({ "profileId": profile_id, "line": "[worker-mods] 모드 업데이트 확인 중..." }),
             );
-            let base = crate::pack::worker_base()?;
+            // Worker URL 미설정 = 확인 불가 → 강제 실행 가능(사용자 선택)
+            let base = crate::pack::worker_base().map_err(|_| {
+                crate::pack::forceable(
+                    "업데이트 서버 주소가 설정되지 않아 모드 최신 여부를 확인할 수 없습니다.\n그대로 실행하면 서버 접속이 안 될 수 있습니다.",
+                )
+            })?;
             let mods_dir = game_dir.join("mods");
+            // 서버 접근 불가 → 강제 실행 가능. (Electron은 이 경우 조용히 실행했으나 안내를 추가)
             let updates = hyenimc_launcher::workermods::check_all_updates(
                 &http,
                 &base,
@@ -460,7 +469,11 @@ pub async fn game_launch(
                 true, // has_authorized_server — 이 블록은 should_check 통과 시에만 진입
             )
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|_| {
+                crate::pack::forceable(
+                    "업데이트 서버에 연결할 수 없어 모드 최신 여부를 확인하지 못했습니다.\n그대로 실행하면 서버 접속이 안 될 수 있습니다.",
+                )
+            })?;
             if !updates.is_empty() {
                 let token = match hyenimc_launcher::hyeni::read_hyenihelper_token(&game_dir) {
                     Some(t) => t,

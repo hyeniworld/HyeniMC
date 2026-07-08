@@ -18,15 +18,6 @@ pub struct GlobalSettings {
     pub resolution: ResolutionSettings,
     pub cache: CacheSettings,
     pub update: UpdateSettings,
-    #[serde(default)]
-    pub advanced: AdvancedSettings,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct AdvancedSettings {
-    /// 팩 업데이트 서버 접근 불가 시에도 강제 실행 (기본 false — 차단)
-    #[serde(default)]
-    pub force_launch: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -104,9 +95,6 @@ pub fn get_settings(conn: &Connection) -> Result<GlobalSettings, CoreError> {
             check_interval_hours: get_i64(&kv, "update.check_interval_hours", 2),
             auto_download: get_bool(&kv, "update.auto_download", false),
         },
-        advanced: AdvancedSettings {
-            force_launch: get_bool(&kv, "advanced.force_launch", false),
-        },
     })
 }
 
@@ -130,7 +118,6 @@ pub fn update_settings(
         ("cache.ttl_days", s.cache.ttl_days.to_string()),
         ("update.check_interval_hours", s.update.check_interval_hours.to_string()),
         ("update.auto_download", s.update.auto_download.to_string()),
-        ("advanced.force_launch", s.advanced.force_launch.to_string()),
     ];
     let mut stmt = conn.prepare(
         "INSERT INTO global_settings (key, value, updated_at) VALUES (?1, ?2, ?3)
