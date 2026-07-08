@@ -25,6 +25,13 @@ r2_buckets = [
 # TOKEN_CHECK_API_URL - Set via: wrangler secret put TOKEN_CHECK_API_URL
 # See ENV_SETUP.md for detailed setup instructions
 
+# Cloudflare Access (관리 패널 /admin 보호)
+# ACCESS_TEAM_DOMAIN: https://<team>.cloudflareaccess.com
+# ACCESS_AUD: Access 애플리케이션의 Audience(AUD) 태그
+[vars]
+ACCESS_TEAM_DOMAIN = "https://your-team.cloudflareaccess.com"
+ACCESS_AUD = "YOUR_ACCESS_AUD_TAG"
+
 [env.production]
 workers_dev = false
 routes = [
