@@ -362,7 +362,7 @@ export const ProfileDetailPage: React.FC = () => {
 
       {/* Content */}
       <div className="flex-1 overflow-auto">
-        {activeTab === 'overview' && <OverviewTab profile={profile} />}
+        {activeTab === 'overview' && <OverviewTab profile={profile} onReload={loadProfile} />}
         {activeTab === 'mods' && profileId && <ModList profileId={profileId} />}
         {activeTab === 'resourcepacks' && profileId && <ResourcePackList profileId={profileId} />}
         {activeTab === 'shaderpacks' && profileId && <ShaderPackList profileId={profileId} />}
@@ -383,7 +383,7 @@ export const ProfileDetailPage: React.FC = () => {
 };
 
 // Overview Tab
-const OverviewTab: React.FC<{ profile: any }> = ({ profile }) => {
+const OverviewTab: React.FC<{ profile: any; onReload: () => void }> = ({ profile, onReload }) => {
   const toast = useToast();
   const navigate = useNavigate();
   const [profilePath, setProfilePath] = useState<string>('');
@@ -485,7 +485,10 @@ const OverviewTab: React.FC<{ profile: any }> = ({ profile }) => {
       navigate('/'); // 성공 시 이 페이지 언마운트 → 스피너 자연 종료
     } catch (error) {
       console.error('Failed to delete profile:', error);
-      toast.error('오류', '프로필 삭제에 실패했습니다.');
+      const msg = error instanceof Error ? error.message : '프로필 삭제에 실패했습니다.';
+      toast.error('오류', msg);
+      // 삭제 실패 시 백엔드가 '불완전'으로 표시했을 수 있으므로 프로필을 다시 불러와 안내를 노출한다.
+      onReload();
       setDeleting(false);
     }
   };

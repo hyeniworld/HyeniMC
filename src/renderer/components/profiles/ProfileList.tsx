@@ -214,6 +214,8 @@ export function ProfileList() {
       console.error('Failed to delete profile:', err);
       const errorMsg = err instanceof Error ? err.message : '프로필 삭제에 실패했습니다.';
       toast.error('삭제 실패', errorMsg);
+      // 삭제 실패 시 백엔드가 프로필을 '불완전'으로 표시했을 수 있으므로 목록을 갱신해 안내를 노출한다.
+      await loadProfiles();
     } finally {
       setDeletingId(null);
     }

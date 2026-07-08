@@ -8,6 +8,8 @@ use hyenimc_core::profile::{NewProfile, ProfilePatch};
 use hyenimc_core::rusqlite::Connection;
 use hyenimc_core::settings::GlobalSettings;
 
+use crate::game::GameState;
+
 pub struct DbState(pub Mutex<Connection>);
 
 fn now_secs() -> i64 {
@@ -76,7 +78,16 @@ pub fn profile_update(
 }
 
 #[tauri::command]
-pub async fn profile_delete(db: State<'_, DbState>, id: String) -> Result<bool, String> {
+pub async fn profile_delete(
+    db: State<'_, DbState>,
+    game_state: State<'_, GameState>,
+    id: String,
+) -> Result<bool, String> {
+    // 0) 실행 중이면 차단 — 사용 중인 파일을 지우면 게임이 깨지므로 먼저 종료해야 한다.
+    if game_state.is_running(&id) {
+        return Err("게임이 실행 중인 프로필은 삭제할 수 없습니다. 먼저 게임을 종료하세요.".into());
+    }
+
     // 1) game_directory 읽기 (짧은 락)
     let game_dir = {
         let conn = db.0.lock().unwrap();
@@ -91,10 +102,26 @@ pub async fn profile_delete(db: State<'_, DbState>, id: String) -> Result<bool, 
     //    순서가 중요: 파일→DB. 삭제 도중 앱을 강제 종료하면 DB 행이 아직 남아 프로필이 그대로
     //    보이고 다시 삭제할 수 있다. 만약 DB를 먼저 지우면 "기록 없는 잔여 파일(orphan)"이 남는다.
     if let Some(dir) = game_dir {
-        let _ = tauri::async_runtime::spawn_blocking(move || {
-            let _ = std::fs::remove_dir_all(&dir);
-        })
-        .await;
+        let result = tauri::async_runtime::spawn_blocking(move || std::fs::remove_dir_all(&dir)).await;
+        // 이미 없는 디렉터리(NotFound)는 성공 취급. 그 외 실패(권한/사용 중 등)는 파일이 일부만
+        // 남은 불완전 상태 → DB를 지우지 않고 'incomplete'로 표시해 사용자가 다시 삭제하도록 안내한다.
+        let delete_failed = match result {
+            Ok(Ok(())) => false,
+            Ok(Err(e)) if e.kind() == std::io::ErrorKind::NotFound => false,
+            _ => true,
+        };
+        if delete_failed {
+            let conn = db.0.lock().unwrap();
+            let _ = conn.execute(
+                "UPDATE profiles SET installation_status = 'incomplete' WHERE id = ?1",
+                [&id],
+            );
+            return Err(
+                "프로필 파일을 완전히 삭제하지 못했습니다. 다른 프로그램이 파일을 사용 중일 수 있습니다. \
+                 프로필이 '불완전' 상태로 표시되며, 잠시 후 다시 삭제를 시도하세요."
+                    .into(),
+            );
+        }
     }
 
     // 3) 파일 정리 후 DB 행 삭제 (짧은 락)

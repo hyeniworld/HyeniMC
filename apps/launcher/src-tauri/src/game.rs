@@ -66,6 +66,11 @@ impl GameState {
             .cloned()
             .unwrap_or_default()
     }
+
+    /// 해당 프로필의 게임이 실행 중인지 (삭제 차단 등에 사용).
+    pub fn is_running(&self, profile_id: &str) -> bool {
+        self.running.lock().unwrap().contains_key(profile_id)
+    }
 }
 
 #[derive(Serialize, Clone)]

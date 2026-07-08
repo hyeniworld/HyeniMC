@@ -82,6 +82,15 @@ fn main() {
                 log::error!("[db] legacy DB open failed: {e}");
                 e
             })?;
+            // 중단된 설치 복구: 'installing'은 프로세스 종속 상태라 앱 재시작을 넘어 살아남을 수 없다.
+            // 이전 세션이 설치 중 강제 종료됐다면 영원히 'installing'으로 남아 프로필이 잠기므로,
+            // 시작 시 'incomplete'로 되돌려 사용자가 삭제/재설치할 수 있게 한다(Electron 동작 일치).
+            if let Err(e) = conn.execute(
+                "UPDATE profiles SET installation_status = 'incomplete' WHERE installation_status = 'installing'",
+                [],
+            ) {
+                log::warn!("[db] 중단 설치 상태 복구 실패: {e}");
+            }
             app.manage(commands::DbState(Mutex::new(conn)));
             app.manage(game::GameState::default());
             app.manage(resources::WatchState::default());
