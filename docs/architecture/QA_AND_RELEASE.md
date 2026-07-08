@@ -32,7 +32,7 @@ npm run build:tauri   # 배포 번들 (arm64/x64 dmg + nsis)
 ### C. 혜니팩 & 업데이트
 - [ ] 혜니팩 import → 모드 설치(url 피닝분 다운로드 + zip 동봉분 추출) → overrides 적용
 - [ ] 팩 업데이트: 신버전 감지(실행 전/시작 배너) → 적용 → 모드 diff 정확 → 사용자 파일 보존
-- [ ] breaking 업데이트 시 적용 전 실행 차단 / 서버 접근 불가 시 강제 실행 설정
+- [ ] breaking 업데이트 시 적용 전 실행 차단(강제 불가) / **Worker 접근 불가 시 [강제 실행]/[닫기] 다이얼로그**(설정 토글 아님)
 - [ ] worker mods 자동 관리 (혜니월드 서버 프로필에서만 체크, sha256 설치)
 
 ### D. 혜니월드 통합
@@ -45,6 +45,46 @@ npm run build:tauri   # 배포 번들 (arm64/x64 dmg + nsis)
 - [ ] **Windows**: 기존 Electron 판 위에 Tauri NSIS 설치 → 기존 판 자동 제거 + 데이터 보존 (installer-hooks.nsh)
 - [ ] **macOS**: Squirrel.Mac zip 교체 검증 (동일 Developer ID) / 실패 시 브릿지 릴리스
 
+### F. Electron→Tauri 이식 완결 & 감사 정정 검증 (2026-07-08 세션)
+
+전수 대조 감사 + 검증 감사로 잡은 누락/회귀 정정분. 위 A~E와 중복되는 큰 흐름 외 세부 확인.
+
+**프로필 설정 반영**
+- [ ] 프로필별 메모리/해상도 오버라이드 저장 → 재로드 시 유지 → 실행에 반영(전역과 별개, 0=전역 상속)
+- [ ] 커스텀 JVM 인자를 비운 뒤 저장 → 정상 실행(`__CLEAR_JVM_ARGS__` 마커 미주입)
+- [ ] 실행 전 검증: 최대 메모리를 시스템 90% 초과로 → 실행 시 차단 다이얼로그 **[닫기]/[설정 열기]**(설정 이동)
+- [ ] 잘못된 Java 경로 → 차단 다이얼로그; Java 미설치 → **[Java 설치 안내]**(브라우저)
+- [ ] min>max 메모리 → 자동 보정(max=min)되어 실행
+
+**모드 메타 통합**
+- [ ] Electron으로 설치한 혜니팩 프로필을 Tauri에서 팩 업데이트 → **중복 모드 없이** 정상(통합 `.hyenimc-metadata.json`)
+- [ ] 모드 목록 출처(source)가 재파싱 후에도 유지
+
+**이벤트·UI**
+- [ ] 런처 업데이트: 새 릴리스 시 **배너 표시** / 설정 '자동 다운로드' 켜면 발견 즉시 자동 다운로드
+- [ ] 모드/리소스팩/셰이더팩 추가·삭제 시 **목록 자동 새로고침**(디바운스 — 대량 추가 시 폭주 없음)
+- [ ] 리소스팩 **"Format N"**·설명·아이콘 표시 / 비활성(`.disabled`) 팩도 목록에 표시(enabled:false)
+- [ ] 캐시 통계 표시 + 전체 삭제(실행 중이면 차단) — 대상 `<userData>/shared`(에셋/라이브러리)
+- [ ] 게임 비정상 종료 → **원인 진단 다이얼로그**(메모리/모드충돌/그래픽/파일손상) + crash-report 없으면 로그 폴백
+
+**프로필 생명주기**
+- [ ] 게임 실행 중 삭제 버튼 비활성화 + 백엔드 차단
+- [ ] 삭제 실패(파일 사용 중) → **'삭제 실패'** 상태 표시 + 재삭제 가능(NotFound은 성공 취급)
+- [ ] 시작 시 'installing'으로 잠긴 프로필 → 'incomplete'로 해제
+
+**워커 모드**
+- [ ] 서버 미등록 프로필에서도 **기설치** 워커 모드 업데이트 확인됨
+- [ ] 워커 모드 설치 성공 시 '실패' 토스트 안 뜸 / 일부 실패해도 나머지 설치(per-mod 결과)
+- [ ] 로더 버전 불호환 모드는 실행 전 자동 업데이트에서 제외
+- [ ] 딥링크 MODE1: servers.dat 매칭 **+ HyeniHelper 설치** 프로필에만 config 기록
+
+**팩/모드 강제 실행 (오늘 신규)**
+- [ ] Worker 접근 불가 시 실행 → **[강제 실행]/[닫기]** 안내 다이얼로그. 강제 시 진행, 닫기 시 대기
+- [ ] breaking 업데이트는 강제 없이 차단(업데이트 안내)
+
+**경로**
+- [ ] 설정 게임 디렉터리 '기본값' 버튼 → OS 네이티브 문서 경로(Windows OneDrive 이동/한국어 로케일 `~/문서` 정확)
+
 ## 배포 파이프라인 (M6 잔여 — 인프라 결정 필요)
 
 1. **updater 서버**: tauri.conf.json의 `endpoints`는 **GitHub Releases**(`github.com/hyeniworld/HyeniMC/releases/latest/download/latest.json`) — Electron판(electron-updater)과 동일 서버. 릴리스 전엔 404→조용히 no-update. 실동작하려면 릴리스에 **`latest.json`(Tauri 서명 포맷) + 서명된 번들**을 asset으로 업로드해야 함. 서명 키는 `~/.tauri/hyenimc.key`(비번 없음 — **프로덕션 전 재생성 검토**). electron-updater의 `latest.yml`과 공존 가능(다른 파일).
@@ -54,5 +94,6 @@ npm run build:tauri   # 배포 번들 (arm64/x64 dmg + nsis)
 
 ## 알려진 보류 (M6+)
 - 경로 대소문자 이원화(hyenimc/HyeniMC) — Linux만 위험(비주력)
-- 스텁 잔여: mod/modpack/hyeni/dialog/fs/errorDialog — 사용자 런처 UI에서 진입점 숨김 완료, 커맨드는 no-op 스텁
+- 스텁 잔여: mod/modpack/hyeni/fs — **제작자 전용 기능**이라 사용자 런처 UI에서 진입점 숨김(isCreatorMode), 커맨드는 no-op 스텁. (errorDialog·dialog.selectFile·settings 캐시/내보내기·onShowErrorDialog는 실구현 완료)
+- 모드 검색/설치·의존성 자동설치·온라인 모드팩(CurseForge) 검색/설치는 미이식 — 제작자 도구(Electron) 전용, 사용자 런처 비대상
 - generate-config의 server-config.ts(AUTHORIZED_SERVER_DOMAINS)는 Rust hyeni.rs에 하드코딩 — 동기화 필요 시 build.rs 확장
