@@ -2,7 +2,7 @@
 //! 어댑터(src/renderer/tauri-shim.ts)가 이 이름들에 의존한다.
 
 use std::sync::Mutex;
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 
 use hyenimc_core::profile::{NewProfile, ProfilePatch};
 use hyenimc_core::rusqlite::Connection;
@@ -260,23 +260,23 @@ pub fn system_memory() -> u64 {
 }
 
 #[tauri::command]
-pub fn system_get_path(name: String) -> Result<String, String> {
+pub fn system_get_path(app: AppHandle, name: String) -> Result<String, String> {
     match name.as_str() {
         "userData" => hyenimc_core::paths::legacy_user_data_dir()
             .map(|p| p.display().to_string())
             .ok_or_else(|| "userData 경로를 결정할 수 없음".into()),
-        "documents" => home_dir()
-            .map(|h| h.join("Documents").display().to_string())
-            .ok_or_else(|| "documents 경로를 결정할 수 없음".into()),
-        "downloads" => home_dir()
-            .map(|h| h.join("Downloads").display().to_string())
-            .ok_or_else(|| "downloads 경로를 결정할 수 없음".into()),
+        // OS 네이티브 특수폴더 해석 — Windows(OneDrive로 이동/백업된 경로)·비영어 로케일(예: ~/문서)까지
+        // 정확히 반영(Electron app.getPath 동일). 하드코딩 $HOME/Documents는 이런 경우 틀린다.
+        "documents" => app
+            .path()
+            .document_dir()
+            .map(|p| p.display().to_string())
+            .map_err(|e| format!("documents 경로를 결정할 수 없음: {e}")),
+        "downloads" => app
+            .path()
+            .download_dir()
+            .map(|p| p.display().to_string())
+            .map_err(|e| format!("downloads 경로를 결정할 수 없음: {e}")),
         other => Err(format!("unsupported path name: {other}")),
     }
-}
-
-fn home_dir() -> Option<std::path::PathBuf> {
-    std::env::var_os("USERPROFILE")
-        .or_else(|| std::env::var_os("HOME"))
-        .map(std::path::PathBuf::from)
 }

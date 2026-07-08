@@ -103,12 +103,15 @@ pub fn read_unified(mods_dir: &Path) -> Option<UnifiedMetadata> {
     serde_json::from_str(&text).ok()
 }
 
-/// 통합 파일 쓰기 (updatedAt은 호출부에서 갱신).
+/// 통합 파일 쓰기. `updated_at`은 내부에서 항상 현재 시각으로 갱신한다
+/// (Electron writeUnifiedMetadata와 동일 — 호출부가 깜빡해도 안전).
 pub fn write_unified(mods_dir: &Path, meta: &UnifiedMetadata) -> Result<(), LauncherError> {
     if let Some(parent) = unified_path(mods_dir).parent() {
         std::fs::create_dir_all(parent)?;
     }
-    std::fs::write(unified_path(mods_dir), serde_json::to_string_pretty(meta)?)?;
+    let mut meta = meta.clone();
+    meta.updated_at = iso_now();
+    std::fs::write(unified_path(mods_dir), serde_json::to_string_pretty(&meta)?)?;
     Ok(())
 }
 

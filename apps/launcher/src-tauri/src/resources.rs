@@ -41,23 +41,28 @@ fn list_dir(dir: &std::path::Path, provided: &[String], parse_meta: bool) -> Vec
         }
         let meta = entry.metadata().ok();
         let is_directory = meta.as_ref().map(|m| m.is_dir()).unwrap_or(false);
-        // 셰이더/리소스팩 = zip 또는 폴더
-        if !is_directory && !file_name.to_lowercase().ends_with(".zip") {
+        // 셰이더/리소스팩 = zip / zip.disabled(비활성) / 폴더. 비활성 팩도 목록에 표시(Electron 동일).
+        let lower = file_name.to_lowercase();
+        let is_disabled = lower.ends_with(".zip.disabled");
+        if !is_directory && !lower.ends_with(".zip") && !is_disabled {
             continue;
         }
-        // 리소스팩만 pack.mcmeta에서 pack_format/설명/아이콘 파싱 (셰이더팩은 미해당)
+        // 표시/조작용 정규화 파일명(.disabled 제거) — Electron actualFileName과 동일
+        let canonical = file_name.trim_end_matches(".disabled").to_string();
+        // 리소스팩만 pack.mcmeta에서 pack_format/설명/아이콘 파싱 (셰이더팩은 미해당).
+        // 비활성 팩도 실제 디스크 경로(.disabled 포함)를 zip으로 읽는다.
         let (pack_format, description, icon) = if parse_meta {
             read_pack_metadata(&entry.path(), is_directory)
         } else {
             (0, None, None)
         };
         out.push(PackEntry {
-            name: file_name.trim_end_matches(".zip").to_string(),
+            name: canonical.trim_end_matches(".zip").to_string(),
             size: meta.map(|m| m.len()).unwrap_or(0),
-            enabled: true,
+            enabled: !is_disabled,
             is_directory,
-            provided_by_pack: provided.iter().any(|p| p == &file_name),
-            file_name,
+            provided_by_pack: provided.iter().any(|p| p == &canonical || p == &file_name),
+            file_name: canonical,
             pack_format,
             description,
             icon,
@@ -126,10 +131,12 @@ fn read_zip_pack_files(zip_path: &std::path::Path) -> (Option<Vec<u8>>, Option<V
 fn normalize_description(v: &serde_json::Value) -> Option<String> {
     match v {
         serde_json::Value::String(s) => Some(s.clone()),
+        // Electron `rawDesc.fallback || rawDesc.translate`와 동일하게 truthy(빈 문자열은 스킵) 판정
         serde_json::Value::Object(o) => o
             .get("fallback")
-            .or_else(|| o.get("translate"))
             .and_then(|x| x.as_str())
+            .filter(|s| !s.is_empty())
+            .or_else(|| o.get("translate").and_then(|x| x.as_str()).filter(|s| !s.is_empty()))
             .map(String::from)
             .or_else(|| Some(v.to_string())),
         serde_json::Value::Array(a) => {
@@ -199,6 +206,10 @@ pub fn file_watch_start(
     let dir = PathBuf::from(&game_directory);
     let app2 = app.clone();
     let pid = profile_id.clone();
+    // 디바운스: 동일 (type,fileName)의 add/change가 짧은 시간 내 반복되면(Create+Modify 연쇄 등)
+    // 흡수해 프론트 리로드 폭주를 막는다(Electron chokidar awaitWriteFinish 의도). remove는 예외.
+    let mut last_emit: std::collections::HashMap<String, std::time::Instant> = std::collections::HashMap::new();
+    const DEBOUNCE: std::time::Duration = std::time::Duration::from_millis(500);
     let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
         let Ok(event) = res else { return };
         // 이벤트 종류 → 렌더러 action. Access/Other 등은 무시.
@@ -209,12 +220,14 @@ pub fn file_watch_start(
             _ => return,
         };
         for path in &event.paths {
-            // 어느 하위 폴더(mods/resourcepacks/shaderpacks)의 변경인지 판별
-            let Some(kind) = path.components().find_map(|c| match c.as_os_str().to_str() {
-                Some("mods") => Some("mods"),
-                Some("resourcepacks") => Some("resourcepacks"),
-                Some("shaderpacks") => Some("shaderpacks"),
-                _ => None,
+            // 어느 하위 폴더의 변경인지 = 즉시 부모 폴더명(상위 경로가 같은 이름이어도 오분류 안 되게)
+            let Some(kind) = path.parent().and_then(|p| p.file_name()).and_then(|n| n.to_str()).and_then(|n| {
+                match n {
+                    "mods" => Some("mods"),
+                    "resourcepacks" => Some("resourcepacks"),
+                    "shaderpacks" => Some("shaderpacks"),
+                    _ => None,
+                }
             }) else {
                 continue;
             };
@@ -222,9 +235,24 @@ pub fn file_watch_start(
                 .file_name()
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_default();
-            // 폴더 자체 이벤트나 빈 파일명은 건너뜀 (렌더러는 파일 단위로 처리)
-            if file_name.is_empty() || file_name == kind {
+            if file_name.is_empty() {
                 continue;
+            }
+            // mods는 .jar/.jar.disabled만 통지(Electron 동일 — config 등 잡파일 무시)
+            if kind == "mods" {
+                let lower = file_name.to_lowercase();
+                if !(lower.ends_with(".jar") || lower.ends_with(".jar.disabled")) {
+                    continue;
+                }
+            }
+            // 디바운스(remove는 항상 통지 — 프론트가 fileName으로 즉시 제거하므로 놓치면 안 됨)
+            if action != "remove" {
+                let key = format!("{kind}:{file_name}");
+                let now = std::time::Instant::now();
+                if last_emit.get(&key).is_some_and(|prev| now.duration_since(*prev) < DEBOUNCE) {
+                    continue;
+                }
+                last_emit.insert(key, now);
             }
             // 렌더러(ModList/ResourcePackList/ShaderPackList)가 기대하는 페이로드
             let _ = app2.emit(

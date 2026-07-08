@@ -285,7 +285,12 @@ fn analyze_process_output(output: &[String], code: Option<i32>, elapsed_ms: u128
         let ll = l.to_lowercase();
         ll.contains("error") || ll.contains("exception") || ll.contains("failed")
     }) {
-        let msg = first.replace("[STDOUT] ", "").replace("[STDERR] ", "");
+        // Rust 로그 버퍼는 stderr를 "[ERROR] "로 태깅한다(launch.rs). Electron의 [STDOUT]/[STDERR]
+        // 태그는 이 코드베이스엔 없지만 방어적으로 함께 제거.
+        let msg = first
+            .trim_start_matches("[ERROR] ")
+            .replace("[STDOUT] ", "")
+            .replace("[STDERR] ", "");
         return (
             "게임 실행 오류".into(),
             msg,

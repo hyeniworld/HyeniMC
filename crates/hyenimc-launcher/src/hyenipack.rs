@@ -227,11 +227,11 @@ pub async fn install_pack(
     on_progress: impl Fn(PackInstallProgress) + Send + Sync,
 ) -> Result<PackManifest, LauncherError> {
     let manifest = read_manifest_from_zip(pack_zip)?;
-    // formatVersion 방어 — 이 런처가 아는 형식은 v1(0=레거시 취급)·v2. 상위 형식은 처리 규칙이
-    // 다를 수 있으므로 조용히 오설치하지 않고 명시적으로 거부한다.
-    if manifest.format_version > 2 {
+    // formatVersion 방어 — 이 런처가 아는 형식은 v1·v2뿐. 0(키 누락)·3+ 등은 처리 규칙이
+    // 다르거나 손상 매니페스트이므로 조용히 오설치하지 않고 명시적으로 거부한다(Electron 동일).
+    if manifest.format_version != 1 && manifest.format_version != 2 {
         return Err(LauncherError::Other(format!(
-            "지원하지 않는 혜니팩 형식입니다 (formatVersion={}). 런처를 업데이트하세요.",
+            "지원하지 않는 혜니팩 형식입니다 (formatVersion={}). 런처를 업데이트하거나 팩을 다시 받으세요.",
             manifest.format_version
         )));
     }
