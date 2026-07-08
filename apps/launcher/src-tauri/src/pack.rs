@@ -179,39 +179,49 @@ pub fn forceable(msg: &str) -> String {
 }
 
 /// 실행 전 혜니팩 게이트.
-/// - `force=true`: 사용자가 강제 실행 선택 → 게이트 우회.
-/// - Worker(업데이트 확인 서버) 접근 불가/미설정: 강제 실행 가능 에러(프론트가 확인 다이얼로그).
-/// - breaking(호환성 파괴) 업데이트: 강제 불가 하드 차단(팩 업데이트로만 해소).
+/// - Worker(업데이트 확인 서버) 접근 불가/미설정: `force=false`면 강제 실행 가능 에러(프론트가 확인
+///   다이얼로그), `force=true`면 우회.
+/// - breaking(호환성 파괴) 업데이트: **force와 무관하게** 하드 차단(팩 업데이트로만 해소).
+///   force여도 check_pack_update를 계속 수행해, 강제 실행 순간 서버가 살아있고 breaking이면 여전히 차단.
 pub async fn pre_launch_pack_gate(dirs: &GameDirs, force: bool) -> Result<(), String> {
     // 팩 미설치 프로필(바닐라 등)은 게이트 대상 아님
     if hyenipack::read_pack_meta(&dirs.instance_dir).is_none() {
         return Ok(());
     }
-    if force {
-        return Ok(()); // 사용자가 강제 실행 선택
-    }
 
     let base = match worker_base() {
         Ok(b) => b,
+        // URL 미설정 = 확인 불가 → force면 우회, 아니면 강제 실행 가능 안내
         Err(_) => {
-            return Err(forceable(
-                "업데이트 서버 주소가 설정되지 않아 팩 최신 여부를 확인할 수 없습니다.\n그대로 실행하면 서버 접속이 안 될 수 있습니다.",
-            ));
+            return if force {
+                Ok(())
+            } else {
+                Err(forceable(
+                    "업데이트 서버 주소가 설정되지 않아 팩 최신 여부를 확인할 수 없습니다.\n그대로 실행하면 서버 접속이 안 될 수 있습니다.",
+                ))
+            };
         }
     };
 
     let http = reqwest::Client::new();
     match hyenipack::check_pack_update(&http, &base, &dirs.instance_dir).await {
         Ok(None) => Ok(()), // 최신
+        // breaking은 강제로도 우회 불가 — 확인된 호환성 파괴는 실행 시 크래시/접속불가로 이어짐
         Ok(Some(update)) if update.breaking => Err(format!(
             "호환성 파괴 업데이트(v{})가 있어 적용 전까지 실행할 수 없습니다. 팩을 업데이트하세요.",
             update.latest_version
         )),
         Ok(Some(_)) => Ok(()), // non-breaking: 배너로 안내(렌더러), 실행 허용
-        // 서버 접근 불가 → 강제 실행 가능(사용자 선택)
-        Err(_) => Err(forceable(
-            "업데이트 서버에 연결할 수 없어 팩 최신 여부를 확인하지 못했습니다.\n그대로 실행하면 서버 접속이 안 될 수 있습니다.",
-        )),
+        // 서버 접근 불가 → force면 우회, 아니면 강제 실행 가능 안내
+        Err(_) => {
+            if force {
+                Ok(())
+            } else {
+                Err(forceable(
+                    "업데이트 서버에 연결할 수 없어 팩 최신 여부를 확인하지 못했습니다.\n그대로 실행하면 서버 접속이 안 될 수 있습니다.",
+                ))
+            }
+        }
     }
 }
 

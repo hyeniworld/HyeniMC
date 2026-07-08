@@ -11,9 +11,7 @@ import { DecorationCharacter } from '../common/HyeniDecorations';
 import { ConfirmModal } from '../common/ConfirmModal';
 import { errorText } from '../../utils/errorText';
 import { isAuthorizedServer } from '@shared/config/server-config';
-
-// Rust pack::FORCE_MARKER와 동일해야 함 — 업데이트 확인 실패(강제 실행 가능) 에러 접두사
-const FORCE_MARKER = 'FORCE_LAUNCH_AVAILABLE:';
+import { FORCE_LAUNCH_MARKER } from '@shared/constants/launch';
 
 export function ProfileList() {
   const navigate = useNavigate();
@@ -162,10 +160,10 @@ export function ProfileList() {
             return ns;
           });
         // 업데이트 확인 실패(강제 실행 가능) → 다운로드 모달 대신 [강제 실행]/[닫기] 확인 다이얼로그
-        if (raw.includes(FORCE_MARKER)) {
+        if (raw.includes(FORCE_LAUNCH_MARKER)) {
           resetDownload();
           clearLaunching();
-          setForcePrompt({ profileId, message: raw.split(FORCE_MARKER)[1]?.trim() || '업데이트 서버에 연결할 수 없습니다.' });
+          setForcePrompt({ profileId, message: raw.split(FORCE_LAUNCH_MARKER)[1]?.trim() || '업데이트 서버에 연결할 수 없습니다.' });
           return;
         }
         setDl({ error: errorText(err, '게임 실행에 실패했습니다.') });

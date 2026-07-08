@@ -14,12 +14,10 @@ import { useWorkerModUpdates } from '../hooks/useWorkerModUpdates';
 import { useDownloadStore } from '../store/downloadStore';
 import { useToast } from '../contexts/ToastContext';
 import { IPC_EVENTS } from '../../shared/constants/ipc';
+import { FORCE_LAUNCH_MARKER } from '../../shared/constants/launch';
 import { Package, Trash2, Loader2 } from 'lucide-react';
 
 type TabType = 'overview' | 'mods' | 'resourcepacks' | 'shaderpacks' | 'settings';
-
-// Rust pack::FORCE_MARKER와 동일해야 함 — 업데이트 확인 실패(강제 실행 가능) 에러 접두사
-const FORCE_MARKER = 'FORCE_LAUNCH_AVAILABLE:';
 
 export const ProfileDetailPage: React.FC = () => {
   const { profileId } = useParams<{ profileId: string }>();
@@ -187,9 +185,9 @@ export const ProfileDetailPage: React.FC = () => {
 
       const raw = error instanceof Error ? error.message : String(error);
       // 업데이트 확인 실패(강제 실행 가능) → 다운로드 모달/토스트 대신 [강제 실행]/[닫기] 확인
-      if (raw.includes(FORCE_MARKER)) {
+      if (raw.includes(FORCE_LAUNCH_MARKER)) {
         resetDownload();
-        setForceMsg(raw.split(FORCE_MARKER)[1]?.trim() || '업데이트 서버에 연결할 수 없습니다.');
+        setForceMsg(raw.split(FORCE_LAUNCH_MARKER)[1]?.trim() || '업데이트 서버에 연결할 수 없습니다.');
         return;
       }
 

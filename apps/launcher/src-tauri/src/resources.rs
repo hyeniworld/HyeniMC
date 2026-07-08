@@ -252,6 +252,10 @@ pub fn file_watch_start(
                 if last_emit.get(&key).is_some_and(|prev| now.duration_since(*prev) < DEBOUNCE) {
                     continue;
                 }
+                // 무한 누적 방지 — 커지면 만료 항목 정리(보통 파일 수 규모라 잘 안 커짐)
+                if last_emit.len() > 512 {
+                    last_emit.retain(|_, t| now.duration_since(*t) < DEBOUNCE);
+                }
                 last_emit.insert(key, now);
             }
             // 렌더러(ModList/ResourcePackList/ShaderPackList)가 기대하는 페이로드

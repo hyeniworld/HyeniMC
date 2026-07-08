@@ -6,12 +6,16 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_updater::UpdaterExt;
 
 /// 다운로드된 업데이트를 quitAndInstall까지 들고 있기 위한 보관소
 #[derive(Default)]
-pub struct PendingUpdate(pub Mutex<Option<tauri_plugin_updater::Update>>);
+pub struct PendingUpdate {
+    pub update: Mutex<Option<tauri_plugin_updater::Update>>,
+    /// 자동 다운로드를 이미 시작/완료한 버전 — 4시간마다 재확인 시 같은 버전 재다운로드 방지
+    pub auto_downloaded: Mutex<Option<String>>,
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -58,7 +62,7 @@ pub async fn launcher_check_updates(
                     .map(|s| s.update.auto_download)
                     .unwrap_or(false)
             };
-            *pending.0.lock().unwrap() = Some(update.clone());
+            *pending.update.lock().unwrap() = Some(update.clone());
             // useLauncherUpdate 훅은 반환값이 아니라 이벤트로 배너를 띄운다(Electron autoUpdater와 동일).
             let _ = app.emit(
                 "launcher:update-available",
@@ -69,10 +73,23 @@ pub async fn launcher_check_updates(
                     "required": false,
                 }),
             );
-            if auto_download {
+            // 같은 버전을 이미 자동 다운로드했으면 재확인(4시간 주기)마다 다시 받지 않는다.
+            if auto_download
+                && pending.auto_downloaded.lock().unwrap().as_deref() != Some(version.as_str())
+            {
+                *pending.auto_downloaded.lock().unwrap() = Some(version.clone());
                 let app2 = app.clone();
+                let ver = version.clone();
                 tauri::async_runtime::spawn(async move {
-                    let _ = run_download(&app2, &update).await;
+                    if run_download(&app2, &update).await.is_err() {
+                        // 실패 시 다음 체크에서 재시도할 수 있게 표식 해제
+                        if let Some(p) = app2.try_state::<PendingUpdate>() {
+                            let mut g = p.auto_downloaded.lock().unwrap();
+                            if g.as_deref() == Some(ver.as_str()) {
+                                *g = None;
+                            }
+                        }
+                    }
                 });
             }
             Ok(UpdateCheckResult { success: true, available: true, version: Some(version), notes })
@@ -141,7 +158,7 @@ pub async fn launcher_download_update(
     app: AppHandle,
     pending: tauri::State<'_, PendingUpdate>,
 ) -> Result<bool, String> {
-    let update = pending.0.lock().unwrap().clone();
+    let update = pending.update.lock().unwrap().clone();
     let Some(update) = update else {
         return Err("다운로드할 업데이트가 없습니다 (먼저 확인하세요)".into());
     };
@@ -154,7 +171,7 @@ pub async fn launcher_quit_and_install(
     app: AppHandle,
     pending: tauri::State<'_, PendingUpdate>,
 ) -> Result<(), String> {
-    let update = pending.0.lock().unwrap().clone();
+    let update = pending.update.lock().unwrap().clone();
     let Some(update) = update else {
         return Err("설치할 업데이트가 없습니다".into());
     };
