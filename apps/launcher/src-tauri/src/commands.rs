@@ -230,8 +230,15 @@ pub fn settings_cache_stats() -> serde_json::Value {
 }
 
 /// 캐시 전체 삭제 — shared 에셋/라이브러리 제거(다음 실행 시 자동 재다운로드).
+/// 실행 중인 게임이 읽고 있을 수 있으므로 하나라도 실행 중이면 거부한다(Tauri 보강).
 #[tauri::command]
-pub fn settings_reset_cache() -> serde_json::Value {
+pub fn settings_reset_cache(game_state: State<GameState>) -> serde_json::Value {
+    if game_state.any_running() {
+        return serde_json::json!({
+            "success": false,
+            "message": "게임이 실행 중입니다. 모든 게임을 종료한 뒤 다시 시도하세요."
+        });
+    }
     match cache_dir().map(|d| std::fs::remove_dir_all(&d)) {
         Ok(Ok(())) => serde_json::json!({ "success": true, "message": "캐시가 삭제되었습니다." }),
         Ok(Err(e)) if e.kind() == std::io::ErrorKind::NotFound => {

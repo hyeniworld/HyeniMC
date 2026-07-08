@@ -71,6 +71,11 @@ impl GameState {
     pub fn is_running(&self, profile_id: &str) -> bool {
         self.running.lock().unwrap().contains_key(profile_id)
     }
+
+    /// 실행 중인 게임이 하나라도 있는지 (공유 캐시 삭제 차단 등에 사용).
+    pub fn any_running(&self) -> bool {
+        !self.running.lock().unwrap().is_empty()
+    }
 }
 
 #[derive(Serialize, Clone)]
