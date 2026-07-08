@@ -44,10 +44,23 @@ pub fn os_arch() -> &'static str {
     }
 }
 
+/// 런처가 켜는 launch feature 상태 (Electron game-launcher `checkFeatures`와 동일).
+/// - has_custom_resolution: 항상 켠다 → 버전 JSON의 `--width/--height` 인자 블록이 포함돼야
+///   프로필/전역 해상도 설정이 실제로 반영된다.
+/// - is_demo_user / has_quick_plays_support / is_quick_play_* : 미지원 → 배제.
+fn feature_enabled(name: &str) -> bool {
+    matches!(name, "has_custom_resolution")
+}
+
 fn rule_matches(rule: &Rule) -> bool {
-    // feature 조건은 전부 미사용 → feature가 걸린 rule은 매치 안 함
-    if rule.features.as_ref().is_some_and(|f| !f.is_empty()) {
-        return false;
+    // feature 규칙: 요구하는 모든 feature가 런처 상태와 일치해야 매치.
+    // (has_custom_resolution만 켜져 있으므로 해상도 인자는 포함, quickPlay/demo는 배제)
+    if let Some(features) = &rule.features {
+        for (name, &expected) in features {
+            if feature_enabled(name) != expected {
+                return false;
+            }
+        }
     }
     match &rule.os {
         None => true,
@@ -124,5 +137,29 @@ mod tests {
             serde_json::from_str(r#"[{"action":"allow","features":{"is_demo_user":true}}]"#)
                 .unwrap();
         assert!(!rules_allow(&rules));
+    }
+
+    #[test]
+    fn custom_resolution_feature_is_allowed() {
+        // 해상도 인자 블록: features.has_custom_resolution=true → 포함돼야 함
+        let rules: Vec<Rule> = serde_json::from_str(
+            r#"[{"action":"allow","features":{"has_custom_resolution":true}}]"#,
+        )
+        .unwrap();
+        assert!(rules_allow(&rules));
+    }
+
+    #[test]
+    fn quick_play_features_stay_disallowed() {
+        for f in [
+            "has_quick_plays_support",
+            "is_quick_play_singleplayer",
+            "is_quick_play_multiplayer",
+            "is_quick_play_realms",
+        ] {
+            let json = format!(r#"[{{"action":"allow","features":{{"{f}":true}}}}]"#);
+            let rules: Vec<Rule> = serde_json::from_str(&json).unwrap();
+            assert!(!rules_allow(&rules), "{f} 는 배제돼야 함");
+        }
     }
 }

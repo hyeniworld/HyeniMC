@@ -37,20 +37,54 @@ function installTauriShim(): void {
 
   // Rust는 타임스탬프를 초(Unix) i64로 반환 — 렌더러는 new Date(ms)를 기대하므로
   // Electron main(profile.ts)과 동일하게 초→ISO 문자열로 변환한다(생성일 1970 표시 방지).
+  // 또한 Rust는 memory/resolution을 평면(memoryMin 등, NULL=전역 상속)으로 주지만
+  // 렌더러 계약(shared/types/profile.ts)은 중첩 {memory:{min,max}, resolution:{width,height}}이며
+  // 0=전역 관례를 쓴다 → 여기서 평면→중첩 + null→0 정규화(어댑터 계층이 계약을 맞춘다).
   const toRendererProfile = (p: any) =>
     p && {
       ...p,
       createdAt: p.createdAt ? new Date(p.createdAt * 1000).toISOString() : undefined,
       updatedAt: p.updatedAt ? new Date(p.updatedAt * 1000).toISOString() : undefined,
       lastPlayed: p.lastPlayed ? new Date(p.lastPlayed * 1000).toISOString() : undefined,
+      memory: { min: p.memoryMin ?? 0, max: p.memoryMax ?? 0 },
+      resolution: { width: p.resolutionWidth ?? 0, height: p.resolutionHeight ?? 0 },
     };
+
+  // 렌더러 계약(중첩 memory/resolution, 0=전역) → Rust ProfilePatch(평면 memoryMin 등).
+  // 0은 "전역 사용" 신호 → 컬럼을 NULL로 초기화(Rust 실행부가 NULL일 때만 전역 상속하므로
+  // 0을 그대로 저장하면 0MB/0px로 실행되는 문제를 막는다). memory/resolution이 없으면 손대지 않음.
+  const toBackendPatch = (data: any) => {
+    if (!data || typeof data !== 'object') return data;
+    const out: any = { ...data };
+    if (out.memory && typeof out.memory === 'object') {
+      out.memoryMin = out.memory.min ? out.memory.min : null;
+      out.memoryMax = out.memory.max ? out.memory.max : null;
+      delete out.memory;
+    }
+    if (out.resolution && typeof out.resolution === 'object') {
+      out.resolutionWidth = out.resolution.width ? out.resolution.width : null;
+      out.resolutionHeight = out.resolution.height ? out.resolution.height : null;
+      delete out.resolution;
+    }
+    // Proto3 우회 마커 처리(Go profile_service와 동일): ['__CLEAR_JVM_ARGS__'] = 비우기.
+    // 처리하지 않으면 Rust가 마커를 jvm_args에 저장 → 실행 시 JVM 인자로 주입돼 게임이 안 뜬다.
+    if (
+      Array.isArray(out.jvmArgs) &&
+      out.jvmArgs.length === 1 &&
+      out.jvmArgs[0] === '__CLEAR_JVM_ARGS__'
+    ) {
+      out.jvmArgs = [];
+    }
+    return out;
+  };
 
   const api: any = {
     profile: {
       list: async () => ((await invoke('profile_list')) as any[]).map(toRendererProfile),
       get: async (id: string) => toRendererProfile(await invoke('profile_get', { id })),
       create: (data: unknown) => invoke('profile_create', { data }),
-      update: (id: string, data: unknown) => invoke('profile_update', { id, data }),
+      update: async (id: string, data: unknown) =>
+        toRendererProfile(await invoke('profile_update', { id, data: toBackendPatch(data) })),
       delete: (id: string) => invoke('profile_delete', { id }),
       toggleFavorite: (id: string) => invoke('profile_toggle_favorite', { id }),
       launch: (id: string, accountId?: string) =>
