@@ -6,6 +6,8 @@
  * - Releases API (HyeniHelper mod distribution)
  */
 
+import { handleAdminApi } from './admin/router.js';
+
 const CURSEFORGE_BASE_URL = 'https://api.curseforge.com/v1';
 const RATE_LIMIT_PER_HOUR = 100;
 const RATE_LIMIT_WINDOW = 3600; // 1 hour in seconds
@@ -29,6 +31,11 @@ export default {
     try {
       const url = new URL(request.url);
       const path = url.pathname;
+
+      // Route: Admin API (Cloudflare Access 보호)
+      if (path.startsWith('/admin/api/')) {
+        return await handleAdminApi(request, env, ctx);
+      }
 
       // Route: Modpacks API v2 (HyeniPack)
       if (path.startsWith('/api/v2/modpacks') || path.startsWith('/download/v2/modpacks')) {
