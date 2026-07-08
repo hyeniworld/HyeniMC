@@ -72,4 +72,16 @@ describe('buildManifest', () => {
     expect(Object.keys(m.loaders).sort()).toEqual(['fabric', 'neoforge']);
     expect(m.gameVersions).toEqual(['1.21.1']);
   });
+
+  it('sorts top-level gameVersions and loaders keys regardless of file order', () => {
+    const m = buildManifest({
+      ...meta,
+      files: [
+        { loader: 'neoforge', gameVersion: '1.21.1', fileName: 'a.jar', sha256: 'x', size: 1, minLoaderVersion: '1', maxLoaderVersion: null, dependencies: {} },
+        { loader: 'fabric', gameVersion: '1.20.1', fileName: 'b.jar', sha256: 'y', size: 2, minLoaderVersion: '2', maxLoaderVersion: null, dependencies: {} },
+      ],
+    });
+    expect(m.gameVersions).toEqual(['1.20.1', '1.21.1']);
+    expect(Object.keys(m.loaders)).toEqual(['fabric', 'neoforge']);
+  });
 });
