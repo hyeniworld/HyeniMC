@@ -98,10 +98,20 @@ function installTauriShim(): void {
     settings: {
       get: () => invoke('settings_get'),
       update: (settings: unknown) => invoke('settings_update', { settings }),
-      resetCache: stub('settings.resetCache', { success: true, message: 'stub' }),
-      getCacheStats: stub('settings.getCacheStats', { size: 0, files: 0 }),
-      export: stub('settings.export', '{}'),
-      import: stub('settings.import', { success: false, message: 'M1 미구현' }),
+      // 캐시(재다운로드 가능한 shared 에셋/라이브러리) 실통계/삭제 — 기존 가짜 성공 스텁 대체
+      resetCache: () => invoke('settings_reset_cache'),
+      getCacheStats: () => invoke('settings_cache_stats'),
+      // 설정 내보내기/가져오기 — settings_get/update로 왕복(어댑터 계층에서 처리)
+      export: async () => JSON.stringify(await invoke('settings_get'), null, 2),
+      import: async (data: string) => {
+        try {
+          const settings = JSON.parse(data);
+          await invoke('settings_update', { settings });
+          return { success: true, message: '설정을 가져왔습니다.' };
+        } catch {
+          return { success: false, message: '설정 가져오기에 실패했습니다. 파일 형식을 확인하세요.' };
+        }
+      },
     },
     system: {
       getPath: (name: string) => invoke('system_get_path', { name }),

@@ -121,6 +121,8 @@ fn main() {
             commands::profile_record_crash,
             commands::settings_get,
             commands::settings_update,
+            commands::settings_cache_stats,
+            commands::settings_reset_cache,
             commands::system_memory,
             commands::system_get_path,
             game::java_detect,

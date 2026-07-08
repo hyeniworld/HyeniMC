@@ -190,6 +190,60 @@ pub fn settings_update(db: State<DbState>, settings: serde_json::Value) -> Resul
     hyenimc_core::settings::update_settings(&conn, &parsed, now_secs()).map_err(|e| e.to_string())
 }
 
+/// 재다운로드 가능한 캐시 디렉터리 = `<userData>/shared` (shared 에셋/라이브러리).
+/// SettingsPage 위험영역 설명("에셋과 라이브러리")과 일치.
+fn cache_dir() -> Result<std::path::PathBuf, String> {
+    hyenimc_core::paths::legacy_user_data_dir()
+        .map(|d| d.join("shared"))
+        .ok_or_else(|| "userData 경로를 결정할 수 없음".to_string())
+}
+
+/// 디렉터리 전체 크기(바이트)와 파일 개수 재귀 집계.
+fn dir_stats(dir: &std::path::Path) -> (u64, u64) {
+    let mut size = 0u64;
+    let mut files = 0u64;
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return (0, 0);
+    };
+    for entry in rd.flatten() {
+        match entry.metadata() {
+            Ok(m) if m.is_dir() => {
+                let (s, f) = dir_stats(&entry.path());
+                size += s;
+                files += f;
+            }
+            Ok(m) => {
+                size += m.len();
+                files += 1;
+            }
+            Err(_) => {}
+        }
+    }
+    (size, files)
+}
+
+/// 캐시 통계 {size, files} — SettingsPage 표시용 (기존 스텁을 실구현으로 대체).
+#[tauri::command]
+pub fn settings_cache_stats() -> serde_json::Value {
+    let (size, files) = cache_dir().map(|d| dir_stats(&d)).unwrap_or((0, 0));
+    serde_json::json!({ "size": size, "files": files })
+}
+
+/// 캐시 전체 삭제 — shared 에셋/라이브러리 제거(다음 실행 시 자동 재다운로드).
+#[tauri::command]
+pub fn settings_reset_cache() -> serde_json::Value {
+    match cache_dir().map(|d| std::fs::remove_dir_all(&d)) {
+        Ok(Ok(())) => serde_json::json!({ "success": true, "message": "캐시가 삭제되었습니다." }),
+        Ok(Err(e)) if e.kind() == std::io::ErrorKind::NotFound => {
+            serde_json::json!({ "success": true, "message": "삭제할 캐시가 없습니다." })
+        }
+        Ok(Err(e)) => {
+            serde_json::json!({ "success": false, "message": format!("캐시 삭제에 실패했습니다: {e}") })
+        }
+        Err(e) => serde_json::json!({ "success": false, "message": e }),
+    }
+}
+
 #[tauri::command]
 pub fn system_memory() -> u64 {
     let mut sys = sysinfo::System::new();
