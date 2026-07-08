@@ -311,10 +311,23 @@ function installTauriShim(): void {
     },
   };
 
+  // 크래시 자동 진단 등에서 Rust가 보내는 show-error-dialog → ErrorDialogProvider로 전달.
+  api.onShowErrorDialog = (cb: (data: unknown) => void) => api.on('show-error-dialog', cb);
+  // 에러 다이얼로그 액션 실행 (Electron error-dialog와 동일 — 대부분 렌더러/no-op, URL만 열기).
+  api.errorDialog = {
+    executeAction: async (action: string) => {
+      if (action === 'openJavaInstallGuide') {
+        await invoke('plugin:opener|open_url', { url: 'https://www.java.com/ko/download/' });
+      }
+      // increaseMemory 등 그 외 액션은 Electron과 동일하게 no-op(다이얼로그만 닫힘)
+      return { success: true };
+    },
+  };
+
   // 제작자 전용/미사용 카테고리 스텁 — 사용자 런처 UI에선 해당 기능이 숨겨짐(M6b).
   // hyeni.installUpdate는 worker mods로 통합됐으므로 no-op 성공 처리.
   const STUB_CATEGORIES = [
-    'modpack', 'hyeni', 'fs', 'errorDialog',
+    'modpack', 'hyeni', 'fs',
   ];
   for (const cat of STUB_CATEGORIES) {
     api[cat] = {};

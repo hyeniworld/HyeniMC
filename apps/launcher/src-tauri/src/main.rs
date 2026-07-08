@@ -4,6 +4,7 @@
 mod account;
 mod commands;
 mod crash;
+mod crash_analyzer;
 mod game;
 mod hyeni;
 mod launcher;

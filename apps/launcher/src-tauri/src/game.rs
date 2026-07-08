@@ -541,6 +541,7 @@ pub async fn game_launch(
     let app_exit = app.clone();
     let pid_for_exit = profile_id.clone();
     let started_at = Instant::now();
+    let crash_dir = dirs.instance_dir.clone(); // 종료 후 crash-report 진단용
 
     let handle = spawn_game(
         &java_path,
@@ -559,6 +560,7 @@ pub async fn game_launch(
         move |code| {
             // 종료: 상태 정리 + 플레이타임/크래시 기록 + 이벤트
             let elapsed = started_at.elapsed().as_secs() as i64;
+            let elapsed_ms = started_at.elapsed().as_millis();
             let db = app_exit.state::<DbState>();
             if elapsed > 0 {
                 let _ = hyenimc_core::stats::record_play_time(
@@ -567,14 +569,17 @@ pub async fn game_launch(
                     elapsed,
                 );
             }
+            let gs = app_exit.state::<GameState>();
             if matches!(code, Some(c) if c != 0) {
                 let _ = hyenimc_core::stats::record_crash(
                     &db.0.lock().unwrap(),
                     &pid_for_exit,
                     now_secs(),
                 );
+                // 크래시 자동 진단 → error-dialog 표시 (Electron 동작 복원)
+                let logs = gs.log_snapshot(&pid_for_exit);
+                crate::crash_analyzer::report_crash(&app_exit, &crash_dir, &logs, code, elapsed_ms);
             }
-            let gs = app_exit.state::<GameState>();
             gs.running.lock().unwrap().remove(&pid_for_exit);
             let _ = app_exit.emit(
                 "game:stopped",
