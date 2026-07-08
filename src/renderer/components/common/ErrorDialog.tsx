@@ -43,7 +43,13 @@ export function ErrorDialog({
   const handleAction = async (action: ErrorAction) => {
     setLoading(action.label);
     try {
-      await window.electronAPI.errorDialog.executeAction(action.action);
+      if (action.action === 'openSettings') {
+        // ErrorDialogProvider가 Router 바깥이라 useNavigate 불가 → HashRouter 해시로 직접 이동
+        window.location.hash = '#/settings';
+      } else if (action.action !== 'close') {
+        // 'close'는 닫기만. 그 외(openJavaInstallGuide 등)는 어댑터의 executeAction 위임
+        await window.electronAPI.errorDialog.executeAction(action.action);
+      }
       onClose();
     } catch (err) {
       console.error('Action failed:', err);

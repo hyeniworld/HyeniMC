@@ -778,6 +778,12 @@ async fn validate_launch(
         .find(|i| i.severity == "critical")
         .or_else(|| issues.iter().find(|i| i.severity == "error"));
     if let Some(issue) = blocking {
+        // 버튼 둘: '닫기'(그냥 닫음) + 상황별 액션. Java 미설치는 설치 안내(브라우저), 그 외는 설정 화면 이동.
+        let (primary_label, primary_action) = if issue.action == "openJavaInstallGuide" {
+            ("Java 설치 안내", "openJavaInstallGuide")
+        } else {
+            ("설정 열기", "openSettings")
+        };
         let _ = app.emit(
             "show-error-dialog",
             serde_json::json!({
@@ -785,7 +791,10 @@ async fn validate_launch(
                 "title": issue.title,
                 "message": issue.message,
                 "suggestions": [issue.solution],
-                "actions": [{ "label": "설정 열기", "type": "primary", "action": issue.action }],
+                "actions": [
+                    { "label": "닫기", "type": "secondary", "action": "close" },
+                    { "label": primary_label, "type": "primary", "action": primary_action },
+                ],
             }),
         );
         return Err(format!("{}: {}", issue.title, issue.message));
