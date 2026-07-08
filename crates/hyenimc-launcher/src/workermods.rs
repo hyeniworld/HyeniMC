@@ -58,6 +58,11 @@ pub struct FileInfo {
     pub sha256: Option<String>,
     #[serde(default)]
     pub size: Option<u64>,
+    /// 이 파일이 요구하는 로더 버전 범위 (없으면 제약 없음). 프로필 로더 버전이 벗어나면 제외.
+    #[serde(default)]
+    pub min_loader_version: Option<String>,
+    #[serde(default)]
+    pub max_loader_version: Option<String>,
 }
 
 /// 렌더러(useWorkerModUpdates)가 소비하는 업데이트 항목
@@ -130,6 +135,26 @@ pub fn is_newer_version(remote: &str, local: &str) -> bool {
     version_key(remote) > version_key(local)
 }
 
+/// 프로필 로더 버전이 모드가 요구하는 [min, max] 범위 내인지 (Electron checkLoaderVersionCompatibility).
+/// min/max가 없거나 빈 문자열이면 해당 제약 없음.
+fn loader_version_ok(current: &str, min: Option<&str>, max: Option<&str>) -> bool {
+    let cur = version_key(current);
+    let above_min = match min.filter(|m| !m.is_empty()) {
+        Some(m) => cur >= version_key(m),
+        None => true,
+    };
+    let below_max = match max.filter(|m| !m.is_empty()) {
+        Some(m) => cur <= version_key(m),
+        None => true,
+    };
+    above_min && below_max
+}
+
+/// 이 모드를 확인 대상에 포함할지: 기설치는 서버와 무관하게 항상, 미설치는 (인증 서버 + required)일 때만.
+fn should_include_mod(installed: bool, category: &str, has_authorized_server: bool) -> bool {
+    installed || (has_authorized_server && category == "required")
+}
+
 // ── 로컬 상태 ────────────────────────────────────────────
 
 /// mods/에서 `{modId}-*.jar` 파일 목록 (TS `^{modId}-.*\.jar$` 동일 — 하이픈 필수).
@@ -157,12 +182,19 @@ pub fn local_mod_version(mods_dir: &Path, mod_id: &str) -> Option<String> {
 
 // ── 체크/설치 ────────────────────────────────────────────
 
+/// 워커 모드 업데이트 확인.
+/// - `loader_version`: 비면 로더 버전 호환 필터 미적용(수동 패널). 값이 있으면 min/maxLoaderVersion으로
+///   불호환 모드를 제외(실행 전 자동 업데이트 — Electron checkAllMods와 동일).
+/// - `has_authorized_server`: 신규(미설치) 모드는 인증 서버 + required일 때만 포함. 기설치 모드는
+///   서버와 무관하게 항상 확인한다(Electron checkAllModUpdates — 서버 미등록이어도 구버전 방치 방지).
 pub async fn check_all_updates(
     http: &reqwest::Client,
     worker_base: &str,
     mods_dir: &Path,
     game_version: &str,
     loader_type: &str,
+    loader_version: &str,
+    has_authorized_server: bool,
 ) -> Result<Vec<WorkerModUpdate>, LauncherError> {
     let registry: RegistryResponse = http
         .get(format!("{worker_base}/api/v2/mods"))
@@ -174,6 +206,15 @@ pub async fn check_all_updates(
 
     let mut updates = Vec::new();
     for item in registry.mods {
+        // 설치 여부는 파일 존재로 판정 — 버전 파싱이 실패해도(예: `-1.0-SNAPSHOT` 등
+        // 비정형 버전) 설치된 모드를 '미설치'로 오인하지 않게 한다.
+        let installed = !find_mod_files(mods_dir, &item.id).is_empty();
+
+        // 게이트: 기설치 → 항상, 미설치 → (인증 서버 + required)일 때만 (Electron 동일)
+        if !should_include_mod(installed, &item.category, has_authorized_server) {
+            continue;
+        }
+
         let latest: LatestResponse = match http
             .get(format!("{worker_base}/api/v2/mods/{}/latest", item.id))
             .send()
@@ -196,9 +237,23 @@ pub async fn check_all_updates(
             continue;
         };
 
-        // 설치 여부는 파일 존재로 판정 — 버전 파싱이 실패해도(예: `-1.0-SNAPSHOT` 등
-        // 비정형 버전) 설치된 모드를 '미설치'로 오인하지 않게 한다.
-        let installed = !find_mod_files(mods_dir, &item.id).is_empty();
+        // 로더 버전 호환성 (loader_version이 주어진 경우만 — 실행 전 자동 업데이트 경로)
+        if !loader_version.is_empty()
+            && !loader_version_ok(
+                loader_version,
+                file_info.min_loader_version.as_deref(),
+                file_info.max_loader_version.as_deref(),
+            )
+        {
+            log::warn!(
+                "워커 모드 {} 로더 버전 불호환 (요구 {:?}~{:?}, 설치 {loader_version}) — 제외",
+                item.id,
+                file_info.min_loader_version,
+                file_info.max_loader_version
+            );
+            continue;
+        }
+
         let local = local_mod_version(mods_dir, &item.id);
         let needs_update = match (installed, &local) {
             (false, _) => true,                                   // 미설치 → 신규
@@ -412,6 +467,27 @@ mod tests {
         std::fs::write(tmp.path().join("HyeniAdditionalFunctions-neoforge-1.0-SNAPSHOT.jar"), b"x").unwrap();
         assert!(!find_mod_files(tmp.path(), "hyeniadditionalfunctions").is_empty());
         assert_eq!(local_mod_version(tmp.path(), "hyeniadditionalfunctions").as_deref(), Some("1.0-SNAPSHOT"));
+    }
+
+    #[test]
+    fn loader_version_compat() {
+        assert!(loader_version_ok("21.1.50", Some("21.1.0"), None));
+        assert!(!loader_version_ok("21.0.9", Some("21.1.0"), None)); // 최소 미달
+        assert!(loader_version_ok("21.1.50", Some("21.1.0"), Some("21.2.0")));
+        assert!(!loader_version_ok("21.3.0", Some("21.1.0"), Some("21.2.0"))); // 최대 초과
+        assert!(loader_version_ok("21.1.50", None, None)); // 제약 없음
+        assert!(loader_version_ok("21.1.50", Some(""), Some(""))); // 빈 문자열 = 제약 없음
+    }
+
+    #[test]
+    fn mod_inclusion_gate() {
+        // 기설치는 서버 미인증이어도 항상 포함(구버전 방치 방지)
+        assert!(should_include_mod(true, "required", false));
+        assert!(should_include_mod(true, "optional", false));
+        // 미설치: 인증 서버 + required만 포함
+        assert!(should_include_mod(false, "required", true));
+        assert!(!should_include_mod(false, "required", false)); // 서버 미인증
+        assert!(!should_include_mod(false, "optional", true)); // optional 신규는 제외
     }
 
     #[test]

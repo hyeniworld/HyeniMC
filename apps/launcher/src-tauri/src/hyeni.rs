@@ -43,14 +43,23 @@ pub async fn worker_mods_check(
     server_address: Option<String>,
 ) -> Result<Vec<workermods::WorkerModUpdate>, String> {
     let profile_dir = PathBuf::from(&profile_path);
-    if !should_check(&profile_dir, server_address.as_deref()) {
-        return Ok(Vec::new()); // 혜니월드 서버 아님 — TS 의미(빈 목록)
-    }
+    // 기설치 워커 모드는 서버와 무관하게 항상 업데이트 확인(서버 미등록 시 구버전 방치 방지).
+    // 신규(미설치) 모드는 인증 서버일 때만 — has_authorized_server로 check_all_updates에 위임.
+    let has_authorized_server = should_check(&profile_dir, server_address.as_deref());
     let base = crate::pack::worker_base()?;
     let http = reqwest::Client::new();
-    workermods::check_all_updates(&http, &base, &profile_dir.join("mods"), &game_version, &loader_type)
-        .await
-        .map_err(|e| e.to_string())
+    // 수동 패널은 로더 버전 필터를 적용하지 않는다(Electron registry.checkAllModUpdates 동일).
+    workermods::check_all_updates(
+        &http,
+        &base,
+        &profile_dir.join("mods"),
+        &game_version,
+        &loader_type,
+        "",
+        has_authorized_server,
+    )
+    .await
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

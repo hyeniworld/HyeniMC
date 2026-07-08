@@ -440,6 +440,8 @@ pub async fn game_launch(
                 &mods_dir,
                 &profile.game_version,
                 &profile.loader_type,
+                profile.loader_version.as_deref().unwrap_or(""),
+                true, // 이 블록은 should_check(인증 서버) 통과 시에만 진입
             )
             .await
             .map_err(|e| e.to_string())?;
