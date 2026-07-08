@@ -227,6 +227,14 @@ pub async fn install_pack(
     on_progress: impl Fn(PackInstallProgress) + Send + Sync,
 ) -> Result<PackManifest, LauncherError> {
     let manifest = read_manifest_from_zip(pack_zip)?;
+    // formatVersion 방어 — 이 런처가 아는 형식은 v1(0=레거시 취급)·v2. 상위 형식은 처리 규칙이
+    // 다를 수 있으므로 조용히 오설치하지 않고 명시적으로 거부한다.
+    if manifest.format_version > 2 {
+        return Err(LauncherError::Other(format!(
+            "지원하지 않는 혜니팩 형식입니다 (formatVersion={}). 런처를 업데이트하세요.",
+            manifest.format_version
+        )));
+    }
     let mods_dir = dirs.instance_dir.join("mods");
     tokio::fs::create_dir_all(&mods_dir).await?;
 
@@ -329,6 +337,9 @@ pub async fn install_pack(
     }
 
     // overrides 적용 + 제공 리소스/셰이더팩 기록
+    // overrides 적용은 시간이 걸릴 수 있어(설정/리소스 다수 추출) 마무리 단계로 전환해 표시.
+    // (그러지 않으면 UI가 모드 100%에서 멈춘 듯 보인다)
+    on_progress(PackInstallProgress { stage: "finalize".into(), completed: 0, total: 1 });
     let provided = apply_overrides(pack_zip, dirs, &manifest.overrides, &on_progress)?;
     std::fs::write(
         provided_packs_path(&dirs.instance_dir),

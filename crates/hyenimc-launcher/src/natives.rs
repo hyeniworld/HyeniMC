@@ -21,7 +21,9 @@ pub fn extract_natives(version_dir: &Path, jars: &[PathBuf]) -> Result<PathBuf, 
                 .by_index(i)
                 .map_err(|e| LauncherError::Other(e.to_string()))?;
             let name = entry.name().to_string();
-            if name.starts_with("META-INF") || name.ends_with('/') {
+            // 실 Mojang/Fabric/NeoForge natives jar의 extract.exclude는 전부 ["META-INF/"] 하나뿐이라
+            // 이 접두사 제외가 데이터 기반과 동일 결과다(디렉터리 엔트리도 제외).
+            if name.starts_with("META-INF/") || name.ends_with('/') {
                 continue;
             }
             let out = natives_dir.join(&name);

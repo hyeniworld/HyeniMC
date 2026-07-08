@@ -159,6 +159,9 @@ async fn ensure_profile_version(
     };
     let app2 = app.clone();
     let profile_id = profile.id.clone();
+    // 다운로드 모달 제목용 — useDownloadProgress가 profileName/versionId로 헤더를 채운다.
+    let profile_name = profile.name.clone();
+    let version_id_ev = version_id.clone();
     let detail = ensure_version(&http, url.as_deref(), &version_id, dirs, cfg, move |p| {
         // 렌더러(useDownloadProgress)는 `percent`로 모달 표시를 트리거하고 `totalTasks`/`completedTasks`로
         // 바를 채운다. 기존 `completed`/`total`만 보내면 total이 '현재 파일 바이트'로 오해석되어 바가 안 뜬다.
@@ -171,6 +174,8 @@ async fn ensure_profile_version(
             "download:progress",
             serde_json::json!({
                 "profileId": profile_id,
+                "profileName": profile_name,
+                "versionId": version_id_ev,
                 "phase": p.phase,
                 "percent": percent,
                 "totalTasks": p.total,
@@ -237,7 +242,8 @@ pub async fn loader_get_versions(
                 .into_iter()
                 .filter(|v| hyenimc_launcher::loader::neoforge_matches_mc(v, &game_version))
                 .map(|v| hyenimc_launcher::loader::LoaderVersion {
-                    stable: !v.contains("beta"),
+                    // Go/Electron과 동일: beta·alpha 라벨은 불안정 취급
+                    stable: !(v.contains("beta") || v.contains("alpha")),
                     version: v,
                 })
                 .collect();
@@ -363,6 +369,10 @@ pub async fn game_launch(
         profile.loader_version,
         profile.game_directory
     );
+
+    // ⓪ 실행 전 메모리 검증 (Electron GameLaunchValidator) — 시스템 메모리 초과 설정을 사전 차단해
+    //    JVM "Could not reserve enough space" 류 암호적 실패를 방지.
+    validate_memory(&app, &profile, &settings)?;
 
     // ⓪ 실행 전 팩 게이트 (breaking 차단 / 서버 접근 불가 시 정책)
     crate::pack::pre_launch_pack_gate(&dirs, &settings).await?;
@@ -649,4 +659,67 @@ fn now_secs() -> i64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0)
+}
+
+/// 실행 전 메모리 검증 (Electron GameLaunchValidator.checkMemoryConfiguration).
+/// 시스템 메모리를 초과하는 설정은 JVM 할당 실패로 이어지므로 spawn 이전에 차단하고
+/// show-error-dialog로 원인/해결책을 안내한다.
+fn validate_memory(
+    app: &AppHandle,
+    profile: &hyenimc_core::Profile,
+    settings: &hyenimc_core::settings::GlobalSettings,
+) -> Result<(), String> {
+    let max_mem = profile.memory_max.unwrap_or(settings.java.memory_max).max(1) as u64;
+    let min_mem = profile.memory_min.unwrap_or(settings.java.memory_min).max(1) as u64;
+    let sys_mb = {
+        let mut sys = sysinfo::System::new();
+        sys.refresh_memory();
+        sys.total_memory() / (1024 * 1024)
+    };
+    if sys_mb == 0 {
+        return Ok(()); // 시스템 메모리 확인 불가 — 검증 생략
+    }
+    let dialog = |title: &str, message: String, suggestion: String, action: &str| {
+        let _ = app.emit(
+            "show-error-dialog",
+            serde_json::json!({
+                "type": "error",
+                "title": title,
+                "message": message,
+                "suggestions": [suggestion],
+                "actions": [{ "label": "메모리 설정 열기", "type": "primary", "action": action }],
+            }),
+        );
+    };
+
+    // 1. 최대 메모리가 시스템 메모리의 90% 초과 → 차단
+    if (max_mem as f64) > (sys_mb as f64) * 0.9 {
+        let suggested = (sys_mb as f64 * 0.7) as u64;
+        let pct = max_mem * 100 / sys_mb;
+        dialog(
+            "메모리 설정이 시스템 메모리를 초과합니다",
+            format!("최대 메모리 {max_mem}MB가 시스템 메모리 {sys_mb}MB의 {pct}%입니다."),
+            format!("설정에서 최대 메모리를 {suggested}MB 이하로 줄이세요."),
+            "reduceMaxMemory",
+        );
+        return Err(format!(
+            "최대 메모리({max_mem}MB)가 시스템 메모리({sys_mb}MB)의 90%를 초과합니다. 설정을 조정하세요."
+        ));
+    }
+
+    // 2. 최소 = 최대이고 시스템 메모리 80% 초과 → 차단 (시작 즉시 전체 할당은 위험)
+    if min_mem == max_mem && (min_mem as f64) > (sys_mb as f64) * 0.8 {
+        let pct = min_mem * 100 / sys_mb;
+        dialog(
+            "메모리 설정이 위험합니다",
+            format!("최소/최대 메모리가 모두 {min_mem}MB로 시스템 메모리 {sys_mb}MB의 {pct}%를 차지합니다."),
+            "최소 메모리를 줄이거나 최소≠최대로 설정하세요.".to_string(),
+            "fixDangerousMemory",
+        );
+        return Err(format!(
+            "최소=최대 메모리({min_mem}MB)가 시스템 메모리({sys_mb}MB)의 80%를 초과합니다. 설정을 조정하세요."
+        ));
+    }
+
+    Ok(())
 }

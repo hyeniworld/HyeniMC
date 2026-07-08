@@ -258,6 +258,18 @@ pub fn system_get_path(name: String) -> Result<String, String> {
         "userData" => hyenimc_core::paths::legacy_user_data_dir()
             .map(|p| p.display().to_string())
             .ok_or_else(|| "userData 경로를 결정할 수 없음".into()),
+        "documents" => home_dir()
+            .map(|h| h.join("Documents").display().to_string())
+            .ok_or_else(|| "documents 경로를 결정할 수 없음".into()),
+        "downloads" => home_dir()
+            .map(|h| h.join("Downloads").display().to_string())
+            .ok_or_else(|| "downloads 경로를 결정할 수 없음".into()),
         other => Err(format!("unsupported path name: {other}")),
     }
+}
+
+fn home_dir() -> Option<std::path::PathBuf> {
+    std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
+        .map(std::path::PathBuf::from)
 }
