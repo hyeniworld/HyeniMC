@@ -122,18 +122,7 @@ pub struct ModMeta {
     pub modpack_version: Option<String>,
 }
 
-pub fn read_mod_meta(jar_path: &Path) -> Option<ModMeta> {
-    let meta_path = meta_path_for(jar_path);
-    let text = std::fs::read_to_string(meta_path).ok()?;
-    serde_json::from_str(&text).ok()
-}
-
-pub fn write_mod_meta(jar_path: &Path, meta: &ModMeta) -> Result<(), LauncherError> {
-    let text = serde_json::to_string_pretty(meta)?;
-    std::fs::write(meta_path_for(jar_path), text)?;
-    Ok(())
-}
-
+/// 레거시 개별 사이드카 경로 `<jar>.meta.json` — 삭제 시 정리용(더 이상 쓰지 않음).
 fn meta_path_for(jar_path: &Path) -> PathBuf {
     let mut s = jar_path.as_os_str().to_os_string();
     s.push(".meta.json");
@@ -303,18 +292,40 @@ pub async fn install_pack(
         }
     }
 
-    // .meta.json 기록
-    for m in &plan.to_install {
-        let jar = mods_dir.join(&m.file_name);
-        let meta = ModMeta {
-            source: m.effective_source().unwrap_or_else(|| "url".into()),
-            source_mod_id: m.effective_project_id(),
-            version_number: m.effective_version(),
-            installed_from: Some("hyenipack".into()),
-            modpack_id: manifest.hyenipack_id.clone(),
-            modpack_version: Some(manifest.version.clone()),
-        };
-        write_mod_meta(&jar, &meta)?;
+    // 설치 메타를 통합 파일(.hyenimc-metadata.json)에 기록 — 개별 사이드카 대신 Electron과
+    // 동일 정본에 쓴다. 기존 파일이 있으면 미지 필드(autoUpdate 등)를 보존한 채 갱신.
+    {
+        use crate::instmeta::{self, InstalledModMeta};
+        let mut unified = instmeta::read_unified(&mods_dir)
+            .unwrap_or_else(|| instmeta::UnifiedMetadata::new("hyenipack"));
+        unified.source = "hyenipack".into();
+        for name in &plan.to_remove {
+            unified.mods.remove(name);
+        }
+        let now = instmeta::iso_now();
+        for m in &plan.to_install {
+            unified.mods.insert(
+                m.file_name.clone(),
+                InstalledModMeta {
+                    source: m.effective_source().unwrap_or_else(|| "url".into()),
+                    source_mod_id: m.effective_project_id(),
+                    source_file_id: None,
+                    version_number: m.effective_version(),
+                    installed_at: Some(now.clone()),
+                    installed_from: Some("hyenipack".into()),
+                    modpack_id: manifest.hyenipack_id.clone(),
+                    modpack_version: Some(manifest.version.clone()),
+                    extra: Default::default(),
+                },
+            );
+        }
+        if let Some(id) = &manifest.hyenipack_id {
+            unified.modpack_id = Some(id.clone());
+        }
+        unified.modpack_name = Some(manifest.name.clone());
+        unified.modpack_version = Some(manifest.version.clone());
+        unified.updated_at = now;
+        instmeta::write_unified(&mods_dir, &unified)?;
     }
 
     // overrides 적용 + 제공 리소스/셰이더팩 기록
@@ -362,12 +373,17 @@ fn scan_installed_mods(mods_dir: &Path) -> Result<Vec<(String, ModMeta)>, Launch
     let Ok(rd) = std::fs::read_dir(mods_dir) else {
         return Ok(out);
     };
+    // 통합 파일(.hyenimc-metadata.json)에서 파일별 메타를 조회 — 없으면 manual(사용자 추가)로 간주.
+    // 이래야 Electron으로 설치한 모드도 hyenipack 관리 대상으로 정확히 인식돼
+    // 마이그레이션 시 중복/미삭제가 생기지 않는다.
+    let unified = crate::instmeta::read_unified(mods_dir);
     for entry in rd.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
         if !name.ends_with(".jar") {
             continue;
         }
-        let meta = read_mod_meta(&entry.path()).unwrap_or(ModMeta {
+        let inst = unified.as_ref().and_then(|u| u.mods.get(&name).cloned());
+        let meta = inst.map(modmeta_from_installed).unwrap_or(ModMeta {
             source: "local".into(),
             source_mod_id: None,
             version_number: None,
@@ -378,6 +394,18 @@ fn scan_installed_mods(mods_dir: &Path) -> Result<Vec<(String, ModMeta)>, Launch
         out.push((name, meta));
     }
     Ok(out)
+}
+
+/// 통합/레거시 InstalledModMeta → 동기화 판정용 ModMeta.
+fn modmeta_from_installed(m: crate::instmeta::InstalledModMeta) -> ModMeta {
+    ModMeta {
+        source: if m.source.is_empty() { "local".into() } else { m.source },
+        source_mod_id: m.source_mod_id,
+        version_number: m.version_number,
+        installed_from: m.installed_from,
+        modpack_id: m.modpack_id,
+        modpack_version: m.modpack_version,
+    }
 }
 
 /// overrides 적용. 반환: 팩이 제공한 resourcepacks/shaderpacks 파일명 (구분 표시용)
@@ -651,14 +679,36 @@ mod tests {
     }
 
     #[test]
-    fn mod_meta_roundtrip() {
+    fn scan_reads_unified_metadata_for_migration() {
+        // Electron으로 설치한 프로필: 통합 파일만 있고 개별 사이드카는 없음
         let dir = tempfile::tempdir().unwrap();
-        let jar = dir.path().join("mods/sodium.jar");
-        std::fs::create_dir_all(jar.parent().unwrap()).unwrap();
-        std::fs::write(&jar, b"jar").unwrap();
-        let meta = mk_meta("hyenipack", Some("AAN"), Some("0.6.0"));
-        write_mod_meta(&jar, &meta).unwrap();
-        assert_eq!(read_mod_meta(&jar).unwrap(), meta);
+        let mods = dir.path().join("mods");
+        std::fs::create_dir_all(&mods).unwrap();
+        std::fs::write(mods.join("sodium-0.5.jar"), b"jar").unwrap();
+        std::fs::write(mods.join("user.jar"), b"jar").unwrap();
+        std::fs::write(
+            mods.join(".hyenimc-metadata.json"),
+            r#"{"version":1,"source":"hyenipack","installedAt":"x","updatedAt":"x",
+               "mods":{"sodium-0.5.jar":{"source":"modrinth","sourceModId":"AAN",
+               "versionNumber":"0.5.0","installedFrom":"hyenipack"}}}"#,
+        )
+        .unwrap();
+
+        let existing = scan_installed_mods(&mods).unwrap();
+        let sodium = existing.iter().find(|(n, _)| n == "sodium-0.5.jar").unwrap();
+        assert_eq!(sodium.1.installed_from.as_deref(), Some("hyenipack"));
+        assert_eq!(sodium.1.source_mod_id.as_deref(), Some("AAN"));
+        // 통합에 없는 user.jar는 manual(보존)로 인식
+        let user = existing.iter().find(|(n, _)| n == "user.jar").unwrap();
+        assert_eq!(user.1.installed_from.as_deref(), Some("manual"));
+
+        // 팩 업데이트 시 매니페스트에서 빠진 구 sodium이 삭제 대상(파일명 변경 → 중복 방지)
+        let target = vec![mk_mod("sodium-0.6.jar", Some("AAN"), Some("0.6.0"))];
+        let plan = plan_mod_sync(&existing, &target);
+        assert!(
+            plan.to_remove.contains(&"sodium-0.5.jar".to_string()),
+            "통합 메타 미인식 시 구 jar가 안 지워져 중복 모드 크래시"
+        );
     }
 
     #[tokio::test]
@@ -712,10 +762,12 @@ mod tests {
         assert_eq!(std::fs::read(dirs.instance_dir.join("mods/sodium.jar")).unwrap(), b"SODIUM");
         assert_eq!(std::fs::read(dirs.instance_dir.join("config/opts.txt")).unwrap(), b"OPTS");
         assert!(dirs.instance_dir.join("mods/user.jar").exists()); // manual 보존
-        // .meta.json 기록 확인
-        let meta = read_mod_meta(&dirs.instance_dir.join("mods/sodium.jar")).unwrap();
+        // 통합 메타(.hyenimc-metadata.json) 기록 확인 (개별 사이드카 아님)
+        let unified = crate::instmeta::read_unified(&dirs.instance_dir.join("mods")).unwrap();
+        let meta = unified.mods.get("sodium.jar").expect("통합 메타에 sodium 기록");
         assert_eq!(meta.installed_from.as_deref(), Some("hyenipack"));
         assert_eq!(meta.modpack_id.as_deref(), Some("hp-test"));
+        assert!(!dirs.instance_dir.join("mods/sodium.jar.meta.json").exists(), "개별 사이드카 미생성");
         // pack_meta 기록
         assert_eq!(read_pack_meta(&dirs.instance_dir).unwrap().version, "1.0.0");
     }

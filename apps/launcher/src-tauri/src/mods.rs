@@ -132,12 +132,26 @@ pub async fn mod_list(
     if !tasks.is_empty() {
         let dir2 = dir.clone();
         let parsed: Vec<CachedMod> = tauri::async_runtime::spawn_blocking(move || {
+            // 통합 메타(.hyenimc-metadata.json)에서 출처를 채운다 — 없으면 이전 캐시/'local' 폴백.
+            // (재파싱마다 source를 'local'로 덮어 Electron이 기록한 출처가 사라지던 문제 수정)
+            let unified = hyenimc_launcher::instmeta::read_unified(&dir2);
             tasks
                 .into_iter()
                 .map(|t| {
                     let canonical = t.disk_name.trim_end_matches(DISABLED);
                     let enabled = !t.disk_name.ends_with(DISABLED);
                     let meta = modmeta::parse_mod_metadata(&dir2.join(&t.disk_name), canonical);
+                    let inst = unified
+                        .as_ref()
+                        .and_then(|u| u.mods.get(&t.disk_name).or_else(|| u.mods.get(canonical)));
+                    let source = inst
+                        .map(|m| m.source.clone())
+                        .filter(|s| !s.is_empty())
+                        .unwrap_or_else(|| "local".into());
+                    let source_mod_id =
+                        inst.and_then(|m| m.source_mod_id.clone()).or(t.prev_source_mod_id);
+                    let source_file_id =
+                        inst.and_then(|m| m.source_file_id.clone()).or(t.prev_source_file_id);
                     CachedMod {
                         file_name: t.disk_name,
                         file_size: t.size,
@@ -147,10 +161,10 @@ pub async fn mod_list(
                         description: meta.description,
                         authors: meta.authors,
                         enabled,
-                        source: "local".into(),
+                        source,
                         last_modified: t.mtime,
-                        source_mod_id: t.prev_source_mod_id,
-                        source_file_id: t.prev_source_file_id,
+                        source_mod_id,
+                        source_file_id,
                     }
                 })
                 .collect()

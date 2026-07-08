@@ -117,6 +117,10 @@ pub fn toggle_mod(mods_dir: &Path, file_name: &str, enabled: bool) -> Result<(),
     }
     fs::rename(&from, &to)?;
     rename_sidecar(&from, &to);
+    // 통합 메타(.hyenimc-metadata.json) 키도 갱신 — Electron renameModMetadata 대응(이탈 방지).
+    if let (Some(f), Some(t)) = (from.file_name(), to.file_name()) {
+        crate::instmeta::rename_meta_key(mods_dir, &f.to_string_lossy(), &t.to_string_lossy());
+    }
     Ok(())
 }
 
@@ -135,6 +139,11 @@ pub fn remove_mod(mods_dir: &Path, file_name: &str) -> Result<(), LauncherError>
             let _ = fs::remove_file(&sidecar);
         }
     }
+    // 통합 메타에서도 제거 — Electron removeModMetadata 대응(이탈 방지).
+    crate::instmeta::remove_meta_keys(
+        mods_dir,
+        &[canonical.to_string(), format!("{canonical}{DISABLED_SUFFIX}")],
+    );
     if removed {
         Ok(())
     } else {
