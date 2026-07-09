@@ -67,9 +67,17 @@
   - 없으면: 기존 `mods/{id}/latest.json` 반환(하위호환).
 - 인덱스가 아예 없으면(마이그레이션 전 모드) 전역 latest로 폴백.
 
-### 4-3. 런처 (Tauri, Rust) — 소규모
-- [workermods.rs:223](../../../crates/hyenimc-launcher/src/workermods.rs)의 latest 요청에 `?gameVersion={game_version}&loader={loader_type}` 추가. (loaderVersion은 v1에서 미포함 — §6 참조.)
-- 응답은 기존과 같은 manifest이고, 로컬 `.get(loader_type).game_versions.get(game_version)`도 그대로 동작(이제 응답이 그 환경에 맞는 버전이라 항상 타깃 존재). 미출시 버전이라 배포 호환 이슈 없음.
+### 4-3. 런처 (Tauri, Rust) — 두 부분
+**(A) 요청에 환경 쿼리 추가**: [workermods.rs](../../../crates/hyenimc-launcher/src/workermods.rs)의 latest 요청에 `?gameVersion={game_version}&loader={loader_type}` 추가. loaderVersion은 서버로 보내지 않는다(서버는 (loader,gv) 진짜 최신만 해석). 응답은 기존과 같은 manifest.
+
+**(B) 로더 호환 판단 + loader_version 세팅**: 서버가 준 진짜 최신 버전의 (loader,gv) 타깃 min/maxLoaderVersion을 프로필의 현재 loader_version과 비교(`loader_version_ok`).
+- 범위 내 → 그냥 모드 업데이트.
+- 범위 밖 → **[min,max]를 만족하는 설치 가능한 로더 중 최신 릴리스**를 [`loader.rs`](../../../crates/hyenimc-launcher/src/loader.rs)(fabric_loader_versions / neoforge_versions+neoforge_matches_mc)로 찾아 프로필 `loader_version`을 그 값으로 세팅. 실제 로더 설치는 **기존 launch 흐름**([game.rs:411](../../../apps/launcher/src-tauri/src/game.rs))이 수행(별도 설치 코드 불필요). `WorkerModUpdate`에 "로더 변경" 정보를 실어 렌더러가 표시.
+- [min,max] 만족 로더 없음 → "로더 불일치 — 업데이트 불가" 안내.
+
+**렌더러(TS)**: 프로필 개요 업데이트 표시에 **"모드 로더도 함께 업데이트 됩니다."** 한 줄(선택권 없음). '업데이트'/'게임 시작' 어느 쪽이든 모드 갱신 + loader_version 세팅 → launch가 로더 설치. 이후 사용자가 설정에서 loader_version 변경 시 다음 실행에 그 버전으로 재설치.
+
+> **혜니팩 로더**: `install_pack`이 이미 loader_version을 팩 값으로 덮으므로(사용자 수동 변경도 팩 값으로 교체), 팩 업데이트 → 다음 실행에 새 로더 설치. 확인됨(pack.rs:86-94, "다음 실행 시 로더 설치").
 
 ### 4-4. 관리 UI — 환경별 최신 매트릭스 + 핀 (3단계)
 모드 상세에 매트릭스 추가:
@@ -89,14 +97,19 @@ fabric      1.21.8     1.0.4  (고정)      [ 1.0.4 ▾ ]
 
 ## 6. 확정된 결정
 - **latest 정의**: (loader, gv) 타깃을 가진 버전 중 최고 모드버전 = `auto`(자동). 핀으로 override.
-- **loaderVersion 스코프**: v1은 (loader, gv)까지만. 런처가 이미 `loader_version_ok`로 min/max 범위 검사를 하므로 loaderVersion 정밀 스코프는 후속(비목표).
+- **loaderVersion은 서버가 아닌 런처가 처리**(사용자 확정): 서버는 (loader, gv) 진짜 최신만 반환. 로더버전 min/max 불일치는 런처가 판단해 **[min,max] 내 최신 로더로 loader_version을 세팅**(모드 다운그레이드 아님 — 서버필수 모드는 다운그레이드 시 접속 불가). 실제 설치는 기존 launch 흐름 재사용.
+- **로더 교체 방식**: 설치할 로더 = [min,max] 내 **최신 릴리스**. **선택권 없음**(자동), 렌더러에 "모드 로더도 함께 업데이트 됩니다." 표시. 이후 사용자가 설정에서 자유 변경 가능.
 - **전역 `latest.json` 유지**: 쿼리 미지정 클라이언트(구 런처)용 폴백. 관리자의 "latest로 지정"(롤백)은 이 전역 포인터를 계속 설정.
 - **삭제 상호작용**: 버전 삭제 시 인덱스 auto 재계산, 핀 대상이면 핀 해제. 전역 latest 삭제 차단은 유지.
 
 ## 7. 비목표(YAGNI)
-- loaderVersion(min/max)까지의 정밀 해석(후속 후보).
-- 혜니팩 — **무관**. 팩이 MC/로더를 자체 보유하고 같은 팩ID로 업데이트하므로 변경 없음.
+- 서버 측 loaderVersion 해석(후보+범위 저장) — 불필요(런처가 처리).
+- 혜니팩 서버 로직 — **무관**. 팩이 MC/로더를 자체 보유하고 같은 팩ID로 업데이트. (단 팩의 로더 교체는 런처 launch가 이미 처리 — §4-3.)
 - modId에 MC/loader 인코딩 — 명시적 기각(ID 폭증 + 로더 동시배포 강제 + 런처 매핑 복잡).
+
+## 9. 구현 단계
+- **Plan A (서버 + 관리)**: 인덱스((loader,gv)→auto/pinned) + 워커 (loader,gv) 해석 + 하위호환 + 관리 UI 매트릭스/핀. [docs/superpowers/plans/2026-07-09-per-environment-latest.md](../plans/2026-07-09-per-environment-latest.md) Task 1–4 + 런처 쿼리(Task 5).
+- **Plan B (런처 로더 호환)**: §4-3 (B) — 로더 범위 판단 + [min,max] 내 최신 로더로 loader_version 세팅 + `WorkerModUpdate` 확장 + 렌더러 표시. Plan A 완료·검증 후 런처 코드를 읽어 별도 계획으로 상세화.
 
 ## 8. 계층별 규모 요약
 | 계층 | 변경 | 규모 |
