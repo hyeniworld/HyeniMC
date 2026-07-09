@@ -121,4 +121,5 @@ wrangler secret delete TOKEN_CHECK_API_URL
    미설정 시 `/admin/api/*`는 전부 401(fail-closed)로 동작한다.
 2. Cloudflare Zero Trust에서 `/admin*`를 커버하는 self-hosted Access 애플리케이션 생성(본인 이메일 정책). Worker가 커스텀 도메인/라우트에 있어야 Access 적용 가능(`*.workers.dev`는 불가).
 3. 배포: `npm run deploy` (build:admin → wrangler deploy). `public/admin/`이 함께 업로드된다.
-4. `[assets]`가 `wrangler.toml`에 있어야 SPA가 서빙됨(gitignore되므로 새 환경에선 `wrangler.toml.example` 참고해 재작성).
+4. `build:admin`이 `npm --prefix admin install`을 먼저 실행하므로 admin 의존성은 자동 설치된다(새 클론에서 별도 준비 불필요). 필요 시 `npm --prefix admin install`을 수동으로 한 번 실행해도 된다.
+5. `[assets]`가 `wrangler.toml`에 있어야 SPA가 서빙됨(gitignore되므로 새 환경에선 `wrangler.toml.example` 참고해 재작성).

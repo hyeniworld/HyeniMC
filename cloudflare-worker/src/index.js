@@ -41,6 +41,12 @@ export default {
       // 여기 도달 = Cloudflare 에셋 레이어가 /admin/* 아래 실제 파일 매칭에 실패한 경우.
       // (실제 index.html/JS/CSS는 이미 Worker 없이 직접 서빙됨.) 딥 클라이언트 경로만 여기로 온다.
       if (path === '/admin' || path.startsWith('/admin/')) {
+        if (!env.ASSETS) {
+          return new Response(
+            JSON.stringify({ error: 'Admin SPA not configured', message: 'wrangler.toml에 [assets] 바인딩이 필요합니다.' }),
+            { status: 500, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
         return env.ASSETS.fetch(new URL('/admin/index.html', request.url));
       }
 
