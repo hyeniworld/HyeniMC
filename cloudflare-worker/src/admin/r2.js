@@ -25,7 +25,7 @@ export async function objectExists(env, key) {
 
 const VERSION_SEG = /\/versions\/(\d+\.\d+\.\d+)\//;
 
-function compareVersions(a, b) {
+export function compareVersions(a, b) {
   const pa = a.split('.').map(Number);
   const pb = b.split('.').map(Number);
   for (let i = 0; i < 3; i++) {
