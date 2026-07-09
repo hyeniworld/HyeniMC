@@ -221,6 +221,13 @@ input[type="checkbox"] { width: auto; accent-color: var(--accent); }
 .kv-row .k { color: var(--text-faint); margin-right: 6px; }
 .kv-loading { color: var(--text-faint); font-size: 12.5px; padding: 4px 0; }
 
+/* 목록 필터바 */
+.filterbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+.filterbar select { width: auto; padding: 5px 9px; font-size: 12.5px; }
+.filterbar .filter-reset { font-size: 12px; color: var(--text-faint); background: transparent; border: 0; cursor: pointer; padding: 4px 6px; }
+.filterbar .filter-reset:hover { color: var(--text); }
+.filter-count { font-size: 12px; color: var(--text-faint); margin-left: auto; }
+
 hr { border: 0; border-top: 1px solid var(--border); margin: 4px 0; }
 
 /* ---------- responsive ---------- */
