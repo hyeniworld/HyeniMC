@@ -34,6 +34,7 @@ export const deleteModVersion = (id: string, ver: string) =>
 // modpacks
 export const listPacks = () => req('/modpacks');
 export const listPackVersions = (id: string) => req(`/modpacks/${id}/versions`);
+export const getPackManifest = (id: string, ver: string) => req(`/modpacks/${id}/versions/${ver}/manifest`);
 export const publishPack = (id: string, fd: FormData, overwrite = false) =>
   req(`/modpacks/${id}/versions${overwrite ? '?overwrite=true' : ''}`, { method: 'POST', body: fd });
 export const rollbackPack = (id: string, version: string) =>
