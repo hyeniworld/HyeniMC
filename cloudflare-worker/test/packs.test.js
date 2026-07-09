@@ -71,6 +71,41 @@ describe('POST modpacks publish', () => {
   });
 });
 
+describe('GET /admin/api/modpacks', () => {
+  it('exposes minecraft (loader/gameVersion) per pack for filtering', async () => {
+    const manifest = {
+      formatVersion: 2, hyenipackId: 'hyenipack', name: 'T', version: '1.0.0',
+      minecraft: { version: '1.21.1', loaderType: 'neoforge', loaderVersion: '21.1.213' },
+    };
+    const zip = zipSync({ 'hyenipack.json': new TextEncoder().encode(JSON.stringify(manifest)) });
+    await env.RELEASES.put('modpacks/hyenipack/versions/1.0.0/pack.hyenipack', zip);
+    await putJson(env, 'modpacks/hyenipack/latest.json', {
+      hyenipackId: 'hyenipack', version: '1.0.0', sha256: 'x', breaking: false,
+    });
+
+    const res = await handlePacks(req('GET', '/admin/api/modpacks'), env);
+    expect(res.status).toBe(200);
+    const { packs } = await res.json();
+    const pack = packs.find((p) => p.id === 'hyenipack');
+    expect(pack).toBeTruthy();
+    expect(pack.minecraft.loaderType).toBe('neoforge');
+    expect(pack.minecraft.version).toBe('1.21.1');
+  });
+
+  it('keeps a pack with a missing .hyenipack in the list with minecraft: null', async () => {
+    await putJson(env, 'modpacks/broken/latest.json', {
+      hyenipackId: 'broken', version: '1.0.0', sha256: 'x', breaking: false,
+    });
+
+    const res = await handlePacks(req('GET', '/admin/api/modpacks'), env);
+    expect(res.status).toBe(200);
+    const { packs } = await res.json();
+    const pack = packs.find((p) => p.id === 'broken');
+    expect(pack).toBeTruthy();
+    expect(pack.minecraft).toBe(null);
+  });
+});
+
 describe('modpacks rollback / edit / delete', () => {
   async function seedTwo() {
     await handlePacks(await publishReq('hyenipack', '1.0.0', 'V1'), env);

@@ -85,12 +85,33 @@ async function getPackVersionManifest(env, id, ver) {
   });
 }
 
+/** 목록 노출용 관용 파서: 팩 누락/엔트리 없음/JSON 오류 등 어떤 실패에도 null을 반환한다.
+ * 팩 하나가 깨져도 전체 목록이 무너지지 않도록 상태 구분 없이 조용히 넘어간다. */
+async function readPackManifest(env, id, ver) {
+  const obj = await env.RELEASES.get(`modpacks/${id}/versions/${ver}/pack.hyenipack`);
+  if (!obj) return null;
+  try {
+    const buf = new Uint8Array(await obj.arrayBuffer());
+    const files = unzipSync(buf, { filter: (f) => f.name === 'hyenipack.json' });
+    const entry = files['hyenipack.json'];
+    if (!entry) return null;
+    return JSON.parse(new TextDecoder().decode(entry));
+  } catch { return null; }
+}
+
 async function listPacks(env) {
   const ids = await listPrefixes(env, 'modpacks/');
   const packs = [];
   for (const id of ids) {
     const latest = await getJson(env, `modpacks/${id}/latest.json`);
-    if (latest) packs.push({ id, latestVersion: latest.version, breaking: !!latest.breaking });
+    if (!latest) continue;
+    const manifest = latest.version ? await readPackManifest(env, id, latest.version) : null;
+    packs.push({
+      id,
+      latestVersion: latest.version,
+      breaking: !!latest.breaking,
+      minecraft: manifest?.minecraft ?? null,
+    });
   }
   return adminJson({ packs });
 }
