@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import * as api from '../api';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { Modal } from '../components/Modal';
 
 interface Version { version: string; changelog: string; breaking: boolean; }
 
@@ -10,6 +11,8 @@ export function PackVersions({ packId, onToast, onChanged }: {
   const [latest, setLatest] = useState<string | null>(null);
   const [versions, setVersions] = useState<Version[]>([]);
   const [confirm, setConfirm] = useState<{ msg: string; act: () => void } | null>(null);
+  const [editing, setEditing] = useState<Version | null>(null);
+  const [form, setForm] = useState({ changelog: '', breaking: false });
 
   async function load() {
     try {
@@ -22,6 +25,22 @@ export function PackVersions({ packId, onToast, onChanged }: {
   async function run(action: () => Promise<any>, ok: string) {
     try { await action(); onToast(ok); await load(); onChanged(); }
     catch (e: any) { onToast(e.message, 'err'); }
+  }
+
+  function openEdit(v: Version) {
+    setForm({ changelog: v.changelog, breaking: v.breaking });
+    setEditing(v);
+  }
+
+  async function saveEdit() {
+    if (!editing) return;
+    try {
+      await api.editPackVersion(packId, editing.version, { changelog: form.changelog, breaking: form.breaking });
+      onToast(`${editing.version} 편집됨`);
+      setEditing(null);
+      await load();
+      onChanged();
+    } catch (e: any) { onToast(e.message, 'err'); }
   }
 
   return (
@@ -49,6 +68,7 @@ export function PackVersions({ packId, onToast, onChanged }: {
                 <div class="btn-row">
                   <button class="btn btn-sm" disabled={v.version === latest}
                     onClick={() => run(() => api.rollbackPack(packId, v.version), `${v.version} → latest`)}>latest로 지정</button>
+                  <button class="btn btn-sm" onClick={() => openEdit(v)}>편집</button>
                   <button class="btn btn-sm btn-danger" disabled={v.version === latest}
                     onClick={() => setConfirm({
                       msg: `${packId} ${v.version} 삭제할까요?`,
@@ -63,6 +83,18 @@ export function PackVersions({ packId, onToast, onChanged }: {
       <ConfirmDialog open={!!confirm} message={confirm?.msg ?? ''}
         onCancel={() => setConfirm(null)}
         onConfirm={() => { confirm?.act(); setConfirm(null); }} />
+      <Modal open={!!editing} title={<>버전 편집 <span class="mono">{editing?.version}</span></>} onClose={() => setEditing(null)}>
+        <div class="dialog-body">
+          <label class="field"><span>changelog</span>
+            <textarea value={form.changelog} onInput={(e) => setForm({ ...form, changelog: (e.target as HTMLTextAreaElement).value })} /></label>
+          <label class="checkbox"><input type="checkbox" checked={form.breaking}
+            onChange={(e) => setForm({ ...form, breaking: (e.target as HTMLInputElement).checked })} /> breaking (호환 불가 업데이트)</label>
+        </div>
+        <div class="dialog-actions">
+          <button class="btn" onClick={() => setEditing(null)}>취소</button>
+          <button class="btn btn-primary" onClick={saveEdit}>저장</button>
+        </div>
+      </Modal>
     </div>
   );
 }

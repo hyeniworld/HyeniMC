@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import * as api from '../api';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { Modal } from '../components/Modal';
 
 interface Version { version: string; releaseDate: string | null; changelog: string; category: string; }
 
@@ -10,6 +11,8 @@ export function ModVersions({ modId, onToast, onChanged }: {
   const [latest, setLatest] = useState<string | null>(null);
   const [versions, setVersions] = useState<Version[]>([]);
   const [confirm, setConfirm] = useState<{ msg: string; act: () => void } | null>(null);
+  const [editing, setEditing] = useState<Version | null>(null);
+  const [form, setForm] = useState({ changelog: '', category: 'required', minLoaderVersion: '', maxLoaderVersion: '', dependencies: '' });
 
   async function load() {
     try {
@@ -25,10 +28,27 @@ export function ModVersions({ modId, onToast, onChanged }: {
     catch (e: any) { onToast(e.message, 'err'); }
   }
 
-  async function editChangelog(v: Version) {
-    const next = prompt('changelog', v.changelog);
-    if (next === null) return;
-    run(() => api.editModVersion(modId, v.version, { changelog: next }), `${v.version} 편집됨`);
+  function openEdit(v: Version) {
+    setForm({ changelog: v.changelog, category: v.category, minLoaderVersion: '', maxLoaderVersion: '', dependencies: '' });
+    setEditing(v);
+  }
+
+  async function saveEdit() {
+    if (!editing) return;
+    const patch: any = { changelog: form.changelog, category: form.category };
+    if (form.minLoaderVersion.trim()) patch.minLoaderVersion = form.minLoaderVersion.trim();
+    if (form.maxLoaderVersion.trim()) patch.maxLoaderVersion = form.maxLoaderVersion.trim();
+    if (form.dependencies.trim()) {
+      try { patch.dependencies = JSON.parse(form.dependencies); }
+      catch { onToast('dependencies가 유효한 JSON이 아닙니다.', 'err'); return; }
+    }
+    try {
+      await api.editModVersion(modId, editing.version, patch);
+      onToast(`${editing.version} 편집됨`);
+      setEditing(null);
+      await load();
+      onChanged();
+    } catch (e: any) { onToast(e.message, 'err'); }
   }
 
   return (
@@ -52,7 +72,7 @@ export function ModVersions({ modId, onToast, onChanged }: {
                 <div class="btn-row">
                   <button class="btn btn-sm" disabled={v.version === latest}
                     onClick={() => run(() => api.rollbackMod(modId, v.version), `${v.version} → latest`)}>latest로 지정</button>
-                  <button class="btn btn-sm" onClick={() => editChangelog(v)}>편집</button>
+                  <button class="btn btn-sm" onClick={() => openEdit(v)}>편집</button>
                   <button class="btn btn-sm btn-danger" disabled={v.version === latest}
                     onClick={() => setConfirm({
                       msg: `${modId} ${v.version} 버전을 삭제할까요?`,
@@ -67,6 +87,30 @@ export function ModVersions({ modId, onToast, onChanged }: {
       <ConfirmDialog open={!!confirm} message={confirm?.msg ?? ''}
         onCancel={() => setConfirm(null)}
         onConfirm={() => { confirm?.act(); setConfirm(null); }} />
+      <Modal open={!!editing} title={<>버전 편집 <span class="mono">{editing?.version}</span></>} onClose={() => setEditing(null)}>
+        <div class="dialog-body">
+          <label class="field"><span>changelog</span>
+            <textarea value={form.changelog} onInput={(e) => setForm({ ...form, changelog: (e.target as HTMLTextAreaElement).value })} /></label>
+          <label class="field"><span>category</span>
+            <select value={form.category} onChange={(e) => setForm({ ...form, category: (e.target as HTMLSelectElement).value })}>
+              <option value="required">required</option><option value="optional">optional</option></select></label>
+          <div class="field-group">
+            <span class="field-legend">고급 · 비워두면 변경 안 함 · 입력 시 이 버전의 모든 로더/게임버전에 일괄 적용</span>
+            <div class="dialog-grid">
+              <label class="field"><span>minLoaderVersion</span>
+                <input value={form.minLoaderVersion} onInput={(e) => setForm({ ...form, minLoaderVersion: (e.target as HTMLInputElement).value })} /></label>
+              <label class="field"><span>maxLoaderVersion</span>
+                <input value={form.maxLoaderVersion} onInput={(e) => setForm({ ...form, maxLoaderVersion: (e.target as HTMLInputElement).value })} /></label>
+            </div>
+            <label class="field"><span>dependencies (JSON)</span>
+              <input value={form.dependencies} placeholder="{}" onInput={(e) => setForm({ ...form, dependencies: (e.target as HTMLInputElement).value })} /></label>
+          </div>
+        </div>
+        <div class="dialog-actions">
+          <button class="btn" onClick={() => setEditing(null)}>취소</button>
+          <button class="btn btn-primary" onClick={saveEdit}>저장</button>
+        </div>
+      </Modal>
     </div>
   );
 }
