@@ -20,7 +20,7 @@ export function PackVersions({ packId, onToast, onChanged }: {
   const [manifests, setManifests] = useState<Record<string, PackManifest | 'loading' | 'error'>>({});
 
   async function loadManifest(v: string) {
-    if (manifests[v]) return; // 캐시됨
+    if (manifests[v] && manifests[v] !== 'error') return; // 캐시됨(error는 재조회 허용)
     setManifests((m) => ({ ...m, [v]: 'loading' }));
     try { const data = await api.getPackManifest(packId, v); setManifests((m) => ({ ...m, [v]: data })); }
     catch (e: any) { setManifests((m) => ({ ...m, [v]: 'error' })); onToast(e.message, 'err'); }
