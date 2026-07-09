@@ -1,5 +1,6 @@
 /** 혜니팩 관리 핸들러. 공개 API가 읽는 modpacks/{id}/latest.json은 유지하고,
  * 버전 폴더에 스냅샷 latest.json을 추가로 저장해 롤백/편집을 지원한다. */
+import { unzipSync } from 'fflate';
 import { adminJson } from './router.js';
 import { getJson, putJson, putObject, objectExists, listVersions, listPrefixes, deletePrefix } from './r2.js';
 import { sha256Hex } from './mods-format.js';
@@ -39,6 +40,15 @@ export async function handlePacks(request, env) {
     return await rollbackPack(request, env, id);
   }
 
+  const manM = path.match(/^\/admin\/api\/modpacks\/([^/]+)\/versions\/([^/]+)\/manifest$/);
+  if (manM && method === 'GET') {
+    const id = safeDecode(manM[1]);
+    const ver = safeDecode(manM[2]);
+    if (id === null || !PACK_ID_PATTERN.test(id)) return adminJson({ error: 'Invalid modpack id' }, 400);
+    if (ver === null || !VERSION_PATTERN.test(ver)) return adminJson({ error: 'Invalid version' }, 400);
+    return await getPackVersionManifest(env, id, ver);
+  }
+
   const verM = path.match(/^\/admin\/api\/modpacks\/([^/]+)\/versions\/([^/]+)$/);
   if (verM) {
     const id = safeDecode(verM[1]);
@@ -50,6 +60,29 @@ export async function handlePacks(request, env) {
   }
 
   return adminJson({ error: 'Not Found' }, 404);
+}
+
+/** .hyenipack(ZIP) 안의 hyenipack.json을 언집해 로더/게임버전/모드 목록을 노출한다.
+ * sidecar latest.json에는 로더/모드 정보가 없어 팩 파일을 직접 파싱해야 한다. */
+async function getPackVersionManifest(env, id, ver) {
+  const obj = await env.RELEASES.get(`modpacks/${id}/versions/${ver}/pack.hyenipack`);
+  if (!obj) return adminJson({ error: 'Not Found' }, 404);
+  let manifest;
+  try {
+    const buf = new Uint8Array(await obj.arrayBuffer());
+    const files = unzipSync(buf, { filter: (f) => f.name === 'hyenipack.json' });
+    const entry = files['hyenipack.json'];
+    if (!entry) return adminJson({ error: '.hyenipack에 hyenipack.json이 없습니다.' }, 422);
+    manifest = JSON.parse(new TextDecoder().decode(entry));
+  } catch (e) {
+    return adminJson({ error: '.hyenipack 파싱 실패', message: e.message }, 500);
+  }
+  return adminJson({
+    formatVersion: manifest.formatVersion ?? null,
+    name: manifest.name ?? null,
+    minecraft: manifest.minecraft ?? null,
+    mods: Array.isArray(manifest.mods) ? manifest.mods : [],
+  });
 }
 
 async function listPacks(env) {

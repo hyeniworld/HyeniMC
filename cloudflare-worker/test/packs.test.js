@@ -1,5 +1,6 @@
 import { env } from 'cloudflare:test';
 import { describe, it, expect, beforeEach } from 'vitest';
+import { zipSync } from 'fflate';
 import { putJson, putObject, getJson, objectExists } from '../src/admin/r2.js';
 import { sha256Hex } from '../src/admin/mods-format.js';
 import { handlePacks } from '../src/admin/packs.js';
@@ -101,5 +102,32 @@ describe('modpacks rollback / edit / delete', () => {
     const res = await handlePacks(req('DELETE', '/admin/api/modpacks/hyenipack/versions/1.0.0'), env);
     expect(res.status).toBe(200);
     expect(await objectExists(env, 'modpacks/hyenipack/versions/1.0.0/pack.hyenipack')).toBe(false);
+  });
+});
+
+describe('GET modpacks version manifest', () => {
+  it('unzips .hyenipack and exposes loader/gameVersion/mods', async () => {
+    const manifest = {
+      formatVersion: 2, hyenipackId: 'hyenipack', name: 'T', version: '1.0.0',
+      minecraft: { version: '1.21.1', loaderType: 'neoforge', loaderVersion: '21.1.213' },
+      mods: [{ fileName: 'sodium.jar', metadata: { source: 'modrinth', version: '0.5.11' } }],
+    };
+    const zip = zipSync({ 'hyenipack.json': new TextEncoder().encode(JSON.stringify(manifest)) });
+    await env.RELEASES.put('modpacks/hyenipack/versions/1.0.0/pack.hyenipack', zip);
+
+    const res = await handlePacks(req('GET', '/admin/api/modpacks/hyenipack/versions/1.0.0/manifest'), env);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.formatVersion).toBe(2);
+    expect(body.minecraft.version).toBe('1.21.1');
+    expect(body.minecraft.loaderType).toBe('neoforge');
+    expect(body.minecraft.loaderVersion).toBe('21.1.213');
+    expect(body.mods[0].fileName).toBe('sodium.jar');
+    expect(body.mods[0].metadata.version).toBe('0.5.11');
+  });
+
+  it('returns 404 for a nonexistent version', async () => {
+    const res = await handlePacks(req('GET', '/admin/api/modpacks/hyenipack/versions/9.9.9/manifest'), env);
+    expect(res.status).toBe(404);
   });
 });
