@@ -3,6 +3,7 @@ import { adminJson } from './router.js';
 import { getJson, listVersions, putObject, putJson, objectExists, deletePrefix } from './r2.js';
 import { sha256Hex, buildManifest, isoNow } from './mods-format.js';
 import { rebuildRegistry } from './registry.js';
+import { rebuildModIndex, setModPin } from './mod-index.js';
 
 export const MOD_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 export const VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
@@ -72,6 +73,29 @@ export async function handleMods(request, env) {
     if (ver === null || !VERSION_PATTERN.test(ver)) return adminJson({ error: 'Invalid version' }, 400);
     if (method === 'PATCH') return await editModVersion(request, env, id, ver);
     if (method === 'DELETE') return await deleteModVersion(env, id, ver);
+  }
+
+  // GET /admin/api/mods/{id}/index
+  const indexM = path.match(/^\/admin\/api\/mods\/([^/]+)\/index$/);
+  if (indexM && method === 'GET') {
+    const id = decodeURIComponent(indexM[1]);
+    if (!MOD_ID_PATTERN.test(id)) return adminJson({ error: 'Invalid mod id' }, 400);
+    const idx = await getJson(env, `mods/${id}/index.json`);
+    return adminJson(idx || { version: '1', targets: {} });
+  }
+
+  // PATCH /admin/api/mods/{id}/pins  {loader, gameVersion, version|null}
+  const pinsM = path.match(/^\/admin\/api\/mods\/([^/]+)\/pins$/);
+  if (pinsM && method === 'PATCH') {
+    const id = decodeURIComponent(pinsM[1]);
+    if (!MOD_ID_PATTERN.test(id)) return adminJson({ error: 'Invalid mod id' }, 400);
+    let body;
+    try { body = await request.json(); } catch { return adminJson({ error: 'JSON 본문 필요' }, 400); }
+    if (!body.loader || !body.gameVersion) return adminJson({ error: 'loader, gameVersion 필요' }, 400);
+    const version = body.version === undefined ? null : body.version;
+    const r = await setModPin(env, id, body.loader, body.gameVersion, version);
+    if (!r.ok) return adminJson({ error: r.error }, 400);
+    return adminJson({ ok: true, index: r.index });
   }
 
   return adminJson({ error: 'Not Found' }, 404);
@@ -186,6 +210,7 @@ async function publishModVersion(request, env, id) {
   await putJson(env, manifestKey, manifest);
   await putJson(env, `mods/${id}/latest.json`, manifest);
   await rebuildRegistry(env);
+  await rebuildModIndex(env, id);
 
   return adminJson({
     version: meta.version,
@@ -204,6 +229,7 @@ async function rollbackMod(request, env, id) {
 
   await putJson(env, `mods/${id}/latest.json`, manifest);
   await rebuildRegistry(env);
+  await rebuildModIndex(env, id);
   return adminJson({ id, latestVersion: version });
 }
 
@@ -239,6 +265,7 @@ async function editModVersion(request, env, id, ver) {
     await putJson(env, `mods/${id}/latest.json`, updated);
   }
   await rebuildRegistry(env);
+  await rebuildModIndex(env, id);
   return adminJson({ id, version: ver });
 }
 
@@ -252,5 +279,6 @@ async function deleteModVersion(env, id, ver) {
   const removed = await deletePrefix(env, `mods/${id}/versions/${ver}/`);
   if (removed === 0) return adminJson({ error: 'Not Found' }, 404);
   await rebuildRegistry(env);
+  await rebuildModIndex(env, id);
   return adminJson({ id, deleted: ver, objects: removed });
 }
