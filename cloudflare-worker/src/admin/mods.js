@@ -223,6 +223,7 @@ async function editModVersion(request, env, id, ver) {
   if (Array.isArray(body.targets) && body.targets.length > 0) {
     updated.loaders = JSON.parse(JSON.stringify(manifest.loaders || {}));
     for (const t of body.targets) {
+      if (!t || typeof t !== 'object') continue; // 잘못된 요소 무시
       const cell = updated.loaders?.[t.loader]?.gameVersions?.[t.gameVersion];
       if (!cell) continue; // 존재하지 않는 (로더,게임버전)은 무시
       if (t.minLoaderVersion !== undefined) cell.minLoaderVersion = t.minLoaderVersion;

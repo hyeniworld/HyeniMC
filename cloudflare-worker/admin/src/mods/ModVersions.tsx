@@ -76,9 +76,12 @@ export function ModVersions({ modId, onToast, onChanged }: {
       let deps;
       try { deps = JSON.parse(t.dependencies || '{}'); }
       catch { onToast(`${t.loader}·${t.gameVersion}: dependencies JSON 오류`, 'err'); return; }
+      if (typeof deps !== 'object' || deps === null || Array.isArray(deps)) {
+        onToast(`${t.loader}·${t.gameVersion}: dependencies는 객체(JSON)여야 합니다`, 'err'); return;
+      }
       targets.push({
         loader: t.loader, gameVersion: t.gameVersion,
-        minLoaderVersion: t.minLoaderVersion.trim(),
+        minLoaderVersion: t.minLoaderVersion.trim() || null,
         maxLoaderVersion: t.maxLoaderVersion.trim() || null,
         dependencies: deps,
       });
