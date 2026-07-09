@@ -54,4 +54,13 @@ describe('GET /api/v2/mods/{id}/latest with env query', () => {
     expect(res.status).toBe(200);
     expect((await res.json()).version).toBe('1.0.11');
   });
+
+  it('index resolves but manifest missing → 404 (never the wrong-loader global latest)', async () => {
+    // 인덱스는 neoforge/1.21.1 → 1.0.4로 해석하지만 그 manifest가 사라진 상태
+    await env.RELEASES.delete('mods/hh/versions/1.0.4/manifest.json');
+    const res = await SELF.fetch('https://e.com/api/v2/mods/hh/latest?gameVersion=1.21.1&loader=neoforge');
+    expect(res.status).toBe(404);
+    // 글로벌 latest(fabric 1.0.11)로 조용히 폴백하지 않는다
+    expect((await res.json()).error).toBe('No release for this environment');
+  });
 });

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import * as api from '../api';
+import { sortVersions } from '../lib/versions';
 
-interface Target { loader: string; gameVersion: string; }
 interface Version { version: string; targets: { loader: string; gameVersion: string }[]; }
 type Cell = { auto: string; pinned: string | null };
 type Index = { targets: Record<string, Record<string, Cell>> };
@@ -66,7 +66,7 @@ export function ModResolution({ modId, versions, onToast }: {
                       pin(r.loader, r.gameVersion, val === '' ? null : val);
                     }}>
                     <option value="">자동 ({r.auto ?? '—'})</option>
-                    {[...r.offered].sort().reverse().map((v) => <option key={v} value={v}>{v}</option>)}
+                    {sortVersions(r.offered).reverse().map((v) => <option key={v} value={v}>{v}</option>)}
                   </select>
                 </td>
               </tr>

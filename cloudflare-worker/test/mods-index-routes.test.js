@@ -38,6 +38,28 @@ describe('index maintained on publish + GET index', () => {
   });
 });
 
+describe('boundary guards (safeDecode + null body)', () => {
+  it('GET index with malformed %-escape id → 400 (not 500)', async () => {
+    const res = await handleMods(req('GET', '/admin/api/mods/%zz/index'), env);
+    expect(res.status).toBe(400);
+  });
+  it('PATCH pins with malformed %-escape id → 400 (not 500)', async () => {
+    const res = await handleMods(
+      new Request('https://e.com/admin/api/mods/%zz/pins', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ loader: 'neoforge', gameVersion: '1.21.1' }),
+      }), env);
+    expect(res.status).toBe(400);
+  });
+  it('PATCH pins with JSON null body → 400 (not 500)', async () => {
+    const res = await handleMods(
+      new Request('https://e.com/admin/api/mods/hh/pins', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: 'null',
+      }), env);
+    expect(res.status).toBe(400);
+  });
+});
+
 describe('PATCH pins', () => {
   it('pins a valid version and rejects an invalid one', async () => {
     await handleMods(publishReq('hh', '1.0.4', 'neoforge', '1.21.1'), env);

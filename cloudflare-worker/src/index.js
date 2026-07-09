@@ -390,6 +390,12 @@ async function getLatestRelease(env, corsHeaders, modId, version = 'v1', searchP
         }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
       obj = await env.RELEASES.get(`mods/${modId}/versions/${resolved}/manifest.json`);
+      if (!obj) {
+        return new Response(JSON.stringify({
+          error: 'No release for this environment',
+          message: `${modId}: resolved ${resolved} but its manifest is missing.`,
+        }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
     }
     // 인덱스 없으면 아래 latest.json 폴백
   }

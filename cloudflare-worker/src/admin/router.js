@@ -2,6 +2,7 @@ import { verifyAccessJwt, devBypassIdentity } from './access.js';
 import { handleMods } from './mods.js';
 import { handlePacks } from './packs.js';
 import { rebuildRegistry } from './registry.js';
+import { rebuildModIndex } from './mod-index.js';
 
 export function adminJson(obj, status = 200) {
   return new Response(JSON.stringify(obj), {
@@ -20,6 +21,7 @@ export async function dispatchAdmin(request, env) {
   }
   if (method === 'POST' && path === '/admin/api/registry/rebuild') {
     const reg = await rebuildRegistry(env);
+    for (const m of reg.mods) await rebuildModIndex(env, m.id);
     return adminJson({ ok: true, count: reg.mods.length });
   }
   if (path.startsWith('/admin/api/modpacks')) {

@@ -78,8 +78,8 @@ export async function handleMods(request, env) {
   // GET /admin/api/mods/{id}/index
   const indexM = path.match(/^\/admin\/api\/mods\/([^/]+)\/index$/);
   if (indexM && method === 'GET') {
-    const id = decodeURIComponent(indexM[1]);
-    if (!MOD_ID_PATTERN.test(id)) return adminJson({ error: 'Invalid mod id' }, 400);
+    const id = safeDecode(indexM[1]);
+    if (id === null || !MOD_ID_PATTERN.test(id)) return adminJson({ error: 'Invalid mod id' }, 400);
     const idx = await getJson(env, `mods/${id}/index.json`);
     return adminJson(idx || { version: '1', targets: {} });
   }
@@ -87,11 +87,11 @@ export async function handleMods(request, env) {
   // PATCH /admin/api/mods/{id}/pins  {loader, gameVersion, version|null}
   const pinsM = path.match(/^\/admin\/api\/mods\/([^/]+)\/pins$/);
   if (pinsM && method === 'PATCH') {
-    const id = decodeURIComponent(pinsM[1]);
-    if (!MOD_ID_PATTERN.test(id)) return adminJson({ error: 'Invalid mod id' }, 400);
+    const id = safeDecode(pinsM[1]);
+    if (id === null || !MOD_ID_PATTERN.test(id)) return adminJson({ error: 'Invalid mod id' }, 400);
     let body;
     try { body = await request.json(); } catch { return adminJson({ error: 'JSON 본문 필요' }, 400); }
-    if (!body.loader || !body.gameVersion) return adminJson({ error: 'loader, gameVersion 필요' }, 400);
+    if (!body || typeof body !== 'object' || !body.loader || !body.gameVersion) return adminJson({ error: 'loader, gameVersion 필요' }, 400);
     const version = body.version === undefined ? null : body.version;
     const r = await setModPin(env, id, body.loader, body.gameVersion, version);
     if (!r.ok) return adminJson({ error: r.error }, 400);

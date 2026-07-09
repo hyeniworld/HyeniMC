@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:test';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { putJson } from '../src/admin/r2.js';
+import { putJson, getJson } from '../src/admin/r2.js';
 import { dispatchAdmin } from '../src/admin/router.js';
 
 async function clearBucket() {
@@ -29,6 +29,22 @@ describe('dispatchAdmin', () => {
     const res = await dispatchAdmin(new Request('https://e.com/admin/api/registry/rebuild', { method: 'POST' }), env);
     expect(res.status).toBe(200);
     expect((await res.json()).count).toBe(1);
+  });
+
+  it('registry rebuild also backfills each mod index.json', async () => {
+    const loaders = { neoforge: { gameVersions: { '1.21.1': { file: 'a.jar', sha256: 'x', size: 1, minLoaderVersion: '1', maxLoaderVersion: null, dependencies: {} } } } };
+    await putJson(env, 'mods/hh/latest.json', { modId: 'hh', name: 'HH', version: '1.0.0', gameVersions: ['1.21.1'], loaders, category: 'required' });
+    await putJson(env, 'mods/hh/versions/1.0.0/manifest.json', { modId: 'hh', name: 'HH', version: '1.0.0', gameVersions: ['1.21.1'], loaders, category: 'required' });
+
+    // 재생성 전에는 인덱스가 없다
+    expect(await getJson(env, 'mods/hh/index.json')).toBeNull();
+
+    const res = await dispatchAdmin(new Request('https://e.com/admin/api/registry/rebuild', { method: 'POST' }), env);
+    expect(res.status).toBe(200);
+
+    const index = await getJson(env, 'mods/hh/index.json');
+    expect(index).not.toBeNull();
+    expect(index.targets.neoforge['1.21.1'].auto).toBe('1.0.0');
   });
 
   it('unknown route 404', async () => {
