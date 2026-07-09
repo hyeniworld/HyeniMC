@@ -10,6 +10,26 @@ export const LOADER_PATTERN = /^[a-z0-9]+$/;
 export const GAME_VERSION_PATTERN = /^\d+\.\d+(\.\d+)?$/;
 export const FILE_NAME_PATTERN = /^[A-Za-z0-9._+-]+\.jar$/;
 
+/** manifest의 loaders를 (로더,게임버전) 단위의 평면 타깃 목록으로 펼친다. */
+function flattenTargets(manifest) {
+  const out = [];
+  const loaders = manifest?.loaders || {};
+  for (const [loader, ldata] of Object.entries(loaders)) {
+    for (const [gameVersion, cell] of Object.entries(ldata?.gameVersions || {})) {
+      out.push({
+        loader, gameVersion,
+        minLoaderVersion: cell?.minLoaderVersion ?? null,
+        maxLoaderVersion: cell?.maxLoaderVersion ?? null,
+        dependencies: cell?.dependencies ?? {},
+        file: cell?.file ?? null,
+        sha256: cell?.sha256 ?? null,
+        size: cell?.size ?? null,
+      });
+    }
+  }
+  return out;
+}
+
 /** URIError 없이 안전하게 디코딩한다. 잘못된 %-이스케이프는 null로 반환해 400 처리하도록 한다. */
 function safeDecode(s) {
   try {
@@ -73,6 +93,7 @@ async function listModVersions(env, id) {
       gameVersions: manifest?.gameVersions || [],
       changelog: manifest?.changelog || '',
       category: manifest?.category || 'optional',
+      targets: flattenTargets(manifest),
     });
   }
   const latest = await getJson(env, `mods/${id}/latest.json`);
@@ -196,8 +217,19 @@ async function editModVersion(request, env, id, ver) {
   // 불변 갱신
   const updated = { ...manifest };
   if (body.changelog !== undefined) updated.changelog = body.changelog;
-  // min/maxLoaderVersion·dependencies는 (로더,게임버전)별로 다른 값이라 여기서 편집하지 않는다.
-  // 통째로 덮어쓰면 멀티로더 모드가 오염되므로, 변경이 필요하면 해당 버전을 재게시(overwrite)한다.
+  if (body.category !== undefined) updated.category = body.category;
+
+  // targets: (로더,게임버전)별 min/max/deps를 해당 셀에만 적용 (일괄 적용 아님)
+  if (Array.isArray(body.targets) && body.targets.length > 0) {
+    updated.loaders = JSON.parse(JSON.stringify(manifest.loaders || {}));
+    for (const t of body.targets) {
+      const cell = updated.loaders?.[t.loader]?.gameVersions?.[t.gameVersion];
+      if (!cell) continue; // 존재하지 않는 (로더,게임버전)은 무시
+      if (t.minLoaderVersion !== undefined) cell.minLoaderVersion = t.minLoaderVersion;
+      if (t.maxLoaderVersion !== undefined) cell.maxLoaderVersion = t.maxLoaderVersion;
+      if (t.dependencies !== undefined) cell.dependencies = t.dependencies;
+    }
+  }
 
   await putJson(env, `mods/${id}/versions/${ver}/manifest.json`, updated);
 
