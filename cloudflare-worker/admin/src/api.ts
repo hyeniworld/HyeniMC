@@ -30,6 +30,9 @@ export const editModVersion = (id: string, ver: string, patch: object) =>
   req(`/mods/${id}/versions/${ver}`, json('PATCH', patch));
 export const deleteModVersion = (id: string, ver: string) =>
   req(`/mods/${id}/versions/${ver}`, { method: 'DELETE' });
+export const getModIndex = (id: string) => req(`/mods/${id}/index`);
+export const setModPin = (id: string, patch: { loader: string; gameVersion: string; version: string | null }) =>
+  req(`/mods/${id}/pins`, json('PATCH', patch));
 
 // modpacks
 export const listPacks = () => req('/modpacks');

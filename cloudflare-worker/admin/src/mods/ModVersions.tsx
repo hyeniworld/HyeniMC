@@ -2,6 +2,7 @@ import { useEffect, useState } from 'preact/hooks';
 import * as api from '../api';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Modal } from '../components/Modal';
+import { ModResolution } from './ModResolution';
 
 interface Target {
   loader: string;
@@ -97,6 +98,7 @@ export function ModVersions({ modId, onToast, onChanged }: {
   }
 
   return (
+    <>
     <div class="panel">
       <div class="panel-head">
         <h3 class="panel-title mono">{modId}</h3>
@@ -190,5 +192,7 @@ export function ModVersions({ modId, onToast, onChanged }: {
         </div>
       </Modal>
     </div>
+      <ModResolution modId={modId} versions={versions} onToast={onToast} />
+    </>
   );
 }
