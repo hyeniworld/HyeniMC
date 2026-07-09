@@ -196,19 +196,8 @@ async function editModVersion(request, env, id, ver) {
   // 불변 갱신
   const updated = { ...manifest };
   if (body.changelog !== undefined) updated.changelog = body.changelog;
-  if (body.category !== undefined) updated.category = body.category;
-
-  // loader별 min/maxLoaderVersion, dependencies 편집(모든 gameVersion에 적용)
-  if (body.minLoaderVersion !== undefined || body.maxLoaderVersion !== undefined || body.dependencies !== undefined) {
-    updated.loaders = JSON.parse(JSON.stringify(manifest.loaders));
-    for (const loader of Object.values(updated.loaders)) {
-      for (const gv of Object.values(loader.gameVersions)) {
-        if (body.minLoaderVersion !== undefined) gv.minLoaderVersion = body.minLoaderVersion;
-        if (body.maxLoaderVersion !== undefined) gv.maxLoaderVersion = body.maxLoaderVersion;
-        if (body.dependencies !== undefined) gv.dependencies = body.dependencies;
-      }
-    }
-  }
+  // min/maxLoaderVersion·dependencies는 (로더,게임버전)별로 다른 값이라 여기서 편집하지 않는다.
+  // 통째로 덮어쓰면 멀티로더 모드가 오염되므로, 변경이 필요하면 해당 버전을 재게시(overwrite)한다.
 
   await putJson(env, `mods/${id}/versions/${ver}/manifest.json`, updated);
 
