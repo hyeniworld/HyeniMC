@@ -17,25 +17,27 @@ export function PacksView({ onToast }: { onToast: (m: string, k?: 'ok' | 'err') 
   useEffect(() => { load(); }, [refreshKey]);
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 24 }}>
-      <aside>
-        <h3>혜니팩</h3>
-        <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: 4 }}>
+    <div class="workspace">
+      <aside class="rail">
+        <h2 class="rail-title">혜니팩</h2>
+        <ul class="rail-list">
           {packs.map((p) => (
             <li key={p.id}>
-              <button style={{ width: '100%', textAlign: 'left', fontWeight: p.id === selected ? 700 : 400 }}
-                onClick={() => setSelected(p.id)}>{p.id} <small>({p.latestVersion})</small></button>
+              <button class={`rail-item ${p.id === selected ? 'is-active' : ''}`}
+                onClick={() => setSelected(p.id)}>
+                <span class="rail-name">{p.id}</span>
+                <span class="rail-id">v{p.latestVersion}{p.breaking ? ' · breaking' : ''}</span>
+              </button>
             </li>
           ))}
         </ul>
       </aside>
-      <section>
+      <div class="main">
         {selected
           ? <PackVersions packId={selected} onToast={onToast} onChanged={() => setRefreshKey((k) => k + 1)} />
-          : <p>왼쪽에서 혜니팩을 선택하세요.</p>}
-        <hr style={{ margin: '24px 0' }} />
+          : <div class="panel"><p class="panel-placeholder">왼쪽에서 혜니팩을 선택하세요.</p></div>}
         <PackPublishForm onToast={onToast} onPublished={() => setRefreshKey((k) => k + 1)} />
-      </section>
+      </div>
     </div>
   );
 }

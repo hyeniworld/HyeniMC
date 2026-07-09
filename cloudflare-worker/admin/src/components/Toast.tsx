@@ -16,12 +16,9 @@ export function useToast() {
 
 export function Toasts({ items }: { items: ToastItem[] }) {
   return (
-    <div style={{ position: 'fixed', top: 12, right: 12, display: 'grid', gap: 8, zIndex: 50 }}>
+    <div class="toasts">
       {items.map((t) => (
-        <div key={t.id} style={{
-          padding: '8px 14px', borderRadius: 6, color: '#fff',
-          background: t.kind === 'ok' ? '#2e7d32' : '#c62828', maxWidth: 360,
-        }}>{t.message}</div>
+        <div class={`toast is-${t.kind}`} key={t.id}>{t.message}</div>
       ))}
     </div>
   );

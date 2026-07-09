@@ -32,27 +32,33 @@ export function ModVersions({ modId, onToast, onChanged }: {
   }
 
   return (
-    <div>
-      <h3>버전 (현재 latest: {latest ?? '없음'})</h3>
-      <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+    <div class="panel">
+      <div class="panel-head">
+        <h3 class="panel-title mono">{modId}</h3>
+        <span class="panel-sub">현재 latest: {latest ? <span class="mono">{latest}</span> : '없음'}</span>
+      </div>
+      <div class="notice">latest 버전은 삭제할 수 없어요. 다른 버전을 latest로 지정한 뒤 삭제하세요.</div>
+      <table class="vtable">
         <thead><tr>{['버전', '카테고리', 'changelog', '액션'].map((h) => (
-          <th key={h} style={{ textAlign: 'left', borderBottom: '1px solid #ccc', padding: 6 }}>{h}</th>
+          <th key={h}>{h}</th>
         ))}</tr></thead>
         <tbody>
           {versions.map((v) => (
-            <tr key={v.version}>
-              <td style={{ padding: 6 }}>{v.version}{v.version === latest ? ' ★' : ''}</td>
-              <td style={{ padding: 6 }}>{v.category}</td>
-              <td style={{ padding: 6, maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis' }}>{v.changelog}</td>
-              <td style={{ padding: 6, display: 'flex', gap: 6 }}>
-                <button disabled={v.version === latest}
-                  onClick={() => run(() => api.rollbackMod(modId, v.version), `latest→${v.version}`)}>롤백</button>
-                <button onClick={() => editChangelog(v)}>편집</button>
-                <button disabled={v.version === latest}
-                  onClick={() => setConfirm({
-                    msg: `${modId} ${v.version} 버전을 삭제할까요?`,
-                    act: () => run(() => api.deleteModVersion(modId, v.version), `${v.version} 삭제됨`),
-                  })}>삭제</button>
+            <tr class={`vrow ${v.version === latest ? 'is-latest' : ''}`} key={v.version}>
+              <td><span class="vver">{v.version}</span>{v.version === latest && <span class="badge badge-latest"> latest</span>}</td>
+              <td><span class="badge badge-cat">{v.category}</span></td>
+              <td class="vchangelog truncate">{v.changelog}</td>
+              <td>
+                <div class="btn-row">
+                  <button class="btn btn-sm" disabled={v.version === latest}
+                    onClick={() => run(() => api.rollbackMod(modId, v.version), `${v.version} → latest`)}>latest로 지정</button>
+                  <button class="btn btn-sm" onClick={() => editChangelog(v)}>편집</button>
+                  <button class="btn btn-sm btn-danger" disabled={v.version === latest}
+                    onClick={() => setConfirm({
+                      msg: `${modId} ${v.version} 버전을 삭제할까요?`,
+                      act: () => run(() => api.deleteModVersion(modId, v.version), `${v.version} 삭제됨`),
+                    })}>삭제</button>
+                </div>
               </td>
             </tr>
           ))}

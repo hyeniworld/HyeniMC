@@ -54,9 +54,10 @@ export function ModPublishForm({ onToast, onPublished }: {
   }
 
   return (
-    <form onSubmit={submit}>
-      <h3>새 모드 버전 게시</h3>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
+    <form class="card" onSubmit={submit}>
+      <h3 class="card-title">새 모드 버전 게시</h3>
+      <div class="notice">새로 게시하면 그 버전이 바로 latest가 됩니다.</div>
+      <div class="form-grid">
         <Field label="modId"><input value={modId} onInput={(e) => setModId((e.target as HTMLInputElement).value)} /></Field>
         <Field label="name"><input value={name} onInput={(e) => setName((e.target as HTMLInputElement).value)} /></Field>
         <Field label="version (x.y.z)"><input value={version} onInput={(e) => setVersion((e.target as HTMLInputElement).value)} /></Field>
@@ -69,28 +70,30 @@ export function ModPublishForm({ onToast, onPublished }: {
       </div>
       <Field label="changelog"><textarea value={changelog} onInput={(e) => setChangelog((e.target as HTMLTextAreaElement).value)} /></Field>
 
-      <h4>파일</h4>
-      {files.map((f, i) => (
-        <div key={i} style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr) auto', gap: 8, marginBottom: 8, alignItems: 'end' }}>
-          <Field label="loader"><input value={f.loader} onInput={(e) => setFile(i, { loader: (e.target as HTMLInputElement).value })} /></Field>
-          <Field label="gameVersion"><input value={f.gameVersion} onInput={(e) => setFile(i, { gameVersion: (e.target as HTMLInputElement).value })} /></Field>
-          <Field label="jar">
-            <input type="file" accept=".jar" onChange={(e) => {
-              const file = (e.target as HTMLInputElement).files?.[0] ?? null;
-              setFile(i, { file, fileName: file?.name ?? '' });
-            }} />
-          </Field>
-          <Field label="minLoaderVersion"><input value={f.minLoaderVersion} onInput={(e) => setFile(i, { minLoaderVersion: (e.target as HTMLInputElement).value })} /></Field>
-          <Field label="maxLoaderVersion"><input value={f.maxLoaderVersion} onInput={(e) => setFile(i, { maxLoaderVersion: (e.target as HTMLInputElement).value })} /></Field>
-          <Field label="dependencies(JSON)"><input value={f.dependencies} onInput={(e) => setFile(i, { dependencies: (e.target as HTMLInputElement).value })} /></Field>
-          <button type="button" disabled={files.length === 1} onClick={() => setFiles((fs) => fs.filter((_, idx) => idx !== i))}>삭제</button>
-        </div>
-      ))}
-      <button type="button" onClick={() => setFiles((fs) => [...fs, emptyFile()])}>+ 파일 추가</button>
+      <h4 class="rail-title">파일</h4>
+      <div class="file-rows">
+        {files.map((f, i) => (
+          <div class="file-row" key={i}>
+            <Field label="loader"><input value={f.loader} onInput={(e) => setFile(i, { loader: (e.target as HTMLInputElement).value })} /></Field>
+            <Field label="gameVersion"><input value={f.gameVersion} onInput={(e) => setFile(i, { gameVersion: (e.target as HTMLInputElement).value })} /></Field>
+            <Field label="jar">
+              <input type="file" accept=".jar" onChange={(e) => {
+                const file = (e.target as HTMLInputElement).files?.[0] ?? null;
+                setFile(i, { file, fileName: file?.name ?? '' });
+              }} />
+            </Field>
+            <Field label="minLoaderVersion"><input value={f.minLoaderVersion} onInput={(e) => setFile(i, { minLoaderVersion: (e.target as HTMLInputElement).value })} /></Field>
+            <Field label="maxLoaderVersion"><input value={f.maxLoaderVersion} onInput={(e) => setFile(i, { maxLoaderVersion: (e.target as HTMLInputElement).value })} /></Field>
+            <Field label="dependencies(JSON)"><input value={f.dependencies} onInput={(e) => setFile(i, { dependencies: (e.target as HTMLInputElement).value })} /></Field>
+            <button type="button" class="btn btn-sm btn-danger" disabled={files.length === 1} onClick={() => setFiles((fs) => fs.filter((_, idx) => idx !== i))}>삭제</button>
+          </div>
+        ))}
+      </div>
+      <button type="button" class="btn btn-sm" onClick={() => setFiles((fs) => [...fs, emptyFile()])}>+ 파일 추가</button>
 
-      <div style={{ marginTop: 16, display: 'flex', gap: 12, alignItems: 'center' }}>
-        <label><input type="checkbox" checked={overwrite} onChange={(e) => setOverwrite((e.target as HTMLInputElement).checked)} /> 덮어쓰기</label>
-        <button type="submit" disabled={busy}>{busy ? '게시 중…' : '게시'}</button>
+      <div class="form-foot">
+        <label class="checkbox"><input type="checkbox" checked={overwrite} onChange={(e) => setOverwrite((e.target as HTMLInputElement).checked)} /> 덮어쓰기</label>
+        <button type="submit" class="btn btn-primary" disabled={busy}>{busy ? '게시 중…' : '게시'}</button>
       </div>
     </form>
   );

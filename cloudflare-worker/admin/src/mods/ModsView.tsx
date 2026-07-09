@@ -17,25 +17,27 @@ export function ModsView({ onToast }: { onToast: (m: string, k?: 'ok' | 'err') =
   useEffect(() => { load(); }, [refreshKey]);
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 24 }}>
-      <aside>
-        <h3>모드</h3>
-        <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: 4 }}>
+    <div class="workspace">
+      <aside class="rail">
+        <h2 class="rail-title">모드</h2>
+        <ul class="rail-list">
           {mods.map((m) => (
             <li key={m.id}>
-              <button style={{ width: '100%', textAlign: 'left', fontWeight: m.id === selected ? 700 : 400 }}
-                onClick={() => setSelected(m.id)}>{m.name} <small>({m.latestVersion})</small></button>
+              <button class={`rail-item ${m.id === selected ? 'is-active' : ''}`}
+                onClick={() => setSelected(m.id)}>
+                <span class="rail-name">{m.name}</span>
+                <span class="rail-id">{m.id} · v{m.latestVersion}</span>
+              </button>
             </li>
           ))}
         </ul>
       </aside>
-      <section>
+      <div class="main">
         {selected
           ? <ModVersions modId={selected} onToast={onToast} onChanged={() => setRefreshKey((k) => k + 1)} />
-          : <p>왼쪽에서 모드를 선택하세요.</p>}
-        <hr style={{ margin: '24px 0' }} />
+          : <div class="panel"><p class="panel-placeholder">왼쪽에서 모드를 선택하세요.</p></div>}
         <ModPublishForm onToast={onToast} onPublished={() => setRefreshKey((k) => k + 1)} />
-      </section>
+      </div>
     </div>
   );
 }
