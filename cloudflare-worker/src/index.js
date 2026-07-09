@@ -296,7 +296,7 @@ async function handleReleasesAPI(request, env, corsHeaders, version = 'v1') {
   // GET /api/mods/{modId}/latest
   const latestMatch = normalizedPath.match(/^\/api\/mods\/([^\/]+)\/latest$/);
   if (latestMatch) {
-    return await getLatestRelease(env, corsHeaders, latestMatch[1], version);
+    return await getLatestRelease(env, corsHeaders, latestMatch[1], version, url.searchParams);
   }
 
   // GET /api/mods/{modId}/versions
@@ -363,7 +363,7 @@ async function getModsList(env, corsHeaders, version = 'v1') {
 /**
  * Get latest release for a specific mod
  */
-async function getLatestRelease(env, corsHeaders, modId, version = 'v1') {
+async function getLatestRelease(env, corsHeaders, modId, version = 'v1', searchParams = null) {
   if (!env.RELEASES) {
     return new Response(JSON.stringify({ 
       error: 'R2 bucket not configured' 
@@ -373,19 +373,39 @@ async function getLatestRelease(env, corsHeaders, modId, version = 'v1') {
     });
   }
 
-  const latest = await env.RELEASES.get(`mods/${modId}/latest.json`);
-  
-  if (!latest) {
-    return new Response(JSON.stringify({ 
-      error: 'Latest version not found',
-      message: `Release information not available for ${modId}.`
-    }), {
-      status: 404,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
+  const gameVersion = searchParams?.get('gameVersion');
+  const loader = searchParams?.get('loader');
+
+  let obj = null;
+  if (gameVersion && loader) {
+    const indexObj = await env.RELEASES.get(`mods/${modId}/index.json`);
+    if (indexObj) {
+      const idx = JSON.parse(await indexObj.text());
+      const c = idx?.targets?.[loader]?.[gameVersion];
+      const resolved = c ? (c.pinned ?? c.auto) : null;
+      if (!resolved) {
+        return new Response(JSON.stringify({
+          error: 'No release for this environment',
+          message: `${modId}: no version for ${loader}/${gameVersion}.`,
+        }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+      obj = await env.RELEASES.get(`mods/${modId}/versions/${resolved}/manifest.json`);
+    }
+    // 인덱스 없으면 아래 latest.json 폴백
   }
-  
-  const data = JSON.parse(await latest.text());
+
+  if (!obj) {
+    obj = await env.RELEASES.get(`mods/${modId}/latest.json`);
+  }
+
+  if (!obj) {
+    return new Response(JSON.stringify({
+      error: 'Latest version not found',
+      message: `Release information not available for ${modId}.`,
+    }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+
+  const data = JSON.parse(await obj.text());
   
   // Add download URLs based on API version
   if (data.loaders) {
