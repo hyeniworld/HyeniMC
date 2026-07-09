@@ -2,6 +2,7 @@ import { useEffect, useState } from 'preact/hooks';
 import * as api from '../api';
 import { PackVersions } from './PackVersions';
 import { PackPublishForm } from './PackPublishForm';
+import { sortVersions } from '../lib/versions';
 
 interface Pack {
   id: string;
@@ -24,9 +25,9 @@ export function PacksView({ onToast }: { onToast: (m: string, k?: 'ok' | 'err') 
   }
   useEffect(() => { load(); }, [refreshKey]);
 
-  const mcOptions = [...new Set(packs.map((p) => p.minecraft?.version).filter(Boolean))].sort() as string[];
+  const mcOptions = sortVersions([...new Set(packs.map((p) => p.minecraft?.version).filter(Boolean))] as string[]);
   const loaderOptions = [...new Set(packs.map((p) => p.minecraft?.loaderType).filter(Boolean))].sort() as string[];
-  const loaderVerOptions = [...new Set(packs.filter((p) => !fLoader || p.minecraft?.loaderType === fLoader).map((p) => p.minecraft?.loaderVersion).filter(Boolean))].sort() as string[];
+  const loaderVerOptions = sortVersions([...new Set(packs.filter((p) => !fLoader || p.minecraft?.loaderType === fLoader).map((p) => p.minecraft?.loaderVersion).filter(Boolean))] as string[]);
 
   function matchesPack(p: Pack): boolean {
     const mc = p.minecraft;
@@ -43,7 +44,7 @@ export function PacksView({ onToast }: { onToast: (m: string, k?: 'ok' | 'err') 
             <option value="">MC 버전 전체</option>
             {mcOptions.map((v) => <option key={v} value={v}>{v}</option>)}
           </select>
-          <select value={fLoader} onChange={(e) => setFLoader((e.target as HTMLSelectElement).value)}>
+          <select value={fLoader} onChange={(e) => { setFLoader((e.target as HTMLSelectElement).value); setFLoaderVer(''); }}>
             <option value="">로더 전체</option>
             {loaderOptions.map((l) => <option key={l} value={l}>{l}</option>)}
           </select>

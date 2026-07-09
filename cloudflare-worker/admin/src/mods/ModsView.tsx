@@ -2,6 +2,7 @@ import { useEffect, useState } from 'preact/hooks';
 import * as api from '../api';
 import { ModVersions } from './ModVersions';
 import { ModPublishForm } from './ModPublishForm';
+import { sortVersions } from '../lib/versions';
 
 interface Mod {
   id: string;
@@ -25,7 +26,7 @@ export function ModsView({ onToast }: { onToast: (m: string, k?: 'ok' | 'err') =
   }
   useEffect(() => { load(); }, [refreshKey]);
 
-  const mcOptions = [...new Set(mods.flatMap((m) => m.gameVersions || []))].sort();
+  const mcOptions = sortVersions([...new Set(mods.flatMap((m) => m.gameVersions || []))]);
   const loaderOptions = [...new Set(mods.flatMap((m) => (m.loaders || []).map((l) => l.type)))].sort();
 
   function matchesMod(m: Mod): boolean {
