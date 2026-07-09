@@ -5,3 +5,7 @@ releases/
 
 # Local configuration (contains account-specific settings)
 wrangler.toml
+
+# 관리 SPA 빌드 산출물(디렉터리는 유지 — 테스트 하니스 부팅에 필요)
+/public/*
+!/public/.gitkeep

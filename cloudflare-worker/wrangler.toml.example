@@ -36,6 +36,12 @@ ACCESS_AUD = "YOUR_ACCESS_AUD_TAG"
 # 이중 게이트(플래그 + localhost 호스트)라 프로덕션에선 켜져도 열리지 않는다.
 # ACCESS_DEV_BYPASS = "true"
 
+# 관리 패널 SPA(Vite+Preact) 정적 서빙. admin/ 빌드 산출물이 public/admin/로 나온다.
+# 실제 에셋은 Worker 없이 서빙되고, 미매칭 요청만 src/index.js로 떨어진다.
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
 [env.production]
 workers_dev = false
 routes = [

@@ -3,7 +3,8 @@
   "version": "2.0.0",
   "description": "HyeniMC Worker - CurseForge API proxy & Mod distribution (R2)",
   "scripts": {
-    "deploy": "wrangler publish",
+    "build:admin": "npm --prefix admin run build",
+    "deploy": "npm run build:admin && wrangler deploy",
     "dev": "wrangler dev",
     "tail": "wrangler tail",
     "test": "vitest run",

@@ -37,6 +37,13 @@ export default {
         return await handleAdminApi(request, env, ctx);
       }
 
+      // Route: Admin SPA 셸 폴백.
+      // 여기 도달 = Cloudflare 에셋 레이어가 /admin/* 아래 실제 파일 매칭에 실패한 경우.
+      // (실제 index.html/JS/CSS는 이미 Worker 없이 직접 서빙됨.) 딥 클라이언트 경로만 여기로 온다.
+      if (path === '/admin' || path.startsWith('/admin/')) {
+        return env.ASSETS.fetch(new URL('/admin/index.html', request.url));
+      }
+
       // Route: Modpacks API v2 (HyeniPack)
       if (path.startsWith('/api/v2/modpacks') || path.startsWith('/download/v2/modpacks')) {
         return await handleModpacksAPI(request, env, corsHeaders);
