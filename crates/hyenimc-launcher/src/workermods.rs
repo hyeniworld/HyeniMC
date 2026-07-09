@@ -221,6 +221,7 @@ pub async fn check_all_updates(
 
         let latest: LatestResponse = match http
             .get(format!("{worker_base}/api/v2/mods/{}/latest", item.id))
+            .query(&[("gameVersion", game_version), ("loader", loader_type)])
             .send()
             .await
             .and_then(|r| r.error_for_status())
@@ -532,5 +533,61 @@ mod tests {
         assert!(hyeni[0].file_name().unwrap().to_string_lossy().starts_with("hyeni-1"));
 
         assert_eq!(find_mod_files(tmp.path(), "hyenihelper").len(), 1);
+    }
+
+    #[tokio::test]
+    async fn latest_request_includes_env_query() {
+        use std::sync::{Arc, Mutex};
+
+        let registry = r#"{"version":"2","mods":[{"id":"hyenihelper","name":"HyeniHelper",
+            "latestVersion":"1.0.5","description":"","category":"required",
+            "gameVersions":["1.21.1"],"loaders":[]}],"lastUpdated":"x"}"#;
+        let latest = r#"{"version":"1.0.5","name":"HyeniHelper","modId":"hyenihelper",
+            "gameVersions":["1.21.1"],"releaseDate":"x","changelog":"fix",
+            "loaders":{"neoforge":{"gameVersions":{"1.21.1":
+              {"file":"hyenihelper-neoforge-1.21.1-1.0.5.jar","sha256":"ab","size":10,
+               "downloadPath":"p","downloadUrl":"u","minLoaderVersion":"1"}}}}}"#;
+
+        // 서버가 받은 요청 URL(경로+쿼리)을 기록 → latest 요청의 쿼리를 검증
+        let seen: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let seen_srv = seen.clone();
+        let server = tiny_http::Server::http("127.0.0.1:0").unwrap();
+        let addr = format!("http://{}", server.server_addr());
+        std::thread::spawn(move || {
+            for req in server.incoming_requests() {
+                let url = req.url().to_string();
+                seen_srv.lock().unwrap().push(url.clone());
+                let body = if url.starts_with("/api/v2/mods/") && url.contains("/latest") {
+                    latest
+                } else {
+                    registry
+                };
+                let _ = req.respond(tiny_http::Response::from_string(body));
+            }
+        });
+
+        let tmp = tempfile::tempdir().unwrap();
+        let http = reqwest::Client::new();
+        let updates = check_all_updates(
+            &http, &addr, tmp.path(),
+            "1.21.1", "neoforge", "", true, false,
+        )
+        .await
+        .unwrap();
+
+        // 응답 처리·로컬 매칭 불변: 미설치 모드가 업데이트 목록에 그대로 잡힌다
+        assert_eq!(updates.len(), 1);
+        assert_eq!(updates[0].mod_id, "hyenihelper");
+
+        // latest 요청에 프로필 환경 쿼리(gameVersion·loader)가 실려야 함
+        let latest_url = seen
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|u| u.contains("/latest"))
+            .cloned()
+            .expect("latest 요청이 서버에 도달해야 함");
+        assert!(latest_url.contains("gameVersion=1.21.1"), "실제 URL: {latest_url}");
+        assert!(latest_url.contains("loader=neoforge"), "실제 URL: {latest_url}");
     }
 }
