@@ -1,4 +1,4 @@
-import { verifyAccessJwt } from './access.js';
+import { verifyAccessJwt, devBypassIdentity } from './access.js';
 import { handleMods } from './mods.js';
 import { handlePacks } from './packs.js';
 import { rebuildRegistry } from './registry.js';
@@ -32,7 +32,7 @@ export async function dispatchAdmin(request, env) {
 }
 
 export async function handleAdminApi(request, env, ctx) {
-  const identity = await verifyAccessJwt(request, env);
+  const identity = devBypassIdentity(request, env) || await verifyAccessJwt(request, env);
   if (!identity) {
     return adminJson({ error: 'Unauthorized', message: 'Access 인증이 필요합니다.' }, 401);
   }

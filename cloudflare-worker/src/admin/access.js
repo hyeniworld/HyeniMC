@@ -29,6 +29,23 @@ async function getJwks(teamDomain, fetchImpl) {
   return keys;
 }
 
+/**
+ * 로컬 개발 전용 인증 우회(이중 게이트). 다음을 모두 만족할 때만 통과:
+ *   (1) env.ACCESS_DEV_BYPASS === 'true'
+ *   (2) 요청 호스트가 localhost 계열
+ * 프로덕션은 호스트가 실제 도메인이라 플래그가 실수로 켜져도 절대 열리지 않는다.
+ * 활성화(그 세션에만): `wrangler dev --var ACCESS_DEV_BYPASS:true`
+ * — wrangler.toml에 상시로 넣지 말 것. --var를 빼거나 배포하면 자동으로 다시 401.
+ */
+export function devBypassIdentity(request, env) {
+  if (env.ACCESS_DEV_BYPASS !== 'true') return null;
+  const host = new URL(request.url).hostname;
+  if (host === 'localhost' || host === '127.0.0.1' || host === '[::1]') {
+    return { email: 'dev-bypass@local' };
+  }
+  return null;
+}
+
 export async function verifyAccessJwt(request, env, { fetchImpl = fetch } = {}) {
   try {
     const token = request.headers.get('Cf-Access-Jwt-Assertion');

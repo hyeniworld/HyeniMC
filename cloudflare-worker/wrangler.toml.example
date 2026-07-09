@@ -31,6 +31,10 @@ r2_buckets = [
 [vars]
 ACCESS_TEAM_DOMAIN = "https://your-team.cloudflareaccess.com"
 ACCESS_AUD = "YOUR_ACCESS_AUD_TAG"
+# 로컬 개발 전용 인증 우회. wrangler.toml에 상시 넣지 말고, 필요할 때만:
+#   wrangler dev --var ACCESS_DEV_BYPASS:true
+# 이중 게이트(플래그 + localhost 호스트)라 프로덕션에선 켜져도 열리지 않는다.
+# ACCESS_DEV_BYPASS = "true"
 
 [env.production]
 workers_dev = false

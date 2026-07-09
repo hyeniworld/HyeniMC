@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { verifyAccessJwt } from '../src/admin/access.js';
+import { verifyAccessJwt, devBypassIdentity } from '../src/admin/access.js';
 
 // base64url 인코딩 헬퍼
 function b64url(bytes) {
@@ -89,5 +89,27 @@ describe('verifyAccessJwt', () => {
     const token = (await makeJwt({})).slice(0, -3) + 'AAA';
     const result = await verifyAccessJwt(reqWithJwt(token), env, { fetchImpl: fakeFetch() });
     expect(result).toBeNull();
+  });
+});
+
+describe('devBypassIdentity (로컬 전용 이중 게이트)', () => {
+  it('bypasses when flag set AND host is localhost', () => {
+    const r = new Request('http://localhost:8787/admin/api/ping');
+    expect(devBypassIdentity(r, { ACCESS_DEV_BYPASS: 'true' })).toEqual({ email: 'dev-bypass@local' });
+  });
+
+  it('bypasses on 127.0.0.1 too', () => {
+    const r = new Request('http://127.0.0.1:8787/admin/api/ping');
+    expect(devBypassIdentity(r, { ACCESS_DEV_BYPASS: 'true' })).toEqual({ email: 'dev-bypass@local' });
+  });
+
+  it('does NOT bypass on a real domain even with the flag on (prod-safe)', () => {
+    const r = new Request('https://hyenimc-worker.devbug.me/admin/api/ping');
+    expect(devBypassIdentity(r, { ACCESS_DEV_BYPASS: 'true' })).toBeNull();
+  });
+
+  it('does NOT bypass when the flag is unset', () => {
+    const r = new Request('http://localhost:8787/admin/api/ping');
+    expect(devBypassIdentity(r, {})).toBeNull();
   });
 });
