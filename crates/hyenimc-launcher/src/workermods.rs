@@ -85,6 +85,14 @@ pub struct WorkerModUpdate {
     // 설치 URL 구성에 필요 (installMultiple 계약이 updates만 받으므로 내장)
     pub loader_type: String,
     pub game_version: String,
+    /// 이 업데이트가 해석된 (loader,gv) 타깃이 요구하는 로더 버전 범위(없으면 제약 없음).
+    #[serde(default)]
+    pub min_loader_version: Option<String>,
+    #[serde(default)]
+    pub max_loader_version: Option<String>,
+    /// 로더 호환을 위해 프로필 loader_version을 이 값으로 올려야 함(해석 결과 스탬프). 없으면 변경 불필요.
+    #[serde(default)]
+    pub required_loader_version: Option<String>,
 }
 
 // ── 버전 파싱/비교 (순수) ────────────────────────────────
@@ -137,6 +145,9 @@ pub fn is_newer_version(remote: &str, local: &str) -> bool {
 
 /// 프로필 로더 버전이 모드가 요구하는 [min, max] 범위 내인지 (Electron checkLoaderVersionCompatibility).
 /// min/max가 없거나 빈 문자열이면 해당 제약 없음.
+// check_all_updates의 스킵 경로가 제거되어(로더 상향은 Task 3에서 판단) 현재는 테스트만 사용.
+// Task 3의 resolve_loader_for_updates가 이 함수를 재사용한다.
+#[allow(dead_code)]
 fn loader_version_ok(current: &str, min: Option<&str>, max: Option<&str>) -> bool {
     let cur = version_key(current);
     let above_min = match min.filter(|m| !m.is_empty()) {
@@ -182,9 +193,8 @@ pub fn local_mod_version(mods_dir: &Path, mod_id: &str) -> Option<String> {
 
 // ── 체크/설치 ────────────────────────────────────────────
 
-/// 워커 모드 업데이트 확인.
-/// - `loader_version`: 비면 로더 버전 호환 필터 미적용(수동 패널). 값이 있으면 min/maxLoaderVersion으로
-///   불호환 모드를 제외(실행 전 자동 업데이트 — Electron checkAllMods와 동일).
+/// 워커 모드 업데이트 확인. 로더 버전 호환(min/maxLoaderVersion)은 여기서 필터하지 않고,
+/// 각 업데이트에 min/max를 실어 `resolve_loader_for_updates`가 로더 상향을 판단하게 한다.
 /// - `include_all`: true면 적용 가능한 모든 모드를 확인(실행 전 자동 업데이트 — Electron checkAllMods).
 ///   false면 아래 게이트를 적용(수동 패널 — Electron checkAllModUpdates).
 /// - `has_authorized_server`: (include_all=false일 때) 신규(미설치) 모드는 인증 서버 + required일 때만
@@ -195,7 +205,6 @@ pub async fn check_all_updates(
     mods_dir: &Path,
     game_version: &str,
     loader_type: &str,
-    loader_version: &str,
     include_all: bool,
     has_authorized_server: bool,
 ) -> Result<Vec<WorkerModUpdate>, LauncherError> {
@@ -242,23 +251,6 @@ pub async fn check_all_updates(
             continue;
         };
 
-        // 로더 버전 호환성 (loader_version이 주어진 경우만 — 실행 전 자동 업데이트 경로)
-        if !loader_version.is_empty()
-            && !loader_version_ok(
-                loader_version,
-                file_info.min_loader_version.as_deref(),
-                file_info.max_loader_version.as_deref(),
-            )
-        {
-            log::warn!(
-                "워커 모드 {} 로더 버전 불호환 (요구 {:?}~{:?}, 설치 {loader_version}) — 제외",
-                item.id,
-                file_info.min_loader_version,
-                file_info.max_loader_version
-            );
-            continue;
-        }
-
         let local = local_mod_version(mods_dir, &item.id);
         let needs_update = match (installed, &local) {
             (false, _) => true,                                   // 미설치 → 신규
@@ -286,6 +278,9 @@ pub async fn check_all_updates(
             size: file_info.size,
             loader_type: loader_type.to_string(),
             game_version: game_version.to_string(),
+            min_loader_version: file_info.min_loader_version.clone(),
+            max_loader_version: file_info.max_loader_version.clone(),
+            required_loader_version: None,
         });
     }
     log::info!(
@@ -464,10 +459,43 @@ mod tests {
             size: None,
             loader_type: "neoforge".into(),
             game_version: "1.21.1".into(),
+            min_loader_version: None,
+            max_loader_version: None,
+            required_loader_version: None,
         };
         let url = download_url("https://w", &u, "a+b/c=");
         assert!(url.ends_with("?token=a%2Bb%2Fc%3D"));
         assert!(url.contains("/download/v2/mods/hyenihelper/versions/1.0.5/neoforge/1.21.1/h.jar"));
+    }
+
+    #[test]
+    fn worker_mod_update_serde_loader_fields() {
+        let u = WorkerModUpdate {
+            mod_id: "m".into(),
+            mod_name: "M".into(),
+            current_version: None,
+            latest_version: "1.0.0".into(),
+            is_installed: true,
+            category: "required".into(),
+            changelog: None,
+            file: "m.jar".into(),
+            sha256: None,
+            size: None,
+            loader_type: "neoforge".into(),
+            game_version: "1.21.1".into(),
+            min_loader_version: Some("21.1.0".into()),
+            max_loader_version: None,
+            required_loader_version: Some("21.1.186".into()),
+        };
+        let json = serde_json::to_string(&u).unwrap();
+        assert!(json.contains("\"minLoaderVersion\":\"21.1.0\""));
+        assert!(json.contains("\"requiredLoaderVersion\":\"21.1.186\""));
+        // 렌더러가 되돌려 보낼 때 로더 필드가 없어도 역직렬화 성공(기본값 None)
+        let back: WorkerModUpdate = serde_json::from_str(
+            r#"{"modId":"m","modName":"M","currentVersion":null,"latestVersion":"1.0.0","isInstalled":true,"category":"required","file":"m.jar","loaderType":"neoforge","gameVersion":"1.21.1"}"#,
+        ).unwrap();
+        assert_eq!(back.min_loader_version, None);
+        assert_eq!(back.required_loader_version, None);
     }
 
     #[test]
@@ -570,7 +598,7 @@ mod tests {
         let http = reqwest::Client::new();
         let updates = check_all_updates(
             &http, &addr, tmp.path(),
-            "1.21.1", "neoforge", "", true, false,
+            "1.21.1", "neoforge", true, false,
         )
         .await
         .unwrap();

@@ -464,7 +464,6 @@ pub async fn game_launch(
                 &mods_dir,
                 &profile.game_version,
                 &profile.loader_type,
-                profile.loader_version.as_deref().unwrap_or(""),
                 true, // include_all — 실행 전엔 적용 가능한 모든 모드 확인(Electron checkAllMods)
                 true, // has_authorized_server — 이 블록은 should_check 통과 시에만 진입
             )
