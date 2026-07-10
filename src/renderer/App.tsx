@@ -10,6 +10,7 @@ import { useDownloadProgress } from './hooks/useDownloadProgress';
 import { ToastProvider, useToast } from './contexts/ToastContext';
 import { ErrorDialogProvider } from './contexts/ErrorDialogContext';
 import { HyeniDecorations } from './components/common/HyeniDecorations';
+import { HyeniPackSuggestDialog } from './components/hyeni/HyeniPackSuggestDialog';
 import { useLauncherUpdate } from './hooks/useLauncherUpdate';
 import { LauncherUpdateBanner } from './components/launcher/LauncherUpdateBanner';
 import packageJson from '../../package.json';
@@ -47,6 +48,8 @@ function App() {
           </HashRouter>
           {/* Global Download/Install Modal (rich) */}
           <GlobalDownloadModal />
+          {/* 딥링크 혜니팩 설치 제안 다이얼로그 */}
+          <HyeniPackSuggestDialog />
         </AccountContext.Provider>
       </ErrorDialogProvider>
     </ToastProvider>
