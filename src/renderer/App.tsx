@@ -45,11 +45,11 @@ function App() {
                 <Route path="settings" element={<SettingsPage />} />
               </Route>
             </Routes>
+            {/* 딥링크 혜니팩 설치 제안 — useNavigate 사용을 위해 Router 안쪽에 마운트(전역 유지) */}
+            <HyeniPackSuggestDialog />
           </HashRouter>
           {/* Global Download/Install Modal (rich) */}
           <GlobalDownloadModal />
-          {/* 딥링크 혜니팩 설치 제안 다이얼로그 */}
-          <HyeniPackSuggestDialog />
         </AccountContext.Provider>
       </ErrorDialogProvider>
     </ToastProvider>

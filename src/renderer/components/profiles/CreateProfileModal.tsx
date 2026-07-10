@@ -12,6 +12,10 @@ interface CreateProfileModalProps {
   onClose: () => void;
   onSuccess: () => void;
   initialModpackId?: string;
+  /** 초기 탭(기본 custom). 딥링크 혜니팩 설치는 'hyenipack'으로 연다. */
+  initialTab?: 'custom' | 'hyenipack';
+  /** 혜니팩 탭에서 자동 선택할 팩 id(딥링크 제안 경유). */
+  initialHyeniPackId?: string;
 }
 
 interface JavaInstallation {
@@ -22,9 +26,9 @@ interface JavaInstallation {
   architecture: string;
 }
 
-export function CreateProfileModal({ isOpen, onClose, onSuccess, initialModpackId }: CreateProfileModalProps) {
+export function CreateProfileModal({ isOpen, onClose, onSuccess, initialModpackId, initialTab, initialHyeniPackId }: CreateProfileModalProps) {
   const toast = useToast();
-  const [tab, setTab] = useState<'custom' | 'modpack' | 'import' | 'hyenipack'>('custom');
+  const [tab, setTab] = useState<'custom' | 'modpack' | 'import' | 'hyenipack'>(initialTab ?? 'custom');
   const [step, setStep] = useState<'basic' | 'modpack' | 'installing'>('basic');
   const [showModpackSearch, setShowModpackSearch] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -690,7 +694,11 @@ export function CreateProfileModal({ isOpen, onClose, onSuccess, initialModpackI
           )}
 
           {tab === 'hyenipack' && (
-            <HyeniPackImportTab onSuccess={onSuccess} onImportingChange={setImporting} />
+            <HyeniPackImportTab
+              onSuccess={onSuccess}
+              onImportingChange={setImporting}
+              initialPackId={initialHyeniPackId}
+            />
           )}
         </div>
       </div>

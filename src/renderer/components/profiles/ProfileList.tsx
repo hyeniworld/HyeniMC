@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Play, Settings, Trash2, Plus, FolderOpen, Clock, Loader2, Star, Sparkles, Package, AlertTriangle } from 'lucide-react';
 import { CreateProfileModal } from './CreateProfileModal';
 import { ExportHyeniPackModal } from './ExportHyeniPackModal';
@@ -15,6 +15,7 @@ import { FORCE_LAUNCH_MARKER } from '@shared/constants/launch';
 
 export function ProfileList() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { selectedAccountId } = useAccount();
   const toast = useToast();
   const [profiles, setProfiles] = useState<any[]>([]);
@@ -23,6 +24,8 @@ export function ProfileList() {
   const [runningProfiles, setRunningProfiles] = useState<Set<string>>(new Set());
   const [launchingProfiles, setLaunchingProfiles] = useState<Set<string>>(new Set());
   const [showCreateModal, setShowCreateModal] = useState(false);
+  // 딥링크 제안('설치')으로 넘어온 혜니팩 id — 모달을 혜니팩 탭 + 자동 선택으로 연다.
+  const [createHyeniPackId, setCreateHyeniPackId] = useState<string | undefined>(undefined);
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportingProfile, setExportingProfile] = useState<any>(null);
   const [confirmStopId, setConfirmStopId] = useState<string | null>(null);
@@ -97,6 +100,16 @@ export function ProfileList() {
       cleanupStopped();
     };
   }, []);
+
+  // 딥링크 제안('설치')으로 전달된 state.hyeniPackId 1회 소비 → 혜니팩 탭으로 모달 오픈.
+  useEffect(() => {
+    const packId = (location.state as { hyeniPackId?: string } | null)?.hyeniPackId;
+    if (!packId) return;
+    setCreateHyeniPackId(packId);
+    setShowCreateModal(true);
+    // state 클리어(뒤로가기/재마운트 시 재오픈 방지)
+    navigate('.', { replace: true, state: null });
+  }, [location.state, navigate]);
 
   const loadProfiles = async () => {
     try {
@@ -229,7 +242,13 @@ export function ProfileList() {
 
   const handleCreateSuccess = () => {
     setShowCreateModal(false);
+    setCreateHyeniPackId(undefined);
     loadProfiles();
+  };
+
+  const handleCreateClose = () => {
+    setShowCreateModal(false);
+    setCreateHyeniPackId(undefined);
   };
 
   const handleToggleFavorite = async (profileId: string, e: React.MouseEvent) => {
@@ -494,8 +513,10 @@ export function ProfileList() {
       {/* Create Profile Modal */}
       {showCreateModal && (
         <CreateProfileModal
-          onClose={() => setShowCreateModal(false)}
+          onClose={handleCreateClose}
           onSuccess={handleCreateSuccess}
+          initialTab={createHyeniPackId ? 'hyenipack' : undefined}
+          initialHyeniPackId={createHyeniPackId}
         />
       )}
 

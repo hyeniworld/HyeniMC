@@ -188,8 +188,10 @@ function installTauriShim(): void {
       listAvailable: () => invoke('pack_list_available'),
       hasAnyToken: () => invoke('hyeni_has_any_token'),
       listTokens: () => invoke('hyeni_list_tokens'),
-      installFromWorker: (profileId: string, packId: string, accountId?: string) =>
-        invoke('pack_install_from_worker', { profileId, packId, accountId }),
+      // 통일된 설치 흐름: 워커에서 .hyenipack 다운로드(진행 이벤트 emit) → 기존 import 재사용
+      downloadFromWorker: (packId: string) => invoke('pack_download_from_worker', { packId }),
+      applyMatchingToken: (profileId: string) => invoke('hyeni_apply_matching_token', { profileId }),
+      removeTempFile: (path: string) => invoke('hyeni_remove_temp_file', { path }),
     },
     account: {
       loginMicrosoft: () => invoke('account_login_microsoft'),

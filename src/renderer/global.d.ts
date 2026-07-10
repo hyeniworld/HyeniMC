@@ -141,6 +141,24 @@ declare global {
       hyenipack: {
         import: (filePath: string, profileId: string, accountId?: string) => Promise<{ success: boolean; error?: string }>;
         preview: (filePath: string) => Promise<{ success: boolean; manifest?: any; error?: string }>;
+        // 온라인 목록·토큰
+        listAvailable: () => Promise<Array<{
+          id: string;
+          name: string;
+          latestVersion?: string | null;
+          breaking?: boolean;
+          minecraft?: { version: string; loaderType: string; loaderVersion?: string } | null;
+        }>>;
+        hasAnyToken: () => Promise<boolean>;
+        listTokens: () => Promise<any[]>;
+        // 통일된 설치 흐름 (워커 다운로드 → 기존 import 재사용)
+        downloadFromWorker: (packId: string) => Promise<{ path: string; version: string }>;
+        applyMatchingToken: (profileId: string) => Promise<boolean>;
+        removeTempFile: (path: string) => Promise<void>;
+        // 팩 업데이트
+        checkUpdate: (profileId: string) => Promise<any>;
+        applyUpdate: (profileId: string, accountId?: string) => Promise<any>;
+        // 제작자 전용(export/getFileTree 등) 폴백 — 명시 선언 외 메서드 허용
         [key: string]: (...args: any[]) => Promise<any>;
       };
       dialog: {

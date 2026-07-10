@@ -62,7 +62,7 @@ export const SettingsPage: React.FC = () => {
 
   const loadTokens = async () => {
     try {
-      const list = await (window.electronAPI as any).hyenipack.listTokens();
+      const list = await window.electronAPI.hyenipack.listTokens();
       setTokens(Array.isArray(list) ? list : []);
       setTokensError(false);
     } catch {

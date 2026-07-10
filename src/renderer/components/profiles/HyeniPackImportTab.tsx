@@ -3,10 +3,13 @@ import { FileArchive, Loader2, Package, Cpu } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { errorText } from '../../utils/errorText';
 import { useAccount } from '../../App';
+import { setHyeniPackBusy } from '../../utils/hyeniPackBusy';
 
 interface HyeniPackImportTabProps {
   onSuccess: () => void;
   onImportingChange?: (importing: boolean) => void;
+  /** 딥링크/제안에서 넘어온 자동 선택 대상 팩 id (목록 로드 완료 시 자동 선택). */
+  initialPackId?: string;
 }
 
 interface PackManifest {
@@ -25,11 +28,15 @@ interface OnlinePack {
 }
 
 /**
- * 혜니팩(.hyenipack) 파일로 새 프로필 생성 — 사용자 런처용.
- * 파일 선택 → preview(메타) → profile.create → hyenipack.import(모드 설치).
- * (온라인 모드팩 검색/제작 흐름인 ImportModpackTab과 분리 — 사용자는 팩 파일 import만)
+ * 혜니팩(.hyenipack) 온라인 설치/파일 import — 사용자 런처용.
+ *
+ * 온라인 흐름(통일): 검색 → 리스트 선택(이름 입력) → 설치
+ *   → 워커에서 .hyenipack 다운로드(진행바) → preview(실물 매니페스트)
+ *   → profile.create → 기존 import 재사용(모드 설치 진행바)
+ *   → applyMatchingToken → temp 정리 → onSuccess
+ * 파일 흐름: 파일 선택 → preview → profile.create → import (기존 유지)
  */
-export function HyeniPackImportTab({ onSuccess, onImportingChange }: HyeniPackImportTabProps) {
+export function HyeniPackImportTab({ onSuccess, onImportingChange, initialPackId }: HyeniPackImportTabProps) {
   const toast = useToast();
   const { selectedAccountId } = useAccount();
   const [filePath, setFilePath] = useState('');
@@ -38,6 +45,7 @@ export function HyeniPackImportTab({ onSuccess, onImportingChange }: HyeniPackIm
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<{ completed: number; total: number; percent: number; stage: string } | null>(null);
+  const [downloadPct, setDownloadPct] = useState<number | null>(null); // 다운로드 단계 진행률(null=미진행)
   const [onlinePacks, setOnlinePacks] = useState<OnlinePack[] | null>(null); // null=로딩/실패
   const [onlineError, setOnlineError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
@@ -46,13 +54,26 @@ export function HyeniPackImportTab({ onSuccess, onImportingChange }: HyeniPackIm
   useEffect(() => {
     (async () => {
       try {
-        setOnlinePacks(await (window.electronAPI as any).hyenipack.listAvailable());
+        setOnlinePacks(await window.electronAPI.hyenipack.listAvailable());
       } catch (e) {
         setOnlineError(errorText(e, '팩 목록을 불러올 수 없습니다.'));
         setOnlinePacks([]);
       }
     })();
   }, []);
+
+  // 딥링크/제안으로 넘어온 initialPackId 자동 선택(목록 로드 완료 후 1회).
+  useEffect(() => {
+    if (!initialPackId || onlinePacks === null) return;
+    const found = onlinePacks.find((p) => p.id === initialPackId);
+    if (found) {
+      setSelectedPack(found);
+      setManifest(null);
+      setName(found.name);
+    } else {
+      setOnlineError('팩을 찾을 수 없습니다.');
+    }
+  }, [initialPackId, onlinePacks]);
 
   const filteredPacks = (onlinePacks ?? []).filter((p) => {
     const q = query.trim().toLowerCase();
@@ -61,29 +82,55 @@ export function HyeniPackImportTab({ onSuccess, onImportingChange }: HyeniPackIm
 
   const setImportingState = (v: boolean) => {
     setImporting(v);
+    setHyeniPackBusy(v);
     onImportingChange?.(v);
   };
 
   const handleInstallOnline = async () => {
     if (!selectedPack || !name.trim()) return;
-    const mc = selectedPack.minecraft;
     setImportingState(true);
     setError(null);
     setProgress(null);
+    setDownloadPct(null);
+    let unlistenDl: (() => void) | undefined;
     let unlisten: (() => void) | undefined;
+    let downloadedPath: string | undefined;
     try {
-      const hasToken = await (window.electronAPI as any).hyenipack.hasAnyToken();
+      const hasToken = await window.electronAPI.hyenipack.hasAnyToken();
       if (!hasToken) {
-        // 프로필을 만들기 전에 중단 — 빈 프로필 잔존 방지
+        // 프로필/다운로드를 시작하기 전에 중단 — 잔존물 방지
         setError('팩 다운로드를 위한 인증이 필요합니다. Discord에서 /인증 명령어로 인증한 뒤 다시 시도하세요.');
         return;
       }
+
+      // 1) 워커에서 .hyenipack 다운로드 (진행 이벤트 구독)
+      setDownloadPct(0);
+      unlistenDl = window.electronAPI.on('hyenipack:download-progress', (raw: unknown) => {
+        const d = raw as { packId?: string; percent?: number };
+        if (d?.packId && d.packId !== selectedPack.id) return;
+        setDownloadPct(d?.percent ?? 0);
+      });
+      const dl = await window.electronAPI.hyenipack.downloadFromWorker(selectedPack.id);
+      downloadedPath = dl.path;
+      unlistenDl?.();
+      unlistenDl = undefined;
+      setDownloadPct(null);
+
+      // 2) 실물 매니페스트로 프로필 생성 (팩 목록 메타가 아닌 다운로드된 파일 기준)
+      const pv = await window.electronAPI.hyenipack.preview(downloadedPath);
+      if (!pv.success || !pv.manifest) {
+        setError(errorText(pv.error, '혜니팩을 읽을 수 없습니다.'));
+        return;
+      }
+      const mc = (pv.manifest as PackManifest).minecraft;
       const profile = await window.electronAPI.profile.create({
         name: name.trim(),
-        gameVersion: mc?.version || '1.21.1', // 팩 설치가 실제 값으로 덮어씀
-        loaderType: mc?.loaderType || 'neoforge',
-        loaderVersion: mc?.loaderVersion || '',
+        gameVersion: mc.version,
+        loaderType: mc.loaderType,
+        loaderVersion: mc.loaderVersion || '',
       });
+
+      // 3) 기존 import 흐름 재사용 (모드 설치 진행 — profileId 필터)
       unlisten = window.electronAPI.on('hyenipack:import-progress', (raw: unknown) => {
         const data = raw as { profileId?: string; completed?: number; total?: number; percent?: number; stage?: string };
         if (data?.profileId && data.profileId !== profile.id) return;
@@ -94,21 +141,30 @@ export function HyeniPackImportTab({ onSuccess, onImportingChange }: HyeniPackIm
           stage: data?.stage ?? 'mods',
         });
       });
-      const outcome = await (window.electronAPI as any).hyenipack.installFromWorker(
-        profile.id,
-        selectedPack.id,
-        selectedAccountId,
-      );
+      const result = await window.electronAPI.hyenipack.import(downloadedPath, profile.id, selectedAccountId);
+      if (!result.success) {
+        setError(errorText(result.error, '혜니팩 설치에 실패했습니다.'));
+        return;
+      }
+
+      // 4) 서버 토큰 자동 적용 (실패 시 /인증 안내)
+      const applied = await window.electronAPI.hyenipack.applyMatchingToken(profile.id);
       toast.success('혜니팩 설치 완료', `${name} 프로필이 생성되었습니다.`);
-      if (!outcome?.tokenApplied) {
+      if (!applied) {
         toast.info('인증 안내', '이 서버의 디스코드 채널에서 /인증을 실행하면 서버 접속 준비가 끝납니다.');
       }
       onSuccess();
     } catch (e) {
       setError(errorText(e, '혜니팩 설치에 실패했습니다.'));
     } finally {
+      unlistenDl?.();
       unlisten?.();
+      if (downloadedPath) {
+        // temp 정리 실패는 무시(다음 실행/정리에서 처리)
+        try { await window.electronAPI.hyenipack.removeTempFile(downloadedPath); } catch { /* noop */ }
+      }
       setImportingState(false);
+      setDownloadPct(null);
       setProgress(null);
     }
   };
@@ -117,7 +173,7 @@ export function HyeniPackImportTab({ onSuccess, onImportingChange }: HyeniPackIm
     setError(null);
     setSelectedPack(null);
     try {
-      const path = await (window.electronAPI as any).dialog.selectFile({
+      const path = await window.electronAPI.dialog.selectFile({
         filters: [{ name: 'HyeniPack', extensions: ['hyenipack'] }],
       });
       if (!path) return;
@@ -180,6 +236,15 @@ export function HyeniPackImportTab({ onSuccess, onImportingChange }: HyeniPackIm
     }
   };
 
+  // 진행바 라벨/퍼센트 — 다운로드 단계와 모드 설치 단계 공존.
+  const isDownloadPhase = downloadPct !== null;
+  const activePct = isDownloadPhase ? downloadPct : (progress?.percent ?? 0);
+  const progressLabel = isDownloadPhase
+    ? '혜니팩 다운로드 중'
+    : progress?.stage === 'finalize'
+      ? '마무리 중...'
+      : `모드 다운로드 중${progress?.total ? ` (${progress.completed}/${progress.total})` : '...'}`;
+
   return (
     <div className="space-y-4">
       <div className="space-y-2">
@@ -196,31 +261,39 @@ export function HyeniPackImportTab({ onSuccess, onImportingChange }: HyeniPackIm
           <div className="text-xs text-gray-500 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> 목록 불러오는 중...</div>
         )}
         {filteredPacks.length > 0 && (
-          <div className="space-y-1 max-h-48 overflow-y-auto">
-            {filteredPacks.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                disabled={importing}
-                onClick={() => { setSelectedPack(p); setManifest(null); setName(p.name); }}
-                className={`w-full text-left p-3 rounded-lg border transition-colors ${
-                  selectedPack?.id === p.id
-                    ? 'bg-purple-500/10 border-purple-500/40'
-                    : 'bg-gray-800/40 border-gray-700 hover:border-gray-500'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <Package className="w-4 h-4 text-purple-400" />
-                  <span className="font-medium text-gray-200">{p.name}</span>
-                  <span className="text-xs text-gray-500">v{p.latestVersion ?? '?'}</span>
-                </div>
-                {p.minecraft && (
-                  <div className="text-xs text-gray-500 mt-1">
-                    {p.minecraft.version} · {p.minecraft.loaderType}{p.minecraft.loaderVersion ? ` ${p.minecraft.loaderVersion}` : ''}
+          <div className="space-y-1 max-h-48 overflow-y-auto transition-all duration-300">
+            {filteredPacks.map((p) => {
+              const isSelected = selectedPack?.id === p.id;
+              // 설치 중에는 선택 항목만 남기고 나머지는 부드럽게 접힘(요소는 유지).
+              const collapsed = importing && !isSelected;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  disabled={importing}
+                  onClick={() => { setSelectedPack(p); setManifest(null); setName(p.name); }}
+                  className={`w-full text-left rounded-lg overflow-hidden px-3 transition-all duration-300 ${
+                    collapsed
+                      ? 'max-h-0 opacity-0 py-0 border-0'
+                      : 'max-h-24 opacity-100 py-3 border ' +
+                        (isSelected
+                          ? 'bg-purple-500/10 border-purple-500/40'
+                          : 'bg-gray-800/40 border-gray-700 hover:border-gray-500')
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Package className="w-4 h-4 text-purple-400" />
+                    <span className="font-medium text-gray-200">{p.name}</span>
+                    <span className="text-xs text-gray-500">v{p.latestVersion ?? '?'}</span>
                   </div>
-                )}
-              </button>
-            ))}
+                  {p.minecraft && (
+                    <div className="text-xs text-gray-500 mt-1">
+                      {p.minecraft.version} · {p.minecraft.loaderType}{p.minecraft.loaderVersion ? ` ${p.minecraft.loaderVersion}` : ''}
+                    </div>
+                  )}
+                </button>
+              );
+            })}
           </div>
         )}
         {onlinePacks !== null && filteredPacks.length === 0 && !onlineError && (
@@ -228,17 +301,20 @@ export function HyeniPackImportTab({ onSuccess, onImportingChange }: HyeniPackIm
         )}
       </div>
 
-      {selectedPack && !importing && (
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-4 space-y-3">
-          <div>
-            <label className="block text-sm font-semibold mb-1 text-gray-300">프로필 이름</label>
-            <input type="text" value={name} onChange={(e) => setName(e.target.value)}
-              className="input text-base" placeholder="프로필 이름" disabled={importing} />
+      {/* 이름 입력 + 설치 버튼 — 설치 시작 시 부드럽게 접힘(언마운트 대신 collapse) */}
+      {selectedPack && (
+        <div className={`overflow-hidden transition-all duration-300 ${importing ? 'max-h-0 opacity-0' : 'max-h-96 opacity-100'}`}>
+          <div className="bg-gray-800 border border-gray-700 rounded-lg p-4 space-y-3">
+            <div>
+              <label className="block text-sm font-semibold mb-1 text-gray-300">프로필 이름</label>
+              <input type="text" value={name} onChange={(e) => setName(e.target.value)}
+                className="input text-base" placeholder="프로필 이름" disabled={importing} />
+            </div>
+            <button type="button" onClick={handleInstallOnline} disabled={!name.trim() || importing}
+              className="w-full py-3 bg-purple-600 hover:bg-purple-700 rounded-lg font-medium text-white disabled:opacity-50 transition-colors">
+              혜니팩 설치
+            </button>
           </div>
-          <button type="button" onClick={handleInstallOnline} disabled={!name.trim()}
-            className="w-full py-3 bg-purple-600 hover:bg-purple-700 rounded-lg font-medium text-white disabled:opacity-50 transition-colors">
-            혜니팩 설치
-          </button>
         </div>
       )}
 
@@ -303,17 +379,13 @@ export function HyeniPackImportTab({ onSuccess, onImportingChange }: HyeniPackIm
       {importing && (
         <div className="bg-gray-800 border border-gray-700 rounded-lg p-4 space-y-2">
           <div className="flex items-center justify-between text-sm">
-            <span className="text-gray-300">
-              {progress?.stage === 'finalize'
-                ? '마무리 중...'
-                : `모드 다운로드 중${progress?.total ? ` (${progress.completed}/${progress.total})` : '...'}`}
-            </span>
-            <span className="font-semibold text-purple-400">{Math.round(progress?.percent ?? 0)}%</span>
+            <span className="text-gray-300">{progressLabel}</span>
+            <span className="font-semibold text-purple-400">{Math.round(activePct)}%</span>
           </div>
           <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
             <div
               className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-300"
-              style={{ width: `${Math.min(100, progress?.percent ?? 0)}%` }}
+              style={{ width: `${Math.min(100, activePct)}%` }}
             />
           </div>
           <div className="flex items-center gap-1 text-xs text-gray-500">

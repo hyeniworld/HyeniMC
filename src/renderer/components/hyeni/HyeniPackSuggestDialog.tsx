@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Package, Loader2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Package } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
-import { errorText } from '../../utils/errorText';
+import { isHyeniPackBusy } from '../../utils/hyeniPackBusy';
 
 interface PackSuggest {
   packId: string;
@@ -11,14 +12,23 @@ interface PackSuggest {
   loaderType?: string | null;
 }
 
-/** 딥링크(hyenimc://auth?...&hyenipack=)로 온 혜니팩 설치 제안 — 확인 후 프로필 생성+설치. */
+/**
+ * 딥링크(hyenimc://auth?...&hyenipack=)로 온 혜니팩 설치 제안 — 확인 전용.
+ * '설치'를 누르면 프로필 목록으로 이동하며 CreateProfileModal(혜니팩 탭)이 자동으로 열려
+ * 온라인 설치 흐름을 그대로 재사용한다(설치 로직은 HyeniPackImportTab이 담당).
+ */
 export function HyeniPackSuggestDialog() {
   const toast = useToast();
+  const navigate = useNavigate();
   const [suggest, setSuggest] = useState<PackSuggest | null>(null);
-  const [installing, setInstalling] = useState(false);
 
   useEffect(() => {
     const off1 = window.electronAPI.on('hyeni:pack-suggest', (raw: unknown) => {
+      // 설치가 진행 중이면 새 제안을 무시(B-5) — 진행 중 흐름을 방해하지 않는다.
+      if (isHyeniPackBusy()) {
+        toast.info('혜니팩', '설치가 진행 중이라 새 혜니팩 제안을 무시했습니다.');
+        return;
+      }
       setSuggest(raw as PackSuggest);
     });
     const off2 = window.electronAPI.on('hyeni:pack-exists', (raw: unknown) => {
@@ -26,37 +36,13 @@ export function HyeniPackSuggestDialog() {
       toast.info('혜니팩', `이미 '${d?.profileName ?? ''}' 프로필에 설치되어 있어요. 프로필에서 업데이트를 확인하세요.`);
     });
     return () => { off1?.(); off2?.(); };
-  }, []);
+  }, [toast]);
 
-  const handleInstall = async () => {
+  const handleInstall = () => {
     if (!suggest) return;
-    setInstalling(true);
-    try {
-      const hasToken = await (window.electronAPI as any).hyenipack.hasAnyToken();
-      if (!hasToken) {
-        // 프로필을 만들기 전에 중단 — 빈 프로필 잔존 방지
-        toast.error('인증 필요', '팩 다운로드를 위한 인증이 필요합니다. Discord에서 /인증 명령어로 인증한 뒤 다시 시도하세요.');
-        return;
-      }
-      const profile = await window.electronAPI.profile.create({
-        name: suggest.name,
-        gameVersion: suggest.mcVersion || '1.21.1',   // 팩 설치가 실제 값으로 덮어씀
-        loaderType: suggest.loaderType || 'neoforge',
-        loaderVersion: '',
-      });
-      const outcome = await (window.electronAPI as any).hyenipack.installFromWorker(
-        profile.id, suggest.packId, undefined,
-      );
-      toast.success('혜니팩 설치 완료', `${suggest.name} 프로필이 생성되었습니다.`);
-      if (!outcome?.tokenApplied) {
-        toast.info('인증 안내', '이 서버의 디스코드 채널에서 /인증을 실행하면 서버 접속 준비가 끝납니다.');
-      }
-      setSuggest(null);
-    } catch (e) {
-      toast.error('혜니팩 설치 실패', errorText(e, '설치에 실패했습니다.'));
-    } finally {
-      setInstalling(false);
-    }
+    // 프로필 목록으로 이동 + CreateProfileModal(혜니팩 탭, 해당 팩 자동 선택)
+    navigate('/', { state: { hyeniPackId: suggest.packId } });
+    setSuggest(null);
   };
 
   if (!suggest) return null;
@@ -77,13 +63,13 @@ export function HyeniPackSuggestDialog() {
           )}
         </p>
         <div className="flex gap-2 justify-end">
-          <button type="button" disabled={installing} onClick={() => setSuggest(null)}
+          <button type="button" onClick={() => setSuggest(null)}
             className="px-4 py-2 text-sm bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors">
             나중에
           </button>
-          <button type="button" disabled={installing} onClick={handleInstall}
+          <button type="button" onClick={handleInstall}
             className="px-4 py-2 text-sm bg-purple-600 hover:bg-purple-700 rounded-lg font-semibold text-white transition-colors flex items-center gap-2">
-            {installing && <Loader2 className="w-4 h-4 animate-spin" />} 설치
+            설치
           </button>
         </div>
       </div>
