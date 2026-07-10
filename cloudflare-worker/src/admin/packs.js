@@ -40,6 +40,13 @@ export async function handlePacks(request, env) {
     return await rollbackPack(request, env, id);
   }
 
+  const visM = path.match(/^\/admin\/api\/modpacks\/([^/]+)\/visibility$/);
+  if (visM && method === 'PATCH') {
+    const id = safeDecode(visM[1]);
+    if (id === null || !PACK_ID_PATTERN.test(id)) return adminJson({ error: 'Invalid modpack id' }, 400);
+    return await setPackVisibility(request, env, id);
+  }
+
   const manM = path.match(/^\/admin\/api\/modpacks\/([^/]+)\/versions\/([^/]+)\/manifest$/);
   if (manM && method === 'GET') {
     const id = safeDecode(manM[1]);
@@ -116,6 +123,24 @@ async function upsertPackMeta(env, id, manifest) {
   return meta;
 }
 
+/** meta.json의 hidden만 토글한다. name/minecraft는 기존 meta에서 보존(없으면 폴백).
+ * upsertPackMeta는 hidden 보존 전용이라 여기서는 쓰지 않고 직접 쓴다. */
+async function setPackVisibility(request, env, id) {
+  let body;
+  try { body = await request.json(); } catch { return adminJson({ error: 'JSON 본문 필요' }, 400); }
+  if (typeof body.hidden !== 'boolean') return adminJson({ error: 'hidden(boolean)이 필요합니다.' }, 400);
+  const latest = await getJson(env, `modpacks/${id}/latest.json`);
+  if (!latest) return adminJson({ error: 'Not Found' }, 404);
+  const existing = await getJson(env, `modpacks/${id}/meta.json`);
+  await putJson(env, `modpacks/${id}/meta.json`, {
+    name: existing?.name ?? id,
+    minecraft: existing?.minecraft ?? null,
+    hidden: body.hidden,
+    updatedAt: isoNow(),
+  });
+  return adminJson({ id, hidden: body.hidden });
+}
+
 async function listPacks(env) {
   const ids = await listPrefixes(env, 'modpacks/');
   const packs = [];
@@ -123,8 +148,11 @@ async function listPacks(env) {
     const latest = await getJson(env, `modpacks/${id}/latest.json`);
     if (!latest) continue;
     const manifest = latest.version ? await readPackManifest(env, id, latest.version) : null;
+    const meta = await getJson(env, `modpacks/${id}/meta.json`);
     packs.push({
       id,
+      name: meta?.name ?? id,
+      hidden: !!meta?.hidden,
       latestVersion: latest.version,
       breaking: !!latest.breaking,
       minecraft: manifest?.minecraft ?? null,

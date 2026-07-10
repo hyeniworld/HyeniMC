@@ -239,3 +239,33 @@ describe('pack meta.json', () => {
     expect(meta.name).toBe('팩v1');
   });
 });
+
+describe('PATCH /admin/api/modpacks/{id}/visibility', () => {
+  it('sets hidden and preserves name/minecraft; list shows hidden flag', async () => {
+    await handlePacks(await publishZipReq('vispack', '1.0.0', {
+      formatVersion: 1, hyenipackId: 'vispack', name: '비공개될팩', version: '1.0.0',
+      minecraft: { version: '1.21.1', loaderType: 'neoforge', loaderVersion: '21.1.1' },
+      mods: [], breaking: false,
+    }), env);
+    const res = await handlePacks(
+      req('PATCH', '/admin/api/modpacks/vispack/visibility', { hidden: true }), env);
+    expect(res.status).toBe(200);
+    expect((await res.json()).hidden).toBe(true);
+    const meta = await getJson(env, 'modpacks/vispack/meta.json');
+    expect(meta.hidden).toBe(true);
+    expect(meta.name).toBe('비공개될팩');   // 보존
+    const list = await handlePacks(req('GET', '/admin/api/modpacks'), env);
+    const item = (await list.json()).packs.find((p) => p.id === 'vispack');
+    expect(item.hidden).toBe(true);
+    expect(item.name).toBe('비공개될팩');
+  });
+
+  it('400 on non-boolean hidden, 404 on unknown pack', async () => {
+    const bad = await handlePacks(
+      req('PATCH', '/admin/api/modpacks/vispack/visibility', { hidden: 'yes' }), env);
+    expect(bad.status).toBe(400);
+    const nf = await handlePacks(
+      req('PATCH', '/admin/api/modpacks/nope/visibility', { hidden: true }), env);
+    expect(nf.status).toBe(404);
+  });
+});
