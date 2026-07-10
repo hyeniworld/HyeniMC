@@ -48,7 +48,7 @@ export function ModResolution({ modId, versions, onToast }: {
   return (
     <div class="panel">
       <div class="panel-head"><h3 class="panel-title">환경별 최신</h3>
-        <span class="panel-sub">프로필 (로더·MC버전)별로 런처가 받을 버전</span></div>
+        <span class="panel-sub">신(Tauri) 런처가 (로더·MC버전)별로 받는 버전 — 핀이 없으면 자동(최고 버전)</span></div>
       <table class="vtable">
         <thead><tr>{['로더', 'MC 버전', '해석된 latest', '지정'].map((h) => <th key={h}>{h}</th>)}</tr></thead>
         <tbody>

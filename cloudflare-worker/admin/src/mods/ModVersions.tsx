@@ -105,9 +105,9 @@ export function ModVersions({ modId, name, onToast, onChanged }: {
           <h3 class="panel-title">{name || modId}</h3>
           <span class="panel-id mono">modId: {modId}</span>
         </div>
-        <span class="panel-sub">현재 latest: {latest ? <span class="mono">{latest}</span> : '없음'}</span>
+        <span class="panel-sub" title="쿼리 없이 조회하는 구(Electron) 런처가 받는 버전. 신(Tauri) 런처는 아래 '환경별 최신'을 받습니다.">전역 latest(구 런처용): {latest ? <span class="mono">{latest}</span> : '없음'}</span>
       </div>
-      <div class="notice">latest 버전은 삭제할 수 없어요. 다른 버전을 latest로 지정한 뒤 삭제하세요.</div>
+      <div class="notice">전역 latest와 아래 <b>latest</b> 배지·"latest로 지정"은 <b>구(Electron) 런처 전용</b>이에요. 신(Tauri) 런처는 하단 <b>환경별 최신</b>(핀 → 자동)을 따릅니다. latest 버전은 삭제할 수 없어요 — 다른 버전을 latest로 지정한 뒤 삭제하세요.</div>
       <table class="vtable">
         <thead><tr>{['버전', '카테고리', 'changelog', '액션'].map((h) => (
           <th key={h}>{h}</th>
@@ -117,13 +117,14 @@ export function ModVersions({ modId, name, onToast, onChanged }: {
             <tr class={`vrow ${v.version === latest ? 'is-latest' : ''}`} key={v.version}>
               <td>
                 <button class="expand-btn" onClick={() => toggle(v.version)}>{expanded.has(v.version) ? '▾' : '▸'}</button>
-                <span class="vver">{v.version}</span>{v.version === latest && <span class="badge badge-latest"> latest</span>}
+                <span class="vver">{v.version}</span>{v.version === latest && <span class="badge badge-latest" title="전역 latest — 구(Electron) 런처가 받는 버전"> latest</span>}
               </td>
               <td><span class="badge badge-cat">{v.category}</span></td>
               <td class="vchangelog truncate" title={v.changelog}>{v.changelog}</td>
               <td>
                 <div class="btn-row">
                   <button class="btn btn-sm" disabled={v.version === latest}
+                    title="전역 latest 변경 — 구(Electron) 런처에만 영향. 신 런처는 환경별 최신(핀/자동)을 따릅니다."
                     onClick={() => run(() => api.rollbackMod(modId, v.version), `${v.version} → latest`)}>latest로 지정</button>
                   <button class="btn btn-sm" onClick={() => openEdit(v)}>편집</button>
                   <button class="btn btn-sm btn-danger" disabled={v.version === latest}
