@@ -49,7 +49,7 @@ export const SettingsPage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState<GlobalSettings>({});
   const [original, setOriginal] = useState<GlobalSettings>({});
-  const [tab, setTab] = useState<'download'|'java'|'resolution'|'cache'|'update'>('download');
+  const [tab, setTab] = useState<'download'|'java'|'resolution'|'cache'|'update'|'auth'>('download');
   const [javaList, setJavaList] = useState<Array<{ path: string; version: string; majorVersion: number; vendor?: string; architecture: string }>>([]);
   const [systemMemory, setSystemMemory] = useState(16384);
   const [cacheStats, setCacheStats] = useState<{ size: number; files: number }>({ size: 0, files: 0 });
@@ -273,6 +273,7 @@ export const SettingsPage: React.FC = () => {
           <TabButton active={tab==='resolution'} onClick={() => setTab('resolution')}>해상도</TabButton>
           <TabButton active={tab==='cache'} onClick={() => setTab('cache')}>캐시</TabButton>
           <TabButton active={tab==='update'} onClick={() => setTab('update')}>자동 업데이트</TabButton>
+          <TabButton active={tab==='auth'} onClick={() => setTab('auth')}>혜니 인증</TabButton>
         </div>
 
         {tab==='download' && (
@@ -627,10 +628,11 @@ export const SettingsPage: React.FC = () => {
           </SectionCard>
         )}
 
-        {/* 혜니 인증 — 저장된 인증 토큰 현황(표시 전용, 토큰 값 미반환) */}
+        {/* 혜니 인증 탭 — 저장된 인증 현황(표시 전용). 방송 노출 안전: 서버 주소·토큰 값 미표시 */}
+        {tab==='auth' && (
         <SectionCard
           title="혜니 인증"
-          subtitle="저장된 인증 토큰의 서버 스코프와 등록 시각입니다. 토큰 값은 표시되지 않습니다."
+          subtitle="Discord /인증으로 받은 인증 현황입니다. 서버 주소와 토큰 값은 표시되지 않습니다."
           action={
             <button
               onClick={loadTokens}
@@ -650,20 +652,22 @@ export const SettingsPage: React.FC = () => {
             </div>
           ) : tokens.length === 0 ? (
             <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-4 text-center">
-              <p className="text-sm text-gray-400">저장된 인증 토큰이 없습니다.</p>
+              <p className="text-sm text-gray-400">저장된 인증이 없습니다.</p>
               <p className="text-xs text-gray-500 mt-1">Discord에서 /인증 명령어로 인증하세요.</p>
             </div>
           ) : (
             <div className="space-y-3">
-              <div className="text-sm text-gray-300">인증 토큰 {tokens.length}개 저장됨</div>
+              <div className="text-sm text-gray-300">인증 {tokens.length}개 저장됨</div>
               <div className="space-y-2">
                 {tokens.map((t, i) => (
                   <div key={i} className="bg-gray-900/50 border border-gray-800 rounded-lg p-3 flex items-center justify-between gap-4">
                     <div className="text-sm text-gray-200 min-w-0 truncate">
-                      {t.servers.length > 0 ? t.servers.join(', ') : '(서버 스코프 없음)'}
+                      {t.servers.length > 0
+                        ? `서버 ${t.servers.length}곳에서 사용하는 인증`
+                        : '일반 인증 (대상 서버 미지정)'}
                     </div>
                     <div className="text-xs text-gray-500 flex-shrink-0">
-                      {new Date(t.receivedAt * 1000).toLocaleString()}
+                      {new Date(t.receivedAt * 1000).toLocaleString()} 등록
                     </div>
                   </div>
                 ))}
@@ -671,6 +675,7 @@ export const SettingsPage: React.FC = () => {
             </div>
           )}
         </SectionCard>
+        )}
 
         {/* Sticky action bar for small screens */}
         <div className="md:hidden sticky bottom-0 left-0 right-0 bg-gray-900/90 backdrop-blur border-t border-gray-800 px-4 py-3 flex gap-2">
