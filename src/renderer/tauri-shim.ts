@@ -186,6 +186,7 @@ function installTauriShim(): void {
         invoke('pack_apply_update', { profileId, accountId }),
       // 신규 표면 (온라인 목록·검색·설치)
       listAvailable: () => invoke('pack_list_available'),
+      hasAnyToken: () => invoke('hyeni_has_any_token'),
       installFromWorker: (profileId: string, packId: string, accountId?: string) =>
         invoke('pack_install_from_worker', { profileId, packId, accountId }),
     },

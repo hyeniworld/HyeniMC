@@ -32,6 +32,12 @@ export function HyeniPackSuggestDialog() {
     if (!suggest) return;
     setInstalling(true);
     try {
+      const hasToken = await (window.electronAPI as any).hyenipack.hasAnyToken();
+      if (!hasToken) {
+        // 프로필을 만들기 전에 중단 — 빈 프로필 잔존 방지
+        toast.error('인증 필요', '팩 다운로드를 위한 인증이 필요합니다. Discord에서 /인증 명령어로 인증한 뒤 다시 시도하세요.');
+        return;
+      }
       const profile = await window.electronAPI.profile.create({
         name: suggest.name,
         gameVersion: suggest.mcVersion || '1.21.1',   // 팩 설치가 실제 값으로 덮어씀

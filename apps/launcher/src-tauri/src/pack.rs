@@ -128,6 +128,13 @@ pub async fn hyenipack_import(
     Ok(())
 }
 
+/// 다운로드 가능한 인증 토큰(프로필 무관 — 저장소 기준) 존재 여부. 렌더러 프리플라이트용.
+#[tauri::command]
+pub fn hyeni_has_any_token(db: State<'_, DbState>) -> Result<bool, String> {
+    let conn = db.0.lock().unwrap();
+    Ok(hyenimc_core::hyeni_tokens::any_token(&conn).map_err(|e| e.to_string())?.is_some())
+}
+
 /// 팩 미리보기 — 설치 없이 매니페스트만 읽기 (preload hyenipack.preview 대응)
 #[tauri::command]
 pub fn hyenipack_preview(file_path: String) -> Result<hyenipack::PackManifest, String> {
@@ -187,7 +194,7 @@ pub async fn pack_apply_update(
     .map_err(|e| e.to_string())?;
 
     // 재사용: import 흐름 (account_id는 hyenipack_import 내부 CF 프록시용으로 계속 전달)
-    hyenipack_import(
+    let import_result = hyenipack_import(
         app,
         db,
         profile_id,
@@ -195,8 +202,9 @@ pub async fn pack_apply_update(
         account_id,
         crypto,
     )
-    .await?;
+    .await;
     let _ = std::fs::remove_file(&temp);
+    import_result?;
     Ok(())
 }
 
@@ -251,9 +259,11 @@ pub async fn pack_install_from_worker(
     .map_err(|e| e.to_string())?;
 
     // 재사용: 파일 import 파이프(내부 불변 — 실사용 검증 경로)
-    hyenipack_import(app, db.clone(), profile_id, temp.display().to_string(), account_id, crypto)
-        .await?;
+    let import_result =
+        hyenipack_import(app, db.clone(), profile_id, temp.display().to_string(), account_id, crypto)
+            .await;
     let _ = std::fs::remove_file(&temp);
+    import_result?;
 
     // 설치 후 토큰 매칭 기록(팩이 깔아준 servers.dat 기준; 매칭 없으면 렌더러가 /인증 안내)
     let token_applied = apply_matching_store_token(&db, &dirs.instance_dir);

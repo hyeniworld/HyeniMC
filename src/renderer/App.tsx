@@ -86,10 +86,15 @@ function MainLayout() {
     // Auth success
     const unsubSuccess = window.electronAPI.on('auth:success', (data: any) => {
       console.log('[App] Auth success:', data);
-      toast.success(
-        '✨ 혜니월드 인증 완료!',
-        `${data.servers} 서버 인증이 완료되었습니다. (${data.profileCount}개 프로필)\n\nHyeniHelper 설정이 자동으로 업데이트되었습니다.`
-      );
+      if (data?.profileCount === 0) {
+        // 프로필 0개(신규 온보딩) — 자동 업데이트할 프로필이 없으므로 거짓 안내를 피한다.
+        toast.success('인증 완료', '인증되었습니다. 혜니팩 설치 시 자동 적용됩니다.');
+      } else {
+        toast.success(
+          '✨ 혜니월드 인증 완료!',
+          `${data.servers} 서버 인증이 완료되었습니다. (${data.profileCount}개 프로필)\n\nHyeniHelper 설정이 자동으로 업데이트되었습니다.`
+        );
+      }
     });
 
     // Auth error

@@ -140,6 +140,7 @@ fn main() {
             account::account_refresh,
             account::account_remove,
             pack::hyenipack_import,
+            pack::hyeni_has_any_token,
             pack::hyenipack_preview,
             pack::pack_check_update,
             pack::pack_apply_update,
