@@ -107,7 +107,7 @@ export function ModVersions({ modId, name, onToast, onChanged }: {
         </div>
         <span class="panel-sub" title="쿼리 없이 조회하는 구(Electron) 런처가 받는 버전. 신(Tauri) 런처는 아래 '환경별 최신'을 받습니다.">전역 latest(구 런처용): {latest ? <span class="mono">{latest}</span> : '없음'}</span>
       </div>
-      <div class="notice">전역 latest와 아래 <b>latest</b> 배지·"latest로 지정"은 <b>구(Electron) 런처 전용</b>이에요. 신(Tauri) 런처는 하단 <b>환경별 최신</b>(핀 → 자동)을 따릅니다. latest 버전은 삭제할 수 없어요 — 다른 버전을 latest로 지정한 뒤 삭제하세요.</div>
+      <div class="notice">전역 latest와 아래 <b>latest</b> 배지·"latest로 지정"은 <b>구(Electron) 런처 전용</b>이에요. 신(Tauri) 런처는 하단 <b>환경별 최신</b>(핀 → 자동)을 따릅니다. 전역 latest 버전만 삭제가 차단돼요(다른 버전을 latest로 지정한 뒤 삭제). 핀·자동(환경별)은 차단 없이 삭제되고, 핀은 해제되어 자동으로 복귀합니다.</div>
       <table class="vtable">
         <thead><tr>{['버전', '카테고리', 'changelog', '액션'].map((h) => (
           <th key={h}>{h}</th>
