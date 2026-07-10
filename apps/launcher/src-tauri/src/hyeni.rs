@@ -141,7 +141,7 @@ pub async fn worker_mods_install(
 
 /// hyenimc:// 딥링크 처리 — main.rs의 on_open_url/single-instance에서 호출.
 pub fn handle_deep_link(app: &AppHandle, url: &str) {
-    let Some((token, servers, _hyenipack)) = hy::parse_auth_url(url) else {
+    let Some((token, servers, hyenipack)) = hy::parse_auth_url(url) else {
         if url.starts_with("hyenimc://") {
             let _ = app.emit(
                 "auth:error",
@@ -171,15 +171,70 @@ pub fn handle_deep_link(app: &AppHandle, url: &str) {
             }
             Err(e) => {
                 let _ = app.emit("auth:error", serde_json::json!({ "message": e }));
+                return; // 인증 실패면 팩 제안도 중단
             }
         }
+        // 딥링크에 hyenipack= 이 있으면 설치 제안(확인 다이얼로그는 렌더러)
+        if let Some(pack_id) = hyenipack {
+            suggest_pack_install(&app, &pack_id).await;
+        }
     });
+}
+
+/// 팩 제안: 이미 설치된 프로필이 있으면 exists, 없으면 공개 목록에서 찾아 suggest.
+/// 비공개/부재/네트워크 실패는 조용히 무시(인증 자체는 이미 성공).
+async fn suggest_pack_install(app: &AppHandle, pack_id: &str) {
+    // 동일 팩 설치 프로필 검사 (.hyenipack-meta.json의 hyenipack_id).
+    // instance_dir == profile.game_directory (game_dirs_for 참조).
+    let profiles = {
+        let db = app.state::<DbState>();
+        let conn = db.0.lock().unwrap();
+        hyenimc_core::list_profiles(&conn).unwrap_or_default()
+    };
+    for p in &profiles {
+        let meta = hyenimc_launcher::hyenipack::read_pack_meta(Path::new(&p.game_directory));
+        if meta.is_some_and(|m| m.hyenipack_id == pack_id) {
+            let _ = app.emit(
+                "hyeni:pack-exists",
+                serde_json::json!({ "packId": pack_id, "profileName": p.name }),
+            );
+            return;
+        }
+    }
+    let Ok(base) = crate::pack::worker_base() else {
+        return;
+    };
+    let http = reqwest::Client::new();
+    let Ok(packs) = hyenimc_launcher::hyenipack::fetch_pack_list(&http, &base).await else {
+        return;
+    };
+    let Some(item) = packs.into_iter().find(|x| x.id == pack_id) else {
+        return; // 비공개/부재 → 무시
+    };
+    let _ = app.emit(
+        "hyeni:pack-suggest",
+        serde_json::json!({
+            "packId": item.id,
+            "name": item.name,
+            "version": item.latest_version,
+            "mcVersion": item.minecraft.as_ref().map(|m| m.version.clone()),
+            "loaderType": item.minecraft.as_ref().map(|m| m.loader_type.clone()),
+        }),
+    );
 }
 
 /// MODE1(servers 있음): servers.dat 매칭 프로필에 무조건 기록.
 /// MODE2(없음): HyeniHelper 설치 프로필에 기존 토큰 없을 때만 기록. (TS handleAuthRequest 의미)
 fn apply_auth(app: &AppHandle, token: &str, servers: &[String]) -> Result<(usize, Vec<String>), String> {
     let db = app.state::<DbState>();
+    // 저장소 적재(항상) — 프로필이 없어도 토큰을 버리지 않는다(닭-달걀 방지).
+    // 팩 설치/실행 시 servers.dat 매칭으로 프로필에 뒤늦게 기록된다.
+    {
+        let conn = db.0.lock().unwrap();
+        if let Err(e) = hyenimc_core::hyeni_tokens::upsert_token(&conn, token, servers, now_secs()) {
+            log::warn!("토큰 저장소 적재 실패: {e}");
+        }
+    }
     let profiles = {
         let conn = db.0.lock().unwrap();
         hyenimc_core::list_profiles(&conn).map_err(|e| e.to_string())?
@@ -208,17 +263,15 @@ fn apply_auth(app: &AppHandle, token: &str, servers: &[String]) -> Result<(usize
         }
     }
 
-    if updated.is_empty() {
-        return Err(if servers.is_empty() {
-            "HyeniHelper가 설치된 프로필을 찾을 수 없습니다".to_string()
-        } else {
-            format!(
-                "서버({})가 등록되고 HyeniHelper가 설치된 프로필을 찾을 수 없습니다",
-                servers.join(", ")
-            )
-        });
-    }
+    // 0건도 성공 — 토큰은 저장소에 적재되었고, 팩 설치/실행 시 매칭 기록된다.
     Ok((updated.len(), updated))
+}
+
+fn now_secs() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
 }
 
 #[cfg(test)]
