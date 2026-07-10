@@ -272,16 +272,23 @@ pub async fn pack_download_from_worker(
     let app2 = app.clone();
     let pid = pack_id.clone();
     let mut last_pct: i64 = -1;
+    let mut last_bytes: u64 = 0;
     hyenimc_launcher::hyenipack::download_pack_version(
         &http, &base, &pack_id, &version, &token, &dest,
         move |received, total| {
-            // 정수 % 변화 시에만 emit(이벤트 폭주 방지). total 미상이면 received만.
-            let pct = total.map(|t| if t > 0 { (received * 100 / t) as i64 } else { 0 }).unwrap_or(-1);
-            if pct != last_pct {
-                last_pct = pct;
+            // 정수 % 변화 시에만 emit(이벤트 폭주 방지).
+            // Content-Length 미상이면 256KB 수신마다 emit(percent 0 고정 — 진행 중임은 표시).
+            let pct = total.filter(|t| *t > 0).map(|t| (received * 100 / t) as i64);
+            let should_emit = match pct {
+                Some(p) => p != last_pct,
+                None => last_bytes == 0 || received.saturating_sub(last_bytes) >= 262_144,
+            };
+            if should_emit {
+                if let Some(p) = pct { last_pct = p; }
+                last_bytes = received.max(1);
                 let _ = app2.emit("hyenipack:download-progress", serde_json::json!({
                     "packId": &pid,
-                    "percent": if pct >= 0 { pct } else { 0 },
+                    "percent": pct.unwrap_or(0),
                     "receivedBytes": received,
                     "totalBytes": total,
                 }));

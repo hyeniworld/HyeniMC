@@ -147,8 +147,11 @@ export function HyeniPackImportTab({ onSuccess, onImportingChange, initialPackId
         return;
       }
 
-      // 4) 서버 토큰 자동 적용 (실패 시 /인증 안내)
-      const applied = await window.electronAPI.hyenipack.applyMatchingToken(profile.id);
+      // 4) 서버 토큰 자동 적용 — 기록 실패(예외 포함)는 설치 성공을 막지 않고 /인증 안내로 강등
+      let applied = false;
+      try {
+        applied = await window.electronAPI.hyenipack.applyMatchingToken(profile.id);
+      } catch { /* 조회/기록 실패 → 아래 안내 토스트로 처리 */ }
       toast.success('혜니팩 설치 완료', `${name} 프로필이 생성되었습니다.`);
       if (!applied) {
         toast.info('인증 안내', '이 서버의 디스코드 채널에서 /인증을 실행하면 서버 접속 준비가 끝납니다.');

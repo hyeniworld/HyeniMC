@@ -26,6 +26,8 @@ export function ProfileList() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   // 딥링크 제안('설치')으로 넘어온 혜니팩 id — 모달을 혜니팩 탭 + 자동 선택으로 연다.
   const [createHyeniPackId, setCreateHyeniPackId] = useState<string | undefined>(undefined);
+  // 딥링크로 새 팩 제안이 오면 key를 올려 열려 있는 모달을 강제 재마운트(닫고 새로 열기와 동일 효과)
+  const [createModalKey, setCreateModalKey] = useState(0);
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportingProfile, setExportingProfile] = useState<any>(null);
   const [confirmStopId, setConfirmStopId] = useState<string | null>(null);
@@ -102,10 +104,12 @@ export function ProfileList() {
   }, []);
 
   // 딥링크 제안('설치')으로 전달된 state.hyeniPackId 1회 소비 → 혜니팩 탭으로 모달 오픈.
+  // 모달이 이미 열려 있어도 key 증가로 강제 재마운트(= 기존 모달을 닫고 새로 열기).
   useEffect(() => {
     const packId = (location.state as { hyeniPackId?: string } | null)?.hyeniPackId;
     if (!packId) return;
     setCreateHyeniPackId(packId);
+    setCreateModalKey((k) => k + 1);
     setShowCreateModal(true);
     // state 클리어(뒤로가기/재마운트 시 재오픈 방지)
     navigate('.', { replace: true, state: null });
@@ -513,6 +517,7 @@ export function ProfileList() {
       {/* Create Profile Modal */}
       {showCreateModal && (
         <CreateProfileModal
+          key={createModalKey}
           onClose={handleCreateClose}
           onSuccess={handleCreateSuccess}
           initialTab={createHyeniPackId ? 'hyenipack' : undefined}
