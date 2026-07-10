@@ -172,6 +172,24 @@ describe('GET modpacks version manifest', () => {
     expect(body.mods[0].metadata.version).toBe('0.5.11');
   });
 
+  it('serves the sidecar manifest written at publish (without reading the pack)', async () => {
+    await handlePacks(await publishZipReq('scpack', '1.0.0', {
+      formatVersion: 2, hyenipackId: 'scpack', name: 'SC', version: '1.0.0',
+      minecraft: { version: '1.21.1', loaderType: 'neoforge', loaderVersion: '21.1.213' },
+      mods: [{ fileName: 'sodium.jar', metadata: { source: 'modrinth', version: '0.5.11' } }],
+    }), env);
+    // 게시가 버전 사이드카(manifest.json)를 저장했는지
+    const sc = await getJson(env, 'modpacks/scpack/versions/1.0.0/manifest.json');
+    expect(sc.mods[0].fileName).toBe('sodium.jar');
+    // 팩을 지워도 사이드카로 조회됨 — 대용량 팩을 서버에서 읽지 않는다는 증명
+    await env.RELEASES.delete('modpacks/scpack/versions/1.0.0/pack.hyenipack');
+    const res = await handlePacks(req('GET', '/admin/api/modpacks/scpack/versions/1.0.0/manifest'), env);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.mods[0].fileName).toBe('sodium.jar');
+    expect(body.minecraft.loaderType).toBe('neoforge');
+  });
+
   it('returns 404 for a nonexistent version', async () => {
     const res = await handlePacks(req('GET', '/admin/api/modpacks/hyenipack/versions/9.9.9/manifest'), env);
     expect(res.status).toBe(404);
@@ -301,7 +319,7 @@ describe('modpacks multipart upload (init/part/complete)', () => {
       uploadId,
       parts: [{ partNumber: p1.partNumber, etag: p1.etag }],
       latest: { hyenipackId: 'bigpack', version: '1.0.0', sha256, changelog: 'c', breaking: false },
-      packMeta: { name: '대형팩', minecraft: { version: '1.21.1', loaderType: 'neoforge', loaderVersion: '21.1.1' } },
+      packMeta: { name: '대형팩', minecraft: { version: '1.21.1', loaderType: 'neoforge', loaderVersion: '21.1.1' }, mods: [{ fileName: 'lithium.jar', metadata: { source: 'modrinth', version: '0.13' } }] },
     }), env);
     expect(res.status).toBe(201);
 
@@ -312,6 +330,9 @@ describe('modpacks multipart upload (init/part/complete)', () => {
     const meta = await getJson(env, 'modpacks/bigpack/meta.json');
     expect(meta.name).toBe('대형팩');
     expect(meta.minecraft.loaderType).toBe('neoforge');
+    // 멀티파트도 packMeta.mods로 버전 사이드카를 저장한다
+    const scman = await getJson(env, 'modpacks/bigpack/versions/1.0.0/manifest.json');
+    expect(scman.mods[0].fileName).toBe('lithium.jar');
   });
 
   it('complete with sha256 mismatch → 400 and object deleted', async () => {

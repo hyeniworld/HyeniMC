@@ -8,7 +8,10 @@ const BASE = '/admin/api';
 async function req(path: string, opts: RequestInit = {}): Promise<any> {
   const res = await fetch(`${BASE}${path}`, opts);
   const text = await res.text();
-  const body = text ? JSON.parse(text) : {};
+  // 서버가 JSON이 아닌 응답(예: Cloudflare HTML 503 "Worker exceeded resource limits")을 줄 수 있다.
+  // JSON.parse가 터지면 "unexpected character…" 대신 상태코드 기반 메시지를 보여준다.
+  let body: any = {};
+  try { body = text ? JSON.parse(text) : {}; } catch { body = {}; }
   if (!res.ok) {
     throw new ApiError(res.status, body.error || `요청 실패 (${res.status})`);
   }
@@ -58,7 +61,8 @@ export const packUploadPart = (id: string, uploadId: string, version: string, pa
   return req(`/modpacks/${id}/versions/upload-part?${qs}`, { method: 'PUT', body: blob }) as Promise<UploadedPart>;
 };
 export const packUploadComplete = (id: string, body: {
-  uploadId: string; parts: UploadedPart[]; latest: unknown; packMeta?: { name?: string; minecraft?: unknown };
+  uploadId: string; parts: UploadedPart[]; latest: unknown;
+  packMeta?: { formatVersion?: unknown; name?: string; minecraft?: unknown; mods?: unknown[] };
 }) => req(`/modpacks/${id}/versions/upload-complete`, json('POST', body));
 
 // registry

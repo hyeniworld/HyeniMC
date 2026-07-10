@@ -18,6 +18,17 @@ export function PackPublishForm({ onToast, onPublished }: {
   const [overwrite, setOverwrite] = useState(false);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState('');
+  const [changelog, setChangelog] = useState('');
+
+  /** 사이드카(.latest.json) 선택 시 changelog를 프리필한다(이후 수정 가능). */
+  async function onSidecarSelect(file: File | null) {
+    setSidecar(file);
+    if (!file) return;
+    try {
+      const sc = JSON.parse(await file.text());
+      if (typeof sc.changelog === 'string') setChangelog(sc.changelog);
+    } catch { /* 파싱 오류는 submit에서 처리 */ }
+  }
 
   /** 90MB 초과 팩: R2 멀티파트 업로드(init → 순차 part → complete). */
   async function publishMultipart(sc: any, buffer: ArrayBuffer) {
@@ -44,6 +55,8 @@ export function PackPublishForm({ onToast, onPublished }: {
     let sc: any;
     try { sc = JSON.parse(await sidecar.text()); }
     catch { onToast('사이드카 JSON 파싱 실패', 'err'); return; }
+    // 폼의 changelog로 사이드카 값을 덮어쓴다(사이드카에 없거나 수정한 경우 반영).
+    sc.changelog = changelog;
 
     const errors = validatePackPublish({ pack, version: sc.version || '' });
     if (errors.length) { onToast(errors[0], 'err'); return; }
@@ -80,9 +93,13 @@ export function PackPublishForm({ onToast, onPublished }: {
           <input type="file" accept=".hyenipack" onChange={(e) => setPack((e.target as HTMLInputElement).files?.[0] ?? null)} />
         </Field>
         <Field label=".latest.json">
-          <input type="file" accept=".json" onChange={(e) => setSidecar((e.target as HTMLInputElement).files?.[0] ?? null)} />
+          <input type="file" accept=".json" onChange={(e) => onSidecarSelect((e.target as HTMLInputElement).files?.[0] ?? null)} />
         </Field>
       </div>
+      <Field label="changelog">
+        <textarea value={changelog} rows={3} placeholder="변경사항 — 사이드카(.latest.json) 값이 자동 입력됩니다. 수정 가능."
+          onInput={(e) => setChangelog((e.target as HTMLTextAreaElement).value)} />
+      </Field>
       <div class="form-foot">
         <label class="checkbox"><input type="checkbox" checked={overwrite} onChange={(e) => setOverwrite((e.target as HTMLInputElement).checked)} /> 덮어쓰기</label>
         {busy && progress && <span class="card-hint">{progress}</span>}

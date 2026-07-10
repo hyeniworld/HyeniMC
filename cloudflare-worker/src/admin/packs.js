@@ -8,6 +8,15 @@ import { sha256Hex, isoNow } from './mods-format.js';
 const PACK_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
 
+// 팩 전체를 Worker 메모리에 올려 unzip하면 128MB 리소스 한도(Error 1102)를 넘긴다.
+// 이 크기를 넘는 팩은 서버에서 파싱하지 않는다. name/minecraft는 meta.json에 이미 있으므로 목록/롤백은 영향 없음.
+const SAFE_UNZIP_BYTES = 96 * 1024 * 1024;
+
+// 사후 sha256 재검증은 팩 전체를 스트리밍 해시한다. 대용량은 Worker 요청당 리소스 한도(메모리 128MB/CPU, Error 1102)를
+// 넘길 수 있어(102MB는 통과·144MB는 실패 관측), 이 크기 이하만 서버에서 재검증하고 그 이상은
+// 클라이언트 업로드 전 sha256 검증 + R2 파트 etag 무결성에 맡긴다.
+const SAFE_HASH_BYTES = 80 * 1024 * 1024;
+
 /** URIError 없이 안전하게 디코딩한다. 잘못된 %-이스케이프는 null로 반환해 400 처리하도록 한다. */
 function safeDecode(s) {
   try {
@@ -80,11 +89,30 @@ export async function handlePacks(request, env) {
   return adminJson({ error: 'Not Found' }, 404);
 }
 
-/** .hyenipack(ZIP) 안의 hyenipack.json을 언집해 로더/게임버전/모드 목록을 노출한다.
- * sidecar latest.json에는 로더/모드 정보가 없어 팩 파일을 직접 파싱해야 한다. */
+/** 버전 상세(로더/게임버전/모드 목록)를 노출한다.
+ * 게시 때 저장한 사이드카 manifest.json이 있으면 그걸 반환(팩을 서버에서 unzip하지 않아 대용량 안전).
+ * 사이드카가 없는 레거시 버전만 소형 팩에 한해 직접 unzip 폴백한다(대용량은 128MB 한도라 413). */
 async function getPackVersionManifest(env, id, ver) {
+  const sidecar = await getJson(env, `modpacks/${id}/versions/${ver}/manifest.json`);
+  if (sidecar) {
+    return adminJson({
+      formatVersion: sidecar.formatVersion ?? null,
+      name: sidecar.name ?? null,
+      minecraft: sidecar.minecraft ?? null,
+      mods: Array.isArray(sidecar.mods) ? sidecar.mods : [],
+    });
+  }
+
   const obj = await env.RELEASES.get(`modpacks/${id}/versions/${ver}/pack.hyenipack`);
   if (!obj) return adminJson({ error: 'Not Found' }, 404);
+  // 사이드카 없는 레거시: 대용량 팩을 arrayBuffer로 올리면 Worker 128MB 한도 초과(Error 1102). 사전 차단.
+  if (obj.size > SAFE_UNZIP_BYTES) {
+    return adminJson({
+      error: '팩이 너무 커서 서버에서 매니페스트(모드 목록)를 파싱할 수 없습니다. 해당 버전을 다시 게시하면 사이드카가 생성되어 조회됩니다.',
+      oversized: true,
+      size: obj.size,
+    }, 413);
+  }
   let manifest;
   try {
     const buf = new Uint8Array(await obj.arrayBuffer());
@@ -119,6 +147,14 @@ async function readPackManifest(env, id, ver) {
   const obj = await env.RELEASES.get(`modpacks/${id}/versions/${ver}/pack.hyenipack`);
   if (!obj) return null;
   return parsePackManifest(await obj.arrayBuffer());
+}
+
+/** readPackManifest의 메모리 안전판: 대용량 팩(>SAFE_UNZIP_BYTES)은 파싱하지 않고 null을 반환한다.
+ * 팩 전체를 arrayBuffer로 올리면 Worker 128MB 한도 초과 → Error 1102(503)가 나므로 head로 먼저 크기를 본다. */
+async function readPackManifestSafe(env, id, ver) {
+  const head = await env.RELEASES.head(`modpacks/${id}/versions/${ver}/pack.hyenipack`);
+  if (!head || head.size > SAFE_UNZIP_BYTES) return null;
+  return readPackManifest(env, id, ver);
 }
 
 /** meta.json 갱신 — name/minecraft는 대상 manifest 기준(없으면 기존/폴백), hidden은 항상 보존. */
@@ -158,15 +194,20 @@ async function listPacks(env) {
   for (const id of ids) {
     const latest = await getJson(env, `modpacks/${id}/latest.json`);
     if (!latest) continue;
-    const manifest = latest.version ? await readPackManifest(env, id, latest.version) : null;
     const meta = await getJson(env, `modpacks/${id}/meta.json`);
+    // minecraft는 meta.json이 정본. meta에 없을 때만(레거시 팩) 팩에서 파싱하되,
+    // 대용량 팩은 readPackManifestSafe가 건너뛴다(128MB 한도 초과 → 목록 전체 503 방지).
+    let minecraft = meta?.minecraft ?? null;
+    if (minecraft == null && latest.version) {
+      minecraft = (await readPackManifestSafe(env, id, latest.version))?.minecraft ?? null;
+    }
     packs.push({
       id,
       name: meta?.name ?? id,
       hidden: !!meta?.hidden,
       latestVersion: latest.version,
       breaking: !!latest.breaking,
-      minecraft: manifest?.minecraft ?? null,
+      minecraft,
     });
   }
   return adminJson({ packs });
@@ -181,6 +222,18 @@ async function listPackVersions(env, id) {
     detailed.push({ version: v, changelog: snap?.changelog || '', breaking: !!snap?.breaking });
   }
   return adminJson({ id, latestVersion: latest?.version || null, versions: detailed });
+}
+
+/** 버전 상세(모드 목록)용 사이드카 manifest.json 저장. 조회 시 팩을 서버에서 unzip하지 않게 한다.
+ * manifest는 해당 버전 팩의 hyenipack.json(단일 경로=서버 파싱, 멀티파트=클라 packMeta). null이면 저장하지 않음. */
+async function writeVersionManifest(env, id, ver, manifest) {
+  if (!manifest || typeof manifest !== 'object') return;
+  await putJson(env, `modpacks/${id}/versions/${ver}/manifest.json`, {
+    formatVersion: manifest.formatVersion ?? null,
+    name: manifest.name ?? null,
+    minecraft: manifest.minecraft ?? null,
+    mods: Array.isArray(manifest.mods) ? manifest.mods : [],
+  });
 }
 
 /** 팩 바이너리가 packKey에 저장된 뒤의 공통 마무리: 스냅샷/조건부 공개 latest/meta.
@@ -232,12 +285,15 @@ async function publishPackVersion(request, env, id) {
   }
 
   await putObject(env, packKey, buffer, 'application/zip');
+  // 이 버전 팩 자체의 매니페스트로 버전 상세용 사이드카를 저장(조회 시 팩 재-unzip 방지).
+  const ownManifest = parsePackManifest(buffer);
+  await writeVersionManifest(env, id, sidecar.version, ownManifest);
   // meta에 넘길 manifest 결정: 상위/동일 버전이면 이번 팩, 레거시(meta 부재) 하위 백필이면 공개 latest 팩.
   const curLatest = await getJson(env, `modpacks/${id}/latest.json`);
   const isNewLatest = !curLatest?.version || compareVersions(sidecar.version, curLatest.version) >= 0;
-  let manifest = parsePackManifest(buffer);
+  let manifest = ownManifest;
   if (!isNewLatest && !(await getJson(env, `modpacks/${id}/meta.json`))) {
-    manifest = (curLatest?.version ? await readPackManifest(env, id, curLatest.version) : null) ?? manifest;
+    manifest = (curLatest?.version ? await readPackManifest(env, id, curLatest.version) : null) ?? ownManifest;
   }
   await finalizePackPublish(env, id, sidecar, manifest);
   return adminJson({ id, version: sidecar.version, sha256: actual }, 201);
@@ -287,9 +343,9 @@ async function packUploadPart(request, env, id) {
   return adminJson({ partNumber: part.partNumber, etag: part.etag });
 }
 
-/** (c) 완료: 파트 병합 → 사후 스트리밍 sha256 검증(불일치 시 삭제+400) → 공통 마무리.
- * manifest(name/minecraft)는 클라이언트가 로컬 zip 파싱으로 동봉한 packMeta를 신뢰한다.
- * 완성 객체(100~150MB)를 Worker 메모리에 올려 unzip하면 128MB 한도 위험이 있어 서버 파싱을 피한다. */
+/** (c) 완료: 파트 병합 → (소형만) 사후 스트리밍 sha256 검증 → 버전 사이드카/공통 마무리.
+ * 대용량 팩은 사후 재해시가 Worker 리소스 한도(1102)를 넘기므로 스킵하고 클라 사전검증+R2 파트 무결성을 신뢰한다.
+ * manifest(name/minecraft/mods)는 클라이언트가 로컬 zip 파싱으로 동봉한 packMeta를 신뢰한다(서버 대용량 unzip 회피). */
 async function packUploadComplete(request, env, id) {
   let body;
   try { body = await request.json(); } catch { return adminJson({ error: 'JSON 본문 필요' }, 400); }
@@ -315,17 +371,28 @@ async function packUploadComplete(request, env, id) {
 
   const obj = await env.RELEASES.get(packKey);
   if (!obj) return adminJson({ error: '완료된 객체를 찾을 수 없습니다.' }, 500);
-  const actual = await streamSha256Hex(obj.body);
-  if (actual !== sidecar.sha256) {
-    await env.RELEASES.delete(packKey);
-    return adminJson({ error: 'sha256 불일치', message: `expected ${sidecar.sha256}, got ${actual}` }, 400);
+  // 소형 팩만 사후 재검증. 대용량은 팩 전체 해시가 Worker 리소스 한도(1102)를 넘기므로 스킵
+  // (클라이언트가 업로드 전 sha256을 검증했고, complete()가 파트 etag로 조립 무결성을 보장한다).
+  // get()은 메타데이터만 받고 body는 소형일 때만 소비하므로 대용량이어도 여기서 안전하다.
+  if (obj.size <= SAFE_HASH_BYTES) {
+    const actual = await streamSha256Hex(obj.body);
+    if (actual !== sidecar.sha256) {
+      await env.RELEASES.delete(packKey);
+      return adminJson({ error: 'sha256 불일치', message: `expected ${sidecar.sha256}, got ${actual}` }, 400);
+    }
   }
 
   const manifest = packMeta && typeof packMeta === 'object'
-    ? { name: packMeta.name ?? null, minecraft: packMeta.minecraft ?? null }
+    ? {
+        formatVersion: packMeta.formatVersion ?? null,
+        name: packMeta.name ?? null,
+        minecraft: packMeta.minecraft ?? null,
+        mods: Array.isArray(packMeta.mods) ? packMeta.mods : [],
+      }
     : null;
+  await writeVersionManifest(env, id, sidecar.version, manifest);
   await finalizePackPublish(env, id, sidecar, manifest);
-  return adminJson({ id, version: sidecar.version, sha256: actual }, 201);
+  return adminJson({ id, version: sidecar.version, sha256: sidecar.sha256 }, 201);
 }
 
 async function rollbackPack(request, env, id) {
@@ -336,7 +403,8 @@ async function rollbackPack(request, env, id) {
   const snap = await getJson(env, `modpacks/${id}/versions/${body.version}/latest.json`);
   if (!snap) return adminJson({ error: 'Not Found' }, 404);
   await putJson(env, `modpacks/${id}/latest.json`, snap);
-  await upsertPackMeta(env, id, await readPackManifest(env, id, body.version));
+  // 롤백 대상 팩이 대용량이면 파싱을 건너뛴다(128MB 한도). 그 경우 name/minecraft는 기존 meta 유지.
+  await upsertPackMeta(env, id, await readPackManifestSafe(env, id, body.version));
   return adminJson({ id, latestVersion: body.version });
 }
 
