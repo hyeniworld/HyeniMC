@@ -56,7 +56,19 @@ export const SettingsPage: React.FC = () => {
   const [currentVersion, setCurrentVersion] = useState('');
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<'checking' | 'available' | 'not-available' | 'error' | null>(null);
+  const [tokens, setTokens] = useState<Array<{ servers: string[]; receivedAt: number }> | null>(null);
+  const [tokensError, setTokensError] = useState(false);
   const s = settings;
+
+  const loadTokens = async () => {
+    try {
+      const list = await (window.electronAPI as any).hyenipack.listTokens();
+      setTokens(Array.isArray(list) ? list : []);
+      setTokensError(false);
+    } catch {
+      setTokensError(true);
+    }
+  };
 
   useEffect(() => {
     (async () => {
@@ -84,6 +96,9 @@ export const SettingsPage: React.FC = () => {
         if (versionResult.success) {
           setCurrentVersion(versionResult.version);
         }
+
+        // 저장된 혜니 인증 토큰 현황(표시 전용) 로드
+        await loadTokens();
       } finally {
         setLoading(false);
       }
@@ -611,6 +626,51 @@ export const SettingsPage: React.FC = () => {
             </div>
           </SectionCard>
         )}
+
+        {/* 혜니 인증 — 저장된 인증 토큰 현황(표시 전용, 토큰 값 미반환) */}
+        <SectionCard
+          title="혜니 인증"
+          subtitle="저장된 인증 토큰의 서버 스코프와 등록 시각입니다. 토큰 값은 표시되지 않습니다."
+          action={
+            <button
+              onClick={loadTokens}
+              className="px-3 py-1.5 text-sm bg-gray-800 border border-gray-700 rounded-md hover:bg-gray-750"
+            >
+              새로고침
+            </button>
+          }
+        >
+          {tokensError ? (
+            <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-4 text-center">
+              <p className="text-sm text-gray-400">확인할 수 없습니다</p>
+            </div>
+          ) : tokens === null ? (
+            <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-4 text-center">
+              <p className="text-sm text-gray-400">불러오는 중...</p>
+            </div>
+          ) : tokens.length === 0 ? (
+            <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-4 text-center">
+              <p className="text-sm text-gray-400">저장된 인증 토큰이 없습니다.</p>
+              <p className="text-xs text-gray-500 mt-1">Discord에서 /인증 명령어로 인증하세요.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="text-sm text-gray-300">인증 토큰 {tokens.length}개 저장됨</div>
+              <div className="space-y-2">
+                {tokens.map((t, i) => (
+                  <div key={i} className="bg-gray-900/50 border border-gray-800 rounded-lg p-3 flex items-center justify-between gap-4">
+                    <div className="text-sm text-gray-200 min-w-0 truncate">
+                      {t.servers.length > 0 ? t.servers.join(', ') : '(서버 스코프 없음)'}
+                    </div>
+                    <div className="text-xs text-gray-500 flex-shrink-0">
+                      {new Date(t.receivedAt * 1000).toLocaleString()}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </SectionCard>
 
         {/* Sticky action bar for small screens */}
         <div className="md:hidden sticky bottom-0 left-0 right-0 bg-gray-900/90 backdrop-blur border-t border-gray-800 px-4 py-3 flex gap-2">

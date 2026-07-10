@@ -135,6 +135,28 @@ pub fn hyeni_has_any_token(db: State<'_, DbState>) -> Result<bool, String> {
     Ok(hyenimc_core::hyeni_tokens::any_token(&conn).map_err(|e| e.to_string())?.is_some())
 }
 
+/// 저장된 인증 토큰 현황(표시 전용) — 토큰 값은 반환하지 않는다.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoredTokenInfo {
+    pub servers: Vec<String>,
+    pub received_at: i64,
+}
+
+/// 저장된 인증 토큰 현황(표시 전용) — 토큰 값은 반환하지 않는다.
+#[tauri::command]
+pub fn hyeni_list_tokens(db: State<'_, DbState>) -> Result<Vec<StoredTokenInfo>, String> {
+    let conn = db.0.lock().unwrap();
+    let tokens = hyenimc_core::hyeni_tokens::list_tokens(&conn).map_err(|e| e.to_string())?;
+    Ok(tokens
+        .into_iter()
+        .map(|t| StoredTokenInfo {
+            servers: t.servers,
+            received_at: t.received_at,
+        })
+        .collect())
+}
+
 /// 팩 미리보기 — 설치 없이 매니페스트만 읽기 (preload hyenipack.preview 대응)
 #[tauri::command]
 pub fn hyenipack_preview(file_path: String) -> Result<hyenipack::PackManifest, String> {
