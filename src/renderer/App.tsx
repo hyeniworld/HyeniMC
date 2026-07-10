@@ -85,7 +85,6 @@ function MainLayout() {
   useEffect(() => {
     // Auth success
     const unsubSuccess = window.electronAPI.on('auth:success', (data: any) => {
-      console.log('[App] Auth success:', data);
       if (data?.profileCount === 0) {
         // 프로필 0개(신규 온보딩) — 자동 업데이트할 프로필이 없으므로 거짓 안내를 피한다.
         toast.success('인증 완료', '인증되었습니다. 혜니팩 설치 시 자동 적용됩니다.');

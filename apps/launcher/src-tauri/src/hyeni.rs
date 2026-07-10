@@ -159,11 +159,12 @@ pub fn handle_deep_link(app: &AppHandle, url: &str) {
                 } else {
                     servers.join(", ")
                 };
+                // 토큰 원문은 렌더러로 보내지 않는다(방송 중 devtools 콘솔 노출 방지).
+                // 렌더러 소비처(App.tsx)는 servers/profileCount만 사용.
                 let _ = app.emit(
                     "auth:success",
                     serde_json::json!({
                         "servers": server_message,
-                        "token": token,
                         "profileCount": count,
                         "profileNames": names,
                     }),
