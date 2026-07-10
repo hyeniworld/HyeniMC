@@ -442,6 +442,7 @@ const OverviewTab: React.FC<{ profile: any; onReload: () => void; isRunning: boo
     profilePath,
     gameVersion: profile?.gameVersion || '',
     loaderType: profile?.loaderType || '',
+    loaderVersion: profile?.loaderVersion || '',
     serverAddress: profile?.serverAddress,
     autoCheck: true,
     checkInterval: 30 * 60 * 1000 // 30 minutes

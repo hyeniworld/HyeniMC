@@ -10,6 +10,7 @@ interface UseWorkerModUpdatesOptions {
   profilePath: string;
   gameVersion: string;
   loaderType: string;
+  loaderVersion: string;
   serverAddress?: string;
   autoCheck?: boolean;
   checkInterval?: number; // in milliseconds
@@ -19,6 +20,7 @@ export function useWorkerModUpdates({
   profilePath,
   gameVersion,
   loaderType,
+  loaderVersion,
   serverAddress,
   autoCheck = true,
   checkInterval = 30 * 60 * 1000 // 30 minutes
@@ -46,6 +48,7 @@ export function useWorkerModUpdates({
         profilePath,
         gameVersion,
         loaderType,
+        loaderVersion,
         serverAddress
       );
 
@@ -62,7 +65,7 @@ export function useWorkerModUpdates({
     } finally {
       setIsChecking(false);
     }
-  }, [profilePath, gameVersion, loaderType, serverAddress]);
+  }, [profilePath, gameVersion, loaderType, loaderVersion, serverAddress]);
 
   // Update ref whenever checkForUpdates changes
   useEffect(() => {

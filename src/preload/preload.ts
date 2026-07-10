@@ -260,7 +260,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Worker Mods APIs (Multi-Mod Updates)
   workerMods: {
-    checkUpdates: (profilePath: string, gameVersion: string, loaderType: string, serverAddress?: string): Promise<any[]> =>
+    checkUpdates: (profilePath: string, gameVersion: string, loaderType: string, _loaderVersion: string, serverAddress?: string): Promise<any[]> =>
+      // Electron 백엔드(worker-mods.ts)는 loaderVersion을 사용하지 않으므로 위치 인자를 흡수만 하고 전달하지 않는다(serverAddress 정합 유지).
       ipcRenderer.invoke(IPC_CHANNELS.WORKER_MODS_CHECK_UPDATES, profilePath, gameVersion, loaderType, serverAddress),
     
     installMultiple: (profilePath: string, updates: any[]): Promise<any[]> =>

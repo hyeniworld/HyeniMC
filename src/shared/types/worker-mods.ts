@@ -75,6 +75,8 @@ export interface WorkerModUpdateCheck {
   changelog: string;
   gameVersion: string;
   loader: string;
+  /** 이 업데이트가 로더 버전 변경을 요구하면 대상 로더 버전(없으면 변경 불필요) */
+  requiredLoaderVersion?: string | null;
 }
 
 // Install Progress
