@@ -47,6 +47,17 @@ export async function handlePacks(request, env) {
     return await setPackVisibility(request, env, id);
   }
 
+  // 대용량 팩 멀티파트 업로드(Worker 본문 한도 회피). 액션 세그먼트가 리터럴이라 버전 라우트와 disjoint.
+  const upM = path.match(/^\/admin\/api\/modpacks\/([^/]+)\/versions\/(upload-init|upload-part|upload-complete)$/);
+  if (upM) {
+    const id = safeDecode(upM[1]);
+    if (id === null || !PACK_ID_PATTERN.test(id)) return adminJson({ error: 'Invalid modpack id' }, 400);
+    const action = upM[2];
+    if (action === 'upload-init' && method === 'POST') return await packUploadInit(request, env, id);
+    if (action === 'upload-part' && method === 'PUT') return await packUploadPart(request, env, id);
+    if (action === 'upload-complete' && method === 'POST') return await packUploadComplete(request, env, id);
+  }
+
   const manM = path.match(/^\/admin\/api\/modpacks\/([^/]+)\/versions\/([^/]+)\/manifest$/);
   if (manM && method === 'GET') {
     const id = safeDecode(manM[1]);
@@ -172,6 +183,22 @@ async function listPackVersions(env, id) {
   return adminJson({ id, latestVersion: latest?.version || null, versions: detailed });
 }
 
+/** 팩 바이너리가 packKey에 저장된 뒤의 공통 마무리: 스냅샷/조건부 공개 latest/meta.
+ * manifest는 이미 파싱된 것을 받는다(null 허용 — 그 경우 meta는 기존/폴백 유지). */
+async function finalizePackPublish(env, id, sidecar, manifest) {
+  await putJson(env, `modpacks/${id}/versions/${sidecar.version}/latest.json`, sidecar);
+  // 공개 latest(쿼리 미지정 구 클라이언트용 폴백)는 더 높거나 같은 버전일 때만 갱신.
+  // 같은 버전(overwrite)은 내용 새로고침을 위해 갱신, 낮은 버전(백필)은 유지.
+  const curLatest = await getJson(env, `modpacks/${id}/latest.json`);
+  const isNewLatest = !curLatest?.version || compareVersions(sidecar.version, curLatest.version) >= 0;
+  if (isNewLatest) {
+    await putJson(env, `modpacks/${id}/latest.json`, sidecar);
+  }
+  if (isNewLatest || !(await getJson(env, `modpacks/${id}/meta.json`))) {
+    await upsertPackMeta(env, id, manifest);
+  }
+}
+
 async function publishPackVersion(request, env, id) {
   let form;
   try { form = await request.formData(); } catch { return adminJson({ error: 'multipart 본문 필요' }, 400); }
@@ -205,23 +232,99 @@ async function publishPackVersion(request, env, id) {
   }
 
   await putObject(env, packKey, buffer, 'application/zip');
-  await putJson(env, `modpacks/${id}/versions/${sidecar.version}/latest.json`, sidecar);
-  // 공개 latest(쿼리 미지정 구 클라이언트용 폴백)는 더 높거나 같은 버전일 때만 갱신.
-  // 같은 버전(overwrite)은 내용 새로고침을 위해 갱신, 낮은 버전(백필)은 유지.
+  // meta에 넘길 manifest 결정: 상위/동일 버전이면 이번 팩, 레거시(meta 부재) 하위 백필이면 공개 latest 팩.
   const curLatest = await getJson(env, `modpacks/${id}/latest.json`);
   const isNewLatest = !curLatest?.version || compareVersions(sidecar.version, curLatest.version) >= 0;
-  if (isNewLatest) {
-    await putJson(env, `modpacks/${id}/latest.json`, sidecar);
+  let manifest = parsePackManifest(buffer);
+  if (!isNewLatest && !(await getJson(env, `modpacks/${id}/meta.json`))) {
+    manifest = (curLatest?.version ? await readPackManifest(env, id, curLatest.version) : null) ?? manifest;
   }
-  if (isNewLatest) {
-    await upsertPackMeta(env, id, parsePackManifest(buffer));
-  } else if (!(await getJson(env, `modpacks/${id}/meta.json`))) {
-    // 레거시 팩(meta 없음)에 하위 버전 백필: meta는 공개 latest 기준으로 시딩
-    const latestManifest = curLatest?.version
-      ? await readPackManifest(env, id, curLatest.version)
-      : null;
-    await upsertPackMeta(env, id, latestManifest ?? parsePackManifest(buffer));
+  await finalizePackPublish(env, id, sidecar, manifest);
+  return adminJson({ id, version: sidecar.version, sha256: actual }, 201);
+}
+
+const SHA256_HEX = /^[0-9a-f]{64}$/;
+
+/** R2 스트림을 메모리에 전부 올리지 않고 SHA-256 hex를 계산한다(128MB Worker 한도 회피). */
+async function streamSha256Hex(stream) {
+  const digestStream = new crypto.DigestStream('SHA-256');
+  await stream.pipeTo(digestStream);
+  const digest = await digestStream.digest;
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** (a) 멀티파트 업로드 시작: 버전/sha256 검증 + overwrite 아니면 중복 409 → uploadId 발급. */
+async function packUploadInit(request, env, id) {
+  let body;
+  try { body = await request.json(); } catch { return adminJson({ error: 'JSON 본문 필요' }, 400); }
+  if (!VERSION_PATTERN.test(body.version || '')) return adminJson({ error: '버전 형식은 x.y.z' }, 400);
+  if (!SHA256_HEX.test(body.sha256 || '')) return adminJson({ error: 'sha256(64자리 hex)이 필요합니다.' }, 400);
+
+  const packKey = `modpacks/${id}/versions/${body.version}/pack.hyenipack`;
+  if (body.overwrite !== true && await objectExists(env, packKey)) {
+    return adminJson({ error: '이미 존재하는 버전입니다.' }, 409);
   }
+  const upload = await env.RELEASES.createMultipartUpload(packKey);
+  return adminJson({ uploadId: upload.uploadId, key: packKey });
+}
+
+/** (b) 파트 업로드: raw 바이너리 본문을 스트림으로 uploadPart에 전달(<100MB, 메모리 회피). */
+async function packUploadPart(request, env, id) {
+  const params = new URL(request.url).searchParams;
+  const uploadId = params.get('uploadId');
+  const version = params.get('version');
+  const partNumber = Number(params.get('part'));
+  if (!uploadId) return adminJson({ error: 'uploadId가 필요합니다.' }, 400);
+  if (!VERSION_PATTERN.test(version || '')) return adminJson({ error: '버전 형식은 x.y.z' }, 400);
+  if (!Number.isInteger(partNumber) || partNumber < 1 || partNumber > 10000) {
+    return adminJson({ error: 'part는 1~10000 정수여야 합니다.' }, 400);
+  }
+  if (!request.body) return adminJson({ error: '본문(바이너리)이 필요합니다.' }, 400);
+
+  const packKey = `modpacks/${id}/versions/${version}/pack.hyenipack`;
+  const upload = env.RELEASES.resumeMultipartUpload(packKey, uploadId);
+  const part = await upload.uploadPart(partNumber, request.body);
+  return adminJson({ partNumber: part.partNumber, etag: part.etag });
+}
+
+/** (c) 완료: 파트 병합 → 사후 스트리밍 sha256 검증(불일치 시 삭제+400) → 공통 마무리.
+ * manifest(name/minecraft)는 클라이언트가 로컬 zip 파싱으로 동봉한 packMeta를 신뢰한다.
+ * 완성 객체(100~150MB)를 Worker 메모리에 올려 unzip하면 128MB 한도 위험이 있어 서버 파싱을 피한다. */
+async function packUploadComplete(request, env, id) {
+  let body;
+  try { body = await request.json(); } catch { return adminJson({ error: 'JSON 본문 필요' }, 400); }
+  const { uploadId, parts, latest: sidecar, packMeta } = body;
+
+  if (!uploadId) return adminJson({ error: 'uploadId가 필요합니다.' }, 400);
+  if (!Array.isArray(parts) || parts.length === 0 ||
+      !parts.every((p) => Number.isInteger(p?.partNumber) && typeof p?.etag === 'string')) {
+    return adminJson({ error: 'parts 배열(partNumber/etag)이 필요합니다.' }, 400);
+  }
+  if (!sidecar || typeof sidecar !== 'object') return adminJson({ error: 'latest(사이드카)가 필요합니다.' }, 400);
+  if (sidecar.hyenipackId !== id) return adminJson({ error: 'hyenipackId가 경로와 불일치합니다.' }, 400);
+  if (!VERSION_PATTERN.test(sidecar.version || '')) return adminJson({ error: '버전 형식은 x.y.z' }, 400);
+  if (!SHA256_HEX.test(sidecar.sha256 || '')) return adminJson({ error: 'sha256(64자리 hex)이 필요합니다.' }, 400);
+
+  const packKey = `modpacks/${id}/versions/${sidecar.version}/pack.hyenipack`;
+  const upload = env.RELEASES.resumeMultipartUpload(packKey, uploadId);
+  try {
+    await upload.complete(parts);
+  } catch (e) {
+    return adminJson({ error: '멀티파트 완료 실패', message: e.message }, 400);
+  }
+
+  const obj = await env.RELEASES.get(packKey);
+  if (!obj) return adminJson({ error: '완료된 객체를 찾을 수 없습니다.' }, 500);
+  const actual = await streamSha256Hex(obj.body);
+  if (actual !== sidecar.sha256) {
+    await env.RELEASES.delete(packKey);
+    return adminJson({ error: 'sha256 불일치', message: `expected ${sidecar.sha256}, got ${actual}` }, 400);
+  }
+
+  const manifest = packMeta && typeof packMeta === 'object'
+    ? { name: packMeta.name ?? null, minecraft: packMeta.minecraft ?? null }
+    : null;
+  await finalizePackPublish(env, id, sidecar, manifest);
   return adminJson({ id, version: sidecar.version, sha256: actual }, 201);
 }
 
