@@ -48,6 +48,11 @@ export const WorkerModUpdatePanel: React.FC<WorkerModUpdatePanelProps> = ({
     [updates]
   );
 
+  const loaderChange = useMemo(
+    () => updates.find(u => u.requiredLoaderVersion)?.requiredLoaderVersion ?? null,
+    [updates]
+  );
+
   const toggleMod = (modId: string) => {
     setSelectedMods(prev => {
       const next = new Set(prev);
@@ -90,9 +95,14 @@ export const WorkerModUpdatePanel: React.FC<WorkerModUpdatePanelProps> = ({
           <p className="text-sm text-gray-400 mt-1">
             {installedUpdates.length > 0 && `${installedUpdates.length}개 업데이트`}
             {installedUpdates.length > 0 && (newRequiredMods.length + newOptionalMods.length) > 0 && ', '}
-            {(newRequiredMods.length + newOptionalMods.length) > 0 && 
+            {(newRequiredMods.length + newOptionalMods.length) > 0 &&
               `${newRequiredMods.length + newOptionalMods.length}개 신규`}
           </p>
+          {loaderChange && (
+            <p className="text-sm text-amber-300 mt-1 flex items-center gap-1">
+              🔧 모드 로더도 함께 업데이트됩니다 <span className="font-mono">(→ {loaderChange})</span>
+            </p>
+          )}
         </div>
         
         <div className="flex items-center gap-2">
