@@ -8,12 +8,13 @@ interface Version { version: string; changelog: string; breaking: boolean; }
 interface PackMod { fileName: string; url?: string; sha256?: string; source?: string; projectId?: string; metadata?: { source?: string; projectId?: string; version?: string }; }
 interface PackManifest { formatVersion: number | null; name: string | null; minecraft: { version: string; loaderType: string; loaderVersion: string } | null; mods: PackMod[]; }
 
-export function PackVersions({ packId, onToast, onChanged }: {
-  packId: string; onToast: (m: string, k?: 'ok' | 'err') => void; onChanged: () => void;
+export function PackVersions({ packId, name, hidden, onToast, onChanged }: {
+  packId: string; name?: string; hidden: boolean; onToast: (m: string, k?: 'ok' | 'err') => void; onChanged: () => void;
 }) {
   const [latest, setLatest] = useState<string | null>(null);
   const [versions, setVersions] = useState<Version[]>([]);
   const [confirm, setConfirm] = useState<{ msg: string; act: () => void } | null>(null);
+  const [visConfirm, setVisConfirm] = useState(false);
   const [editing, setEditing] = useState<Version | null>(null);
   const [form, setForm] = useState({ changelog: '', breaking: false });
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -44,6 +45,14 @@ export function PackVersions({ packId, onToast, onChanged }: {
     catch (e: any) { onToast(e.message, 'err'); }
   }
 
+  async function doSetVisibility(next: boolean) {
+    try {
+      await api.setPackVisibility(packId, next);
+      onToast(next ? '비공개로 전환됨 — 목록·조회·다운로드 차단' : '공개로 전환됨');
+      onChanged();
+    } catch (e: any) { onToast(e.message, 'err'); }
+  }
+
   function openEdit(v: Version) {
     setForm({ changelog: v.changelog, breaking: v.breaking });
     setEditing(v);
@@ -63,8 +72,16 @@ export function PackVersions({ packId, onToast, onChanged }: {
   return (
     <div class="panel">
       <div class="panel-head">
-        <h3 class="panel-title mono">{packId}</h3>
-        <span class="panel-sub">현재 latest: {latest ? <span class="mono">{latest}</span> : '없음'}</span>
+        <div>
+          <h3 class="panel-title">{name || packId}{hidden && <span class="badge badge-hidden"> 비공개</span>}</h3>
+          <span class="panel-id mono">packId: {packId}</span>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-sm" onClick={() => hidden ? doSetVisibility(false) : setVisConfirm(true)}>
+            {hidden ? '공개로 전환' : '비공개로 전환'}
+          </button>
+          <span class="panel-sub">현재 latest: {latest ? <span class="mono">{latest}</span> : '없음'}</span>
+        </div>
       </div>
       <div class="notice">latest 버전은 삭제할 수 없어요. 다른 버전을 latest로 지정한 뒤 삭제하세요.</div>
       <table class="vtable">
@@ -138,6 +155,10 @@ export function PackVersions({ packId, onToast, onChanged }: {
       <ConfirmDialog open={!!confirm} message={confirm?.msg ?? ''}
         onCancel={() => setConfirm(null)}
         onConfirm={() => { confirm?.act(); setConfirm(null); }} />
+      <ConfirmDialog open={visConfirm}
+        message={`${name || packId}을(를) 비공개로 전환할까요?\n\n목록·조회·다운로드가 모두 차단됩니다. 이미 설치한 사용자는 게임 실행은 되고 업데이트만 멈춥니다.`}
+        onCancel={() => setVisConfirm(false)}
+        onConfirm={() => { doSetVisibility(true); setVisConfirm(false); }} />
       <Modal open={!!editing} title={<>버전 편집 <span class="mono">{editing?.version}</span></>} onClose={() => setEditing(null)}>
         <div class="dialog-body">
           <label class="field"><span>changelog</span>

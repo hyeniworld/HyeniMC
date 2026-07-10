@@ -7,6 +7,8 @@ import { sortVersions } from '../lib/versions';
 
 interface Pack {
   id: string;
+  name: string;
+  hidden: boolean;
   latestVersion: string;
   breaking: boolean;
   minecraft: { version: string; loaderType: string; loaderVersion: string } | null;
@@ -36,6 +38,7 @@ export function PacksView({ onToast }: { onToast: (m: string, k?: 'ok' | 'err') 
     return (!fMc || mc?.version === fMc) && (!fLoader || mc?.loaderType === fLoader) && (!fLoaderVer || mc?.loaderVersion === fLoaderVer);
   }
   const filteredPacks = packs.filter(matchesPack);
+  const sel = packs.find((p) => p.id === selected);
 
   return (
     <div class="workspace">
@@ -65,8 +68,8 @@ export function PacksView({ onToast }: { onToast: (m: string, k?: 'ok' | 'err') 
             <li key={p.id}>
               <button class={`rail-item ${p.id === selected ? 'is-active' : ''}`}
                 onClick={() => setSelected(p.id)}>
-                <span class="rail-name">{p.id}</span>
-                <span class="rail-id">v{p.latestVersion}{p.breaking ? ' · breaking' : ''}</span>
+                <span class="rail-name">{p.name}{p.hidden && <span class="badge badge-hidden"> 비공개</span>}</span>
+                <span class="rail-id">{p.id} · v{p.latestVersion}{p.breaking ? ' · breaking' : ''}</span>
               </button>
             </li>
           ))}
@@ -74,7 +77,8 @@ export function PacksView({ onToast }: { onToast: (m: string, k?: 'ok' | 'err') 
       </aside>
       <div class="main">
         {selected
-          ? <PackVersions packId={selected} onToast={onToast} onChanged={() => setRefreshKey((k) => k + 1)} />
+          ? <PackVersions packId={selected} name={sel?.name} hidden={sel?.hidden ?? false}
+              onToast={onToast} onChanged={() => setRefreshKey((k) => k + 1)} />
           : <div class="panel"><p class="panel-placeholder">왼쪽에서 혜니팩을 선택하세요.</p></div>}
       </div>
       <Modal open={publishOpen} title="새 혜니팩 게시" onClose={() => setPublishOpen(false)}>

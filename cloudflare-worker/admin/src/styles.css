@@ -107,6 +107,7 @@ body {
 .badge-latest { background: var(--accent-soft); color: var(--accent-hover); }
 .badge-breaking { background: var(--warn-soft); color: var(--warn); }
 .badge-cat { background: #eef1f5; color: var(--text-muted); }
+.badge-hidden { background: #e7e9ee; color: var(--text-faint); }
 
 /* ---------- version table ---------- */
 .vtable { width: 100%; border-collapse: collapse; table-layout: fixed; }

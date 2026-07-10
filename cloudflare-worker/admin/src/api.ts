@@ -46,6 +46,8 @@ export const editPackVersion = (id: string, ver: string, patch: object) =>
   req(`/modpacks/${id}/versions/${ver}`, json('PATCH', patch));
 export const deletePackVersion = (id: string, ver: string) =>
   req(`/modpacks/${id}/versions/${ver}`, { method: 'DELETE' });
+export const setPackVisibility = (id: string, hidden: boolean) =>
+  req(`/modpacks/${id}/visibility`, json('PATCH', { hidden }));
 
 // registry
 export const rebuildRegistry = () => req('/registry/rebuild', { method: 'POST' });
