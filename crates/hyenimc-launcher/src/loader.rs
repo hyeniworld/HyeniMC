@@ -158,7 +158,11 @@ pub async fn installable_loader_versions(
             .into_iter()
             .filter(|v| neoforge_matches_mc(v, mc_version) && !(v.contains("beta") || v.contains("alpha")))
             .collect()),
-        "forge" => forge_versions(http, mc_version).await, // 이미 mc 필터·전체 형식(라벨 없음)
+        "forge" => Ok(forge_versions(http, mc_version)
+            .await?
+            .into_iter()
+            .filter(|v| !(v.contains("beta") || v.contains("rc"))) // game.rs loader_get_versions와 동일
+            .collect()),
         _ => Ok(Vec::new()),
     }
 }
