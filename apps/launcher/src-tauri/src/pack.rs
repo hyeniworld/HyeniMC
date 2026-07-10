@@ -1,4 +1,5 @@
-//! 혜니팩 커맨드 (M4b) — import / 업데이트 체크 / 업데이트 적용.
+//! 혜니팩 커맨드 (M4b) — import / 업데이트 체크 / 설치 메타 조회.
+//! 업데이트 적용은 렌더러가 download(pack_download_from_worker) + import를 조합한다.
 
 use std::path::PathBuf;
 
@@ -177,59 +178,16 @@ pub async fn pack_check_update(
         .map_err(|e| e.to_string())
 }
 
-/// 팩 업데이트 적용 — 최신 버전 다운로드 후 재설치(동일 sync 로직).
+/// 현재 프로필에 설치된 팩 메타(없으면 null). 팩 프로필 여부 판별 + 현재 버전 표시용.
+/// `PackInstallMeta`는 이미 camelCase(hyenipackId, version)로 직렬화되므로 그대로 반환한다.
 #[tauri::command]
-pub async fn pack_apply_update(
-    app: AppHandle,
+pub fn pack_get_installed(
     db: State<'_, DbState>,
-    crypto: State<'_, CryptoState>,
     profile_id: String,
-    account_id: Option<String>,
-) -> Result<(), String> {
+) -> Result<Option<hyenipack::PackInstallMeta>, String> {
     let profile = load_profile_pub(&db, &profile_id)?;
     let dirs = game_dirs_for(&profile)?;
-    let http = reqwest::Client::new();
-
-    let update = hyenipack::check_pack_update(&http, &worker_base()?, &dirs.instance_dir)
-        .await
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "적용할 업데이트가 없습니다".to_string())?;
-
-    // 다운로드 인증: 프로필 config 토큰 → 저장소 폴백 (MS 토큰 오이식 교정 — 워커는 /인증 토큰만 검증)
-    let token = resolve_download_token(&db, Some(&dirs.instance_dir)).ok_or_else(|| {
-        "팩 다운로드를 위한 인증이 필요합니다.\n\nDiscord에서 /인증 명령어로 인증하세요.".to_string()
-    })?;
-
-    let temp = dirs.instance_dir.join(".temp").join(format!(
-        "{}-{}.hyenipack",
-        update.hyenipack_id, update.latest_version
-    ));
-    // 업데이트 경로는 진행 표시 없음(no-op 콜백) — 추후 필요 시 진행 이벤트를 연결.
-    hyenipack::download_pack_version(
-        &http,
-        &worker_base()?,
-        &update.hyenipack_id,
-        &update.latest_version,
-        &token,
-        &temp,
-        |_, _| {},
-    )
-    .await
-    .map_err(|e| e.to_string())?;
-
-    // 재사용: import 흐름 (account_id는 hyenipack_import 내부 CF 프록시용으로 계속 전달)
-    let import_result = hyenipack_import(
-        app,
-        db,
-        profile_id,
-        temp.display().to_string(),
-        account_id,
-        crypto,
-    )
-    .await;
-    let _ = std::fs::remove_file(&temp);
-    import_result?;
-    Ok(())
+    Ok(hyenipack::read_pack_meta(&dirs.instance_dir))
 }
 
 /// 공개 혜니팩 목록(토큰 불필요).

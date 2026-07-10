@@ -10,6 +10,7 @@ import { ConfirmModal } from '../components/common/ConfirmModal';
 import { isCreatorMode } from '../utils/appMode';
 import { errorText } from '../utils/errorText';
 import { WorkerModUpdatePanel } from '../components/worker-mods/WorkerModUpdatePanel';
+import { HyeniPackSection } from '../components/hyeni/HyeniPackSection';
 import { useWorkerModUpdates } from '../hooks/useWorkerModUpdates';
 import { useDownloadStore } from '../store/downloadStore';
 import { useToast } from '../contexts/ToastContext';
@@ -413,6 +414,7 @@ export const ProfileDetailPage: React.FC = () => {
 const OverviewTab: React.FC<{ profile: any; onReload: () => void; isRunning: boolean }> = ({ profile, onReload, isRunning }) => {
   const toast = useToast();
   const navigate = useNavigate();
+  const { selectedAccountId } = useAccount();
   const [profilePath, setProfilePath] = useState<string>('');
   const [showExportModal, setShowExportModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -523,6 +525,15 @@ const OverviewTab: React.FC<{ profile: any; onReload: () => void; isRunning: boo
 
   return (
     <div className="p-6 space-y-4">
+      {/* 혜니팩 섹션 — 팩 프로필일 때만 렌더(온라인 배너 + 파일 업데이트) */}
+      {profile?.id && (
+        <HyeniPackSection
+          profileId={profile.id}
+          accountId={selectedAccountId ?? undefined}
+          onUpdated={onReload}
+        />
+      )}
+
       {/* Worker Mods Update Panel (Multi-Mod System) */}
       {profilePath && hasWorkerModUpdates && (
         <WorkerModUpdatePanel

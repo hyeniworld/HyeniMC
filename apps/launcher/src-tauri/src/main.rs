@@ -144,7 +144,7 @@ fn main() {
             pack::hyeni_list_tokens,
             pack::hyenipack_preview,
             pack::pack_check_update,
-            pack::pack_apply_update,
+            pack::pack_get_installed,
             pack::pack_list_available,
             pack::pack_download_from_worker,
             pack::hyeni_apply_matching_token,

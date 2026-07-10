@@ -3,7 +3,8 @@ import { FileArchive, Loader2, Package, Cpu } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { errorText } from '../../utils/errorText';
 import { useAccount } from '../../App';
-import { setHyeniPackBusy } from '../../utils/hyeniPackBusy';
+import { downloadPack, applyPackFile, type ImportProgress } from '../../lib/packApply';
+import { PackApplyProgress } from '../hyeni/PackApplyProgress';
 
 interface HyeniPackImportTabProps {
   onSuccess: () => void;
@@ -44,7 +45,7 @@ export function HyeniPackImportTab({ onSuccess, onImportingChange, initialPackId
   const [name, setName] = useState('');
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [progress, setProgress] = useState<{ completed: number; total: number; percent: number; stage: string } | null>(null);
+  const [progress, setProgress] = useState<ImportProgress | null>(null);
   const [downloadPct, setDownloadPct] = useState<number | null>(null); // 다운로드 단계 진행률(null=미진행)
   const [onlinePacks, setOnlinePacks] = useState<OnlinePack[] | null>(null); // null=로딩/실패
   const [onlineError, setOnlineError] = useState<string | null>(null);
@@ -81,8 +82,8 @@ export function HyeniPackImportTab({ onSuccess, onImportingChange, initialPackId
   });
 
   const setImportingState = (v: boolean) => {
+    // busy 플래그(B-5)는 applyPackFile 유틸이 설치 구간에서 세팅한다(탭·섹션 공통). 여기서는 중복 세팅하지 않는다.
     setImporting(v);
-    setHyeniPackBusy(v);
     onImportingChange?.(v);
   };
 
@@ -92,8 +93,6 @@ export function HyeniPackImportTab({ onSuccess, onImportingChange, initialPackId
     setError(null);
     setProgress(null);
     setDownloadPct(null);
-    let unlistenDl: (() => void) | undefined;
-    let unlisten: (() => void) | undefined;
     let downloadedPath: string | undefined;
     try {
       const hasToken = await window.electronAPI.hyenipack.hasAnyToken();
@@ -103,17 +102,9 @@ export function HyeniPackImportTab({ onSuccess, onImportingChange, initialPackId
         return;
       }
 
-      // 1) 워커에서 .hyenipack 다운로드 (진행 이벤트 구독)
-      setDownloadPct(0);
-      unlistenDl = window.electronAPI.on('hyenipack:download-progress', (raw: unknown) => {
-        const d = raw as { packId?: string; percent?: number };
-        if (d?.packId && d.packId !== selectedPack.id) return;
-        setDownloadPct(d?.percent ?? 0);
-      });
-      const dl = await window.electronAPI.hyenipack.downloadFromWorker(selectedPack.id);
+      // 1) 워커에서 .hyenipack 다운로드 (진행 이벤트 구독은 유틸 내부)
+      const dl = await downloadPack(selectedPack.id, setDownloadPct);
       downloadedPath = dl.path;
-      unlistenDl?.();
-      unlistenDl = undefined;
       setDownloadPct(null);
 
       // 2) 실물 매니페스트로 프로필 생성 (팩 목록 메타가 아닌 다운로드된 파일 기준)
@@ -130,22 +121,13 @@ export function HyeniPackImportTab({ onSuccess, onImportingChange, initialPackId
         loaderVersion: mc.loaderVersion || '',
       });
 
-      // 3) 기존 import 흐름 재사용 (모드 설치 진행 — profileId 필터)
-      unlisten = window.electronAPI.on('hyenipack:import-progress', (raw: unknown) => {
-        const data = raw as { profileId?: string; completed?: number; total?: number; percent?: number; stage?: string };
-        if (data?.profileId && data.profileId !== profile.id) return;
-        setProgress({
-          completed: data?.completed ?? 0,
-          total: data?.total ?? 0,
-          percent: data?.percent ?? 0,
-          stage: data?.stage ?? 'mods',
-        });
+      // 3) 기존 import 흐름 재사용 (모드 설치 진행 — profileId 필터, busy 세팅은 유틸 내부)
+      await applyPackFile({
+        profileId: profile.id,
+        filePath: downloadedPath,
+        accountId: selectedAccountId,
+        onProgress: setProgress,
       });
-      const result = await window.electronAPI.hyenipack.import(downloadedPath, profile.id, selectedAccountId);
-      if (!result.success) {
-        setError(errorText(result.error, '혜니팩 설치에 실패했습니다.'));
-        return;
-      }
 
       // 4) 서버 토큰 자동 적용 — 기록 실패(예외 포함)는 설치 성공을 막지 않고 /인증 안내로 강등
       let applied = false;
@@ -160,8 +142,6 @@ export function HyeniPackImportTab({ onSuccess, onImportingChange, initialPackId
     } catch (e) {
       setError(errorText(e, '혜니팩 설치에 실패했습니다.'));
     } finally {
-      unlistenDl?.();
-      unlisten?.();
       if (downloadedPath) {
         // temp 정리 실패는 무시(다음 실행/정리에서 처리)
         try { await window.electronAPI.hyenipack.removeTempFile(downloadedPath); } catch { /* noop */ }
@@ -199,7 +179,6 @@ export function HyeniPackImportTab({ onSuccess, onImportingChange, initialPackId
     setImportingState(true);
     setError(null);
     setProgress(null);
-    let unlisten: (() => void) | undefined;
     try {
       // 팩 메타 기준으로 프로필 생성 후 혜니팩 import(모드 설치)
       const profile = await window.electronAPI.profile.create({
@@ -208,45 +187,22 @@ export function HyeniPackImportTab({ onSuccess, onImportingChange, initialPackId
         loaderType: manifest.minecraft.loaderType,
         loaderVersion: manifest.minecraft.loaderVersion || '',
       });
-      // 이 프로필의 설치 진행률만 인라인으로 구독(전역 다운로드 모달 대신)
-      unlisten = window.electronAPI.on('hyenipack:import-progress', (raw: unknown) => {
-        const data = raw as { profileId?: string; completed?: number; total?: number; percent?: number; stage?: string };
-        if (data?.profileId && data.profileId !== profile.id) return;
-        setProgress({
-          completed: data?.completed ?? 0,
-          total: data?.total ?? 0,
-          percent: data?.percent ?? 0,
-          stage: data?.stage ?? 'mods',
-        });
-      });
-      const result = await window.electronAPI.hyenipack.import(
+      // 이 프로필의 설치 진행률만 인라인으로 구독(전역 다운로드 모달 대신) — 유틸 재사용
+      await applyPackFile({
+        profileId: profile.id,
         filePath,
-        profile.id,
-        selectedAccountId
-      );
-      if (result.success) {
-        toast.success('혜니팩 설치 완료', `${name} 프로필이 생성되었습니다.`);
-        onSuccess();
-      } else {
-        setError(errorText(result.error, '혜니팩 설치에 실패했습니다.'));
-      }
+        accountId: selectedAccountId,
+        onProgress: setProgress,
+      });
+      toast.success('혜니팩 설치 완료', `${name} 프로필이 생성되었습니다.`);
+      onSuccess();
     } catch (e) {
       setError(errorText(e, '프로필 생성에 실패했습니다.'));
     } finally {
-      unlisten?.();
       setImportingState(false);
       setProgress(null);
     }
   };
-
-  // 진행바 라벨/퍼센트 — 다운로드 단계와 모드 설치 단계 공존.
-  const isDownloadPhase = downloadPct !== null;
-  const activePct = isDownloadPhase ? downloadPct : (progress?.percent ?? 0);
-  const progressLabel = isDownloadPhase
-    ? '혜니팩 다운로드 중'
-    : progress?.stage === 'finalize'
-      ? '마무리 중...'
-      : `모드 다운로드 중${progress?.total ? ` (${progress.completed}/${progress.total})` : '...'}`;
 
   return (
     <div className="space-y-4">
@@ -379,23 +335,7 @@ export function HyeniPackImportTab({ onSuccess, onImportingChange, initialPackId
         </button>
       )}
 
-      {importing && (
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-4 space-y-2">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-gray-300">{progressLabel}</span>
-            <span className="font-semibold text-purple-400">{Math.round(activePct)}%</span>
-          </div>
-          <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-300"
-              style={{ width: `${Math.min(100, activePct)}%` }}
-            />
-          </div>
-          <div className="flex items-center gap-1 text-xs text-gray-500">
-            <Loader2 className="w-3 h-3 animate-spin" /> 혜니팩을 가져오는 중입니다...
-          </div>
-        </div>
-      )}
+      {importing && <PackApplyProgress downloadPct={downloadPct} progress={progress} />}
     </div>
   );
 }

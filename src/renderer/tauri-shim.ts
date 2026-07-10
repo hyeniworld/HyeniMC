@@ -182,8 +182,8 @@ function installTauriShim(): void {
       }),
       // 신규 표면 (팩 업데이트)
       checkUpdate: (profileId: string) => invoke('pack_check_update', { profileId }),
-      applyUpdate: (profileId: string, accountId?: string) =>
-        invoke('pack_apply_update', { profileId, accountId }),
+      // 현재 프로필에 설치된 팩 메타(없으면 null) — 팩 프로필 여부 판별 + 현재 버전 표시.
+      getInstalled: (profileId: string) => invoke('pack_get_installed', { profileId }),
       // 신규 표면 (온라인 목록·검색·설치)
       listAvailable: () => invoke('pack_list_available'),
       hasAnyToken: () => invoke('hyeni_has_any_token'),

@@ -157,7 +157,7 @@ declare global {
         removeTempFile: (path: string) => Promise<void>;
         // 팩 업데이트
         checkUpdate: (profileId: string) => Promise<any>;
-        applyUpdate: (profileId: string, accountId?: string) => Promise<any>;
+        getInstalled: (profileId: string) => Promise<{ hyenipackId: string; version: string } | null>;
         // 제작자 전용(export/getFileTree 등) 폴백 — 명시 선언 외 메서드 허용
         [key: string]: (...args: any[]) => Promise<any>;
       };
