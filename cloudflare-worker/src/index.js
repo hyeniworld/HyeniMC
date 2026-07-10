@@ -186,6 +186,17 @@ async function handleCurseForgeProxy(request, env, corsHeaders) {
 const MODPACK_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const MODPACK_VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
 
+/** 팩 비공개 여부 — modpacks/{id}/meta.json의 hidden. meta 없음/손상 = 공개. */
+async function isPackHidden(env, id) {
+  const obj = await env.RELEASES.get(`modpacks/${id}/meta.json`);
+  if (!obj) return false;
+  try {
+    return !!JSON.parse(await obj.text())?.hidden;
+  } catch {
+    return false;
+  }
+}
+
 async function handleModpacksAPI(request, env, corsHeaders) {
   if (!env.RELEASES) {
     return jsonResponse({ error: 'R2 bucket not configured' }, 500, corsHeaders);
@@ -233,6 +244,9 @@ async function handleModpacksAPI(request, env, corsHeaders) {
     if (!MODPACK_ID_PATTERN.test(id)) {
       return jsonResponse({ error: 'Invalid modpack id' }, 400, corsHeaders);
     }
+    if (await isPackHidden(env, id)) {
+      return jsonResponse({ error: 'Not Found', message: '팩을 찾을 수 없습니다.' }, 404, corsHeaders);
+    }
     const latest = await env.RELEASES.get(`modpacks/${id}/latest.json`);
     if (!latest) {
       return jsonResponse({ error: 'Not Found', message: `No release for ${id}` }, 404, corsHeaders);
@@ -252,6 +266,9 @@ async function handleModpacksAPI(request, env, corsHeaders) {
     if (!MODPACK_ID_PATTERN.test(id)) {
       return jsonResponse({ error: 'Invalid modpack id' }, 400, corsHeaders);
     }
+    if (await isPackHidden(env, id)) {
+      return jsonResponse({ error: 'Not Found', message: '팩을 찾을 수 없습니다.' }, 404, corsHeaders);
+    }
     const list = await env.RELEASES.list({ prefix: `modpacks/${id}/versions/` });
     const versions = new Set();
     for (const obj of list.objects) {
@@ -267,6 +284,10 @@ async function handleModpacksAPI(request, env, corsHeaders) {
     const [, id, version] = dlMatch;
     if (!MODPACK_ID_PATTERN.test(id) || !MODPACK_VERSION_PATTERN.test(version)) {
       return jsonResponse({ error: 'Invalid modpack id or version' }, 400, corsHeaders);
+    }
+    // hidden 체크를 토큰 검증보다 먼저 — 존재 누설·토큰체크 API 호출 방지.
+    if (await isPackHidden(env, id)) {
+      return jsonResponse({ error: 'Not Found', message: '팩을 찾을 수 없습니다.' }, 404, corsHeaders);
     }
 
     const url = new URL(request.url);
