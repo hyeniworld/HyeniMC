@@ -102,6 +102,39 @@ describe('POST /admin/api/mods/{id}/versions', () => {
     expect(res.status).toBe(400);
   });
 
+  it('keeps global latest at the higher version when a lower version is backfilled', async () => {
+    await handleMods(publishReq('hyenihelper', meta, { jar0: 'JARBYTES' }), env); // 1.0.5
+    const older = { ...meta, version: '1.0.3',
+      files: [{ ...meta.files[0], fileName: 'hyenihelper-neoforge-1.21.1-1.0.3.jar' }] };
+    const res = await handleMods(publishReq('hyenihelper', older, { jar0: 'OLDBYTES' }), env);
+    expect(res.status).toBe(201);
+
+    // 전역 latest는 여전히 1.0.5
+    expect((await getJson(env, 'mods/hyenihelper/latest.json')).version).toBe('1.0.5');
+    // 백필 버전 자체는 저장됨
+    expect(await objectExists(env, 'mods/hyenihelper/versions/1.0.3/manifest.json')).toBe(true);
+    // 환경별 index의 auto는 최고 버전 1.0.5
+    const index = await getJson(env, 'mods/hyenihelper/index.json');
+    expect(index.targets.neoforge['1.21.1'].auto).toBe('1.0.5');
+  });
+
+  it('advances global latest when a higher version is published', async () => {
+    await handleMods(publishReq('hyenihelper', meta, { jar0: 'JARBYTES' }), env); // 1.0.5
+    const newer = { ...meta, version: '1.0.6',
+      files: [{ ...meta.files[0], fileName: 'hyenihelper-neoforge-1.21.1-1.0.6.jar' }] };
+    const res = await handleMods(publishReq('hyenihelper', newer, { jar0: 'NEWBYTES' }), env);
+    expect(res.status).toBe(201);
+    expect((await getJson(env, 'mods/hyenihelper/latest.json')).version).toBe('1.0.6');
+  });
+
+  it('refreshes global latest content on same-version overwrite', async () => {
+    await handleMods(publishReq('hyenihelper', meta, { jar0: 'JARBYTES' }), env); // 1.0.5 changelog 'fix'
+    const edited = { ...meta, changelog: 'refreshed changelog' };
+    const res = await handleMods(publishReq('hyenihelper', edited, { jar0: 'JARBYTES' }, '?overwrite=true'), env);
+    expect(res.status).toBe(201);
+    expect((await getJson(env, 'mods/hyenihelper/latest.json')).changelog).toBe('refreshed changelog');
+  });
+
   it('rolls back on partial upload failure: latest/registry not written, returns 500', async () => {
     const spy = vi.spyOn(env.RELEASES, 'put').mockRejectedValueOnce(new Error('boom'));
     try {

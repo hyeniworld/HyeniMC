@@ -61,6 +61,17 @@ describe('POST modpacks publish', () => {
     expect(res.status).toBe(409);
   });
 
+  it('keeps public latest at the higher version when a lower version is backfilled', async () => {
+    await handlePacks(await publishReq('hyenipack', '1.2.0', 'HIGH'), env);
+    const res = await handlePacks(await publishReq('hyenipack', '1.1.0', 'LOW'), env);
+    expect(res.status).toBe(201);
+    // 공개 latest는 여전히 높은 버전
+    expect((await getJson(env, 'modpacks/hyenipack/latest.json')).version).toBe('1.2.0');
+    // 낮은 버전 스냅샷은 저장됨
+    expect(await objectExists(env, 'modpacks/hyenipack/versions/1.1.0/pack.hyenipack')).toBe(true);
+    expect((await getJson(env, 'modpacks/hyenipack/versions/1.1.0/latest.json')).version).toBe('1.1.0');
+  });
+
   it('rejects when latest field is missing from the form', async () => {
     const fd = new FormData();
     fd.set('pack', new File(['PACKDATA'], 'pack.hyenipack', { type: 'application/zip' }));

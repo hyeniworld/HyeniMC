@@ -42,7 +42,7 @@ export function PackPublishForm({ onToast, onPublished }: {
   return (
     <form class="dialog-form-body" onSubmit={submit}>
       <p class="card-hint">런처 export 산출물(.hyenipack + 같은 이름의 .latest.json)을 선택하세요.</p>
-      <div class="notice">새로 게시하면 그 버전이 바로 latest가 됩니다.</div>
+      <div class="notice">기존 latest보다 높거나 같은 버전을 게시하면 latest가 됩니다(낮은 버전은 백필만).</div>
       <div class="form-grid">
         <Field label=".hyenipack">
           <input type="file" accept=".hyenipack" onChange={(e) => setPack((e.target as HTMLInputElement).files?.[0] ?? null)} />

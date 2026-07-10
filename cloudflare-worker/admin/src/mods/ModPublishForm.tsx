@@ -55,7 +55,7 @@ export function ModPublishForm({ initialModId, onToast, onPublished }: {
 
   return (
     <form class="dialog-form-body" onSubmit={submit}>
-      <div class="notice">새로 게시하면 그 버전이 바로 latest가 됩니다.</div>
+      <div class="notice">기존 latest보다 높거나 같은 버전을 게시하면 latest가 됩니다(낮은 버전은 백필만). 환경별 latest는 자동 재계산됩니다(핀 우선).</div>
       <div class="form-grid">
         <Field label="modId"><input value={modId} onInput={(e) => setModId((e.target as HTMLInputElement).value)} /></Field>
         <Field label="name"><input value={name} onInput={(e) => setName((e.target as HTMLInputElement).value)} /></Field>

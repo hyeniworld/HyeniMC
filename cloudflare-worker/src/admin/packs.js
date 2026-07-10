@@ -2,7 +2,7 @@
  * 버전 폴더에 스냅샷 latest.json을 추가로 저장해 롤백/편집을 지원한다. */
 import { unzipSync } from 'fflate';
 import { adminJson } from './router.js';
-import { getJson, putJson, putObject, objectExists, listVersions, listPrefixes, deletePrefix } from './r2.js';
+import { getJson, putJson, putObject, objectExists, listVersions, listPrefixes, deletePrefix, compareVersions } from './r2.js';
 import { sha256Hex } from './mods-format.js';
 
 const PACK_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
@@ -161,7 +161,12 @@ async function publishPackVersion(request, env, id) {
 
   await putObject(env, packKey, buffer, 'application/zip');
   await putJson(env, `modpacks/${id}/versions/${sidecar.version}/latest.json`, sidecar);
-  await putJson(env, `modpacks/${id}/latest.json`, sidecar);
+  // 공개 latest(쿼리 미지정 구 클라이언트용 폴백)는 더 높거나 같은 버전일 때만 갱신.
+  // 같은 버전(overwrite)은 내용 새로고침을 위해 갱신, 낮은 버전(백필)은 유지.
+  const curLatest = await getJson(env, `modpacks/${id}/latest.json`);
+  if (!curLatest?.version || compareVersions(sidecar.version, curLatest.version) >= 0) {
+    await putJson(env, `modpacks/${id}/latest.json`, sidecar);
+  }
   return adminJson({ id, version: sidecar.version, sha256: actual }, 201);
 }
 

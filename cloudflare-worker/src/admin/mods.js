@@ -1,6 +1,6 @@
 /** 모드 관리 핸들러: 목록/버전/게시/롤백/편집/삭제. */
 import { adminJson } from './router.js';
-import { getJson, listVersions, putObject, putJson, objectExists, deletePrefix } from './r2.js';
+import { getJson, listVersions, putObject, putJson, objectExists, deletePrefix, compareVersions } from './r2.js';
 import { sha256Hex, buildManifest, isoNow } from './mods-format.js';
 import { rebuildRegistry } from './registry.js';
 import { rebuildModIndex, setModPin } from './mod-index.js';
@@ -208,7 +208,12 @@ async function publishModVersion(request, env, id) {
     files: prepared,
   });
   await putJson(env, manifestKey, manifest);
-  await putJson(env, `mods/${id}/latest.json`, manifest);
+  // 전역 latest(쿼리 미지정 구 클라이언트용 폴백)는 더 높거나 같은 버전일 때만 갱신.
+  // 같은 버전(overwrite)은 내용 새로고침을 위해 갱신, 낮은 버전(백필)은 유지.
+  const curLatest = await getJson(env, `mods/${id}/latest.json`);
+  if (!curLatest?.version || compareVersions(meta.version, curLatest.version) >= 0) {
+    await putJson(env, `mods/${id}/latest.json`, manifest);
+  }
   await rebuildRegistry(env);
   await rebuildModIndex(env, id);
 
