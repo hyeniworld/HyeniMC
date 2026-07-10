@@ -24,6 +24,38 @@ pub fn worker_base() -> Result<String, String> {
         .ok_or_else(|| "HYENIMC_WORKER_URL이 설정되지 않았습니다 (.env 또는 환경변수)".to_string())
 }
 
+/// 워커 다운로드용 토큰: 프로필 config 토큰 1순위, 저장소 최신 토큰 폴백(다운로드는 스코프 무관).
+fn resolve_download_token(db: &State<'_, DbState>, game_dir: Option<&std::path::Path>) -> Option<String> {
+    if let Some(dir) = game_dir {
+        if let Some(t) = hyenimc_launcher::hyeni::read_hyenihelper_token(dir) {
+            return Some(t);
+        }
+    }
+    let conn = db.0.lock().unwrap();
+    hyenimc_core::hyeni_tokens::any_token(&conn).ok().flatten()
+}
+
+/// 설치/게이트 후 config 기록 — 저장소에서 이 game_dir의 servers.dat와 매칭되는 토큰만 기록.
+/// 매칭 없으면 false(호출자가 "/인증 필요" 안내). 아무 토큰이나 쓰지 않는다(스펙 §2-1).
+pub(crate) fn apply_matching_store_token(db: &State<'_, DbState>, game_dir: &std::path::Path) -> bool {
+    let tokens = {
+        let conn = db.0.lock().unwrap();
+        hyenimc_core::hyeni_tokens::list_tokens(&conn).unwrap_or_default()
+    };
+    let servers_dat = game_dir.join("servers.dat");
+    for t in tokens {
+        if t
+            .servers
+            .iter()
+            .any(|s| hyenimc_launcher::hyeni::servers_dat_contains(&servers_dat, s))
+        {
+            return hyenimc_launcher::hyeni::write_hyenihelper_config(game_dir, &t.token, true)
+                .unwrap_or(false);
+        }
+    }
+    false
+}
+
 /// 로컬 .hyenipack import — 모드 동기화 + overrides + 프로필 버전/로더 반영.
 #[tauri::command]
 pub async fn hyenipack_import(
@@ -134,9 +166,10 @@ pub async fn pack_apply_update(
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "적용할 업데이트가 없습니다".to_string())?;
 
-    // 토큰 필수 (다운로드 인증)
-    let aid = account_id.ok_or_else(|| "업데이트 다운로드에 로그인이 필요합니다".to_string())?;
-    let token = crate::account::get_valid_tokens(&db, &crypto, &aid).await?.access_token;
+    // 다운로드 인증: 프로필 config 토큰 → 저장소 폴백 (MS 토큰 오이식 교정 — 워커는 /인증 토큰만 검증)
+    let token = resolve_download_token(&db, Some(&dirs.instance_dir)).ok_or_else(|| {
+        "팩 다운로드를 위한 인증이 필요합니다.\n\nDiscord에서 /인증 명령어로 인증하세요.".to_string()
+    })?;
 
     let temp = dirs.instance_dir.join(".temp").join(format!(
         "{}-{}.hyenipack",
@@ -153,18 +186,78 @@ pub async fn pack_apply_update(
     .await
     .map_err(|e| e.to_string())?;
 
-    // 재사용: import 흐름
+    // 재사용: import 흐름 (account_id는 hyenipack_import 내부 CF 프록시용으로 계속 전달)
     hyenipack_import(
         app,
         db,
         profile_id,
         temp.display().to_string(),
-        Some(aid),
+        account_id,
         crypto,
     )
     .await?;
     let _ = std::fs::remove_file(&temp);
     Ok(())
+}
+
+/// 공개 혜니팩 목록(토큰 불필요).
+#[tauri::command]
+pub async fn pack_list_available() -> Result<Vec<hyenimc_launcher::hyenipack::PackListItem>, String> {
+    let http = reqwest::Client::new();
+    hyenimc_launcher::hyenipack::fetch_pack_list(&http, &worker_base()?)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PackInstallOutcome {
+    pub token_applied: bool,
+}
+
+/// 워커에서 혜니팩 최신 버전을 받아 지정 프로필에 설치(기존 import 파이프 재사용).
+/// 설치 후 저장소에서 서버 매칭 토큰이 있으면 프로필 config에 기록.
+#[tauri::command]
+pub async fn pack_install_from_worker(
+    app: AppHandle,
+    db: State<'_, DbState>,
+    crypto: State<'_, CryptoState>,
+    profile_id: String,
+    pack_id: String,
+    account_id: Option<String>,
+) -> Result<PackInstallOutcome, String> {
+    let profile = load_profile_pub(&db, &profile_id)?;
+    let dirs = game_dirs_for(&profile)?;
+    let http = reqwest::Client::new();
+    let base = worker_base()?;
+
+    let version = hyenimc_launcher::hyenipack::fetch_pack_latest_version(&http, &base, &pack_id)
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "혜니팩을 찾을 수 없습니다(비공개이거나 존재하지 않음).".to_string())?;
+
+    let token = resolve_download_token(&db, Some(&dirs.instance_dir)).ok_or_else(|| {
+        "팩 다운로드를 위한 인증이 필요합니다.\n\nDiscord에서 /인증 명령어로 인증하세요.".to_string()
+    })?;
+
+    let temp = dirs
+        .instance_dir
+        .join(".temp")
+        .join(format!("{pack_id}-{version}.hyenipack"));
+    hyenimc_launcher::hyenipack::download_pack_version(
+        &http, &base, &pack_id, &version, &token, &temp,
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // 재사용: 파일 import 파이프(내부 불변 — 실사용 검증 경로)
+    hyenipack_import(app, db.clone(), profile_id, temp.display().to_string(), account_id, crypto)
+        .await?;
+    let _ = std::fs::remove_file(&temp);
+
+    // 설치 후 토큰 매칭 기록(팩이 깔아준 servers.dat 기준; 매칭 없으면 렌더러가 /인증 안내)
+    let token_applied = apply_matching_store_token(&db, &dirs.instance_dir);
+    Ok(PackInstallOutcome { token_applied })
 }
 
 /// 실행 전 팩 게이트 (game_launch 내부 호출).

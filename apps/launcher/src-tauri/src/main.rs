@@ -143,6 +143,8 @@ fn main() {
             pack::hyenipack_preview,
             pack::pack_check_update,
             pack::pack_apply_update,
+            pack::pack_list_available,
+            pack::pack_install_from_worker,
             hyeni::worker_mods_check,
             hyeni::worker_mods_install,
             resources::resourcepack_list,
