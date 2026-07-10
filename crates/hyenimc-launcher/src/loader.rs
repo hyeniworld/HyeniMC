@@ -137,6 +137,10 @@ pub fn forge_build_part<'a>(version: &'a str, mc_version: &str) -> &'a str {
 
 /// 주어진 로더/ MC 버전에 설치 가능한 로더 버전 목록(설치용 전체 형식). 자동 교체는
 /// fabric/neoforge/forge만 지원(그 외는 빈 목록 → 로더 상향 없음).
+///
+/// 자동 상향은 "최신 릴리스"만 대상으로 하므로 불안정(beta/alpha) 버전은 제외한다
+/// (`loader_get_versions`의 stable 판정과 동일 규칙). version_key가 pre-release 접미사를
+/// 떼어버려 베타가 릴리스와 오정렬되는 것을 막는다.
 pub async fn installable_loader_versions(
     http: &reqwest::Client,
     loader_type: &str,
@@ -146,14 +150,15 @@ pub async fn installable_loader_versions(
         "fabric" => Ok(fabric_loader_versions(http, mc_version)
             .await?
             .into_iter()
+            .filter(|v| v.stable)
             .map(|v| v.version)
             .collect()),
         "neoforge" => Ok(neoforge_versions(http)
             .await?
             .into_iter()
-            .filter(|v| neoforge_matches_mc(v, mc_version))
+            .filter(|v| neoforge_matches_mc(v, mc_version) && !(v.contains("beta") || v.contains("alpha")))
             .collect()),
-        "forge" => forge_versions(http, mc_version).await, // 이미 mc 필터·전체 형식
+        "forge" => forge_versions(http, mc_version).await, // 이미 mc 필터·전체 형식(라벨 없음)
         _ => Ok(Vec::new()),
     }
 }

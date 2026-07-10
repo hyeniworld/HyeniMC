@@ -143,6 +143,11 @@ pub fn is_newer_version(remote: &str, local: &str) -> bool {
     version_key(remote) > version_key(local)
 }
 
+/// win이 현재보다 높은 상향인가(현재 미설정=상향으로 간주). 다운그레이드/동일이면 false.
+pub fn is_upgrade(win: &str, cur: &str) -> bool {
+    cur.is_empty() || version_key(win) > version_key(cur)
+}
+
 /// candidates 중 [lo, hi] 범위(빈 문자열/None = 경계 없음)를 만족하는 최신(version_key 최대) 반환.
 pub fn newest_in_range(candidates: &[String], lo: Option<&str>, hi: Option<&str>) -> Option<String> {
     let lo_key = lo.filter(|s| !s.is_empty()).map(version_key);
@@ -377,7 +382,8 @@ pub async fn resolve_loader_for_updates(
         crate::loader::installable_loader_versions(http, loader_type, game_version).await?;
     let normalized: Vec<String> = candidates_full.iter().map(|c| norm(c)).collect();
     match newest_in_range(&normalized, lo.as_deref(), hi.as_deref()) {
-        Some(win) => {
+        // 상향(현재보다 높음)일 때만 교체 — 계획 하드제약 "다운그레이드 금지 / 상향만".
+        Some(win) if is_upgrade(&win, &cur) => {
             // 정규화형 승자에 대응하는 전체 형식 후보를 되찾아 설치용으로 반환.
             let full = candidates_full
                 .iter()
@@ -386,6 +392,7 @@ pub async fn resolve_loader_for_updates(
                 .unwrap_or(win);
             Ok(Some(LoaderBump { version: full }))
         }
+        Some(_) => Ok(None), // 다운그레이드/동일 → 변경 없음
         None => Err(LauncherError::Other(format!(
             "모드가 요구하는 로더 버전({}~{})을 설치할 수 없습니다.",
             lo.as_deref().unwrap_or("*"),
@@ -547,6 +554,14 @@ mod tests {
         let c = vec!["1.20.1-47.4.20".to_string(), "1.20.1-47.4.9".to_string()];
         let norm: Vec<String> = c.iter().map(|v| forge_build_part(v, "1.20.1").to_string()).collect();
         assert_eq!(newest_in_range(&norm, Some("47.4.0"), None).as_deref(), Some("47.4.20"));
+    }
+
+    #[test]
+    fn is_upgrade_blocks_downgrade_and_equal() {
+        assert!(is_upgrade("0.16.20", "0.16.10"));   // 상향
+        assert!(!is_upgrade("0.16.10", "0.16.20"));  // 다운그레이드 금지
+        assert!(!is_upgrade("0.16.10", "0.16.10"));  // 동일 → 변경없음
+        assert!(is_upgrade("0.16.5", ""));           // 현재 미설정 → 상향
     }
 
     #[test]
