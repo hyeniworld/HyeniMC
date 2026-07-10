@@ -139,13 +139,27 @@ pub async fn worker_mods_install(
     Ok(results)
 }
 
+/// 로그/에러 표시용 토큰 마스킹 — token= 값 부분만 ***로 치환(방송·로그 노출 방지).
+fn mask_token(url: &str) -> String {
+    match url.find("token=") {
+        Some(i) => {
+            let start = i + "token=".len();
+            let end = url[start..].find('&').map(|j| start + j).unwrap_or(url.len());
+            format!("{}***{}", &url[..start], &url[end..])
+        }
+        None => url.to_string(),
+    }
+}
+
 /// hyenimc:// 딥링크 처리 — main.rs의 on_open_url/single-instance에서 호출.
 pub fn handle_deep_link(app: &AppHandle, url: &str) {
+    log::info!("[deeplink] 수신: {}", mask_token(url));
     let Some((token, servers, hyenipack)) = hy::parse_auth_url(url) else {
         if url.starts_with("hyenimc://") {
+            log::warn!("[deeplink] 인증 링크 파싱 실패: {}", mask_token(url));
             let _ = app.emit(
                 "auth:error",
-                serde_json::json!({ "message": "잘못된 인증 링크입니다" }),
+                serde_json::json!({ "message": format!("잘못된 인증 링크입니다: {}", mask_token(url)) }),
             );
         }
         return;

@@ -38,12 +38,13 @@ fn db_status(db: tauri::State<commands::DbState>) -> Result<serde_json::Value, S
 fn main() {
     tauri::Builder::default()
         // single-instance는 가장 먼저 등록 (플러그인 문서 요구사항).
-        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
-            // Windows/Linux: 두 번째 인스턴스 argv로 딥링크가 들어온다
-            for arg in &argv {
-                if arg.starts_with("hyenimc://") {
-                    hyeni::handle_deep_link(app, arg);
-                }
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            // 딥링크는 여기서 직접 처리하지 않는다 — single-instance의 `deep-link` feature가
+            // 두 번째 인스턴스 argv를 deep-link 플러그인으로 전달해 on_open_url이 발화한다
+            // (플러그인 handle_cli_arguments → "deep-link://new-url" emit 확인).
+            // 여기서도 handle_deep_link를 부르면 같은 URL이 이중 처리되어 토스트가 2번 뜬다.
+            if let Some(win) = app.get_webview_window("main") {
+                let _ = win.set_focus();
             }
         }))
         // 파일+콘솔 로깅 (기존 Go 데몬의 상세 로그 대체). log:: 매크로가 여기로 흐른다.

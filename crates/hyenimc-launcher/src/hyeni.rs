@@ -118,8 +118,14 @@ pub fn read_hyenihelper_token(game_dir: &Path) -> Option<String> {
 
 /// hyenimc://auth?token=X&server=A,B&hyenipack=ID 파싱 (순수).
 /// 세 번째 = hyenipack 쿼리 파라미터(없거나 비면 None — 하위호환).
+/// OS/브라우저가 정규화하며 붙이는 경로 슬래시(`hyenimc://auth/?…`)도 허용한다
+/// (TS 원본 protocol/handler.ts는 new URL 기반이라 관대했음 — 동일 의미 유지).
 pub fn parse_auth_url(url: &str) -> Option<(String, Vec<String>, Option<String>)> {
     let rest = url.strip_prefix("hyenimc://auth")?;
+    let rest = rest.strip_prefix('/').unwrap_or(rest);
+    if !rest.is_empty() && !rest.starts_with('?') {
+        return None; // hyenimc://authx 등 다른 호스트
+    }
     let query = rest.strip_prefix('?').unwrap_or("");
     let mut token = None;
     let mut servers = Vec::new();
@@ -265,6 +271,17 @@ mod tests {
 
         assert!(parse_auth_url("hyenimc://auth?server=a").is_none()); // token 필수
         assert!(parse_auth_url("hyenimc://other?token=x").is_none());
+    }
+
+    #[test]
+    fn auth_url_tolerates_normalized_path_slash() {
+        // OS/브라우저가 hyenimc://auth?… 를 hyenimc://auth/?… 로 정규화해 전달하는 경우
+        let (t, s, p) = parse_auth_url("hyenimc://auth/?token=abc&server=mc.a.com").unwrap();
+        assert_eq!(t, "abc");
+        assert_eq!(s, vec!["mc.a.com"]);
+        assert_eq!(p, None);
+        assert!(parse_auth_url("hyenimc://auth/").is_none()); // 토큰 없음
+        assert!(parse_auth_url("hyenimc://authors?token=x").is_none()); // 다른 호스트는 여전히 거부
     }
 
     #[test]
