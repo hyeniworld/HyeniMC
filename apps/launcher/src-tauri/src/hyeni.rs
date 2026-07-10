@@ -40,6 +40,7 @@ pub async fn worker_mods_check(
     profile_path: String,
     game_version: String,
     loader_type: String,
+    loader_version: String,
     server_address: Option<String>,
 ) -> Result<Vec<workermods::WorkerModUpdate>, String> {
     let profile_dir = PathBuf::from(&profile_path);
@@ -53,7 +54,7 @@ pub async fn worker_mods_check(
     let base = crate::pack::worker_base()?;
     let http = reqwest::Client::new();
     // 수동 패널은 로더 버전 필터를 적용하지 않는다(Electron registry.checkAllModUpdates 동일).
-    workermods::check_all_updates(
+    let mut updates = workermods::check_all_updates(
         &http,
         &base,
         &profile_dir.join("mods"),
@@ -63,7 +64,29 @@ pub async fn worker_mods_check(
         has_authorized_server,
     )
     .await
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?;
+
+    // 로더 호환 판단 → 필요하면 각 업데이트에 required_loader_version 스탬프(표시용).
+    // 실제 로더 설치/프로필 반영은 다음 게임 실행(game.rs)이 수행한다.
+    match workermods::resolve_loader_for_updates(
+        &http,
+        &loader_type,
+        &game_version,
+        &loader_version,
+        &updates,
+    )
+    .await
+    {
+        Ok(Some(bump)) => {
+            for u in &mut updates {
+                u.required_loader_version = Some(bump.version.clone());
+            }
+        }
+        Ok(None) => {}
+        Err(e) => log::warn!("업데이트 패널 로더 해석 실패(무시): {e}"),
+    }
+
+    Ok(updates)
 }
 
 #[tauri::command]
