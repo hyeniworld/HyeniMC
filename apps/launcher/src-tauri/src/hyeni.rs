@@ -53,8 +53,9 @@ pub async fn worker_mods_check(
         .is_some_and(|s| !s.is_empty() && is_authorized_server(s));
     let base = crate::pack::worker_base()?;
     let http = reqwest::Client::new();
-    // 수동 패널은 로더 버전 필터를 적용하지 않는다(Electron registry.checkAllModUpdates 동일).
-    let mut updates = workermods::check_all_updates(
+    // check_all_updates 자체는 로더 필터를 하지 않고(각 update에 min/max 실음),
+    // 아래에서 resolve로 최종 loader_version을 정한 뒤 retain_loader_compatible로 필터한다.
+    let updates = workermods::check_all_updates(
         &http,
         &base,
         &profile_dir.join("mods"),
@@ -66,9 +67,9 @@ pub async fn worker_mods_check(
     .await
     .map_err(|e| e.to_string())?;
 
-    // 로더 호환 판단 → 필요하면 각 업데이트에 required_loader_version 스탬프(표시용).
-    // 실제 로더 설치/프로필 반영은 다음 게임 실행(game.rs)이 수행한다.
-    match workermods::resolve_loader_for_updates(
+    // 로더 호환 판단 → 최종 loader_version 결정. 실제 로더 설치/프로필 반영은 게임 실행(game.rs)이 수행하고,
+    // 여기서는 표시 일관성을 위해 최종 loader_version 기준으로 필터 + required_loader_version 스탬프만 한다.
+    let bump = match workermods::resolve_loader_for_updates(
         &http,
         &loader_type,
         &game_version,
@@ -77,13 +78,23 @@ pub async fn worker_mods_check(
     )
     .await
     {
-        Ok(Some(bump)) => {
-            for u in &mut updates {
-                u.required_loader_version = Some(bump.version.clone());
-            }
+        Ok(b) => b,
+        Err(e) => {
+            log::warn!("업데이트 패널 로더 해석 실패(무시): {e}");
+            None
         }
-        Ok(None) => {}
-        Err(e) => log::warn!("업데이트 패널 로더 해석 실패(무시): {e}"),
+    };
+    // 상향으로도 범위를 못 맞춘 모드(현재 로더가 max 초과 → 다운그레이드 회피)는 game.rs 설치 경로와
+    // 동일하게 목록에서 제외해 표시를 일치시킨다.
+    let final_loader = bump
+        .as_ref()
+        .map(|b| b.version.clone())
+        .unwrap_or_else(|| loader_version.clone());
+    let mut updates = workermods::retain_loader_compatible(updates, &loader_type, &game_version, &final_loader);
+    if let Some(b) = &bump {
+        for u in &mut updates {
+            u.required_loader_version = Some(b.version.clone());
+        }
     }
 
     Ok(updates)

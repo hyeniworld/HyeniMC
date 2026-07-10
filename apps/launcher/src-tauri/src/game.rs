@@ -529,7 +529,24 @@ pub async fn game_launch(
 
     // ③.5 워커 모드 설치 (②.9에서 확인한 업데이트를 로더 설치 뒤에 설치)
     if let (Some(token), Some(base)) = (worker_install_token.as_ref(), worker_base_url.as_ref()) {
-        if !pending_worker_updates.is_empty() {
+        // ②.9에서 확정된 최종 loader_version 기준으로 필터. 상향으로도 범위를 못 맞춘 모드
+        // (현재 로더가 max 초과 → 다운그레이드 회피)는 부적합 로더에 설치되지 않도록 제외한다.
+        let before = pending_worker_updates.len();
+        let installable = hyenimc_launcher::workermods::retain_loader_compatible(
+            pending_worker_updates,
+            &profile.loader_type,
+            &profile.game_version,
+            &loader_version,
+        );
+        if installable.len() < before {
+            let dropped = before - installable.len();
+            log::warn!("워커 모드 {dropped}건: 최종 로더 {loader_version} 범위 밖(max 초과) — 설치 제외");
+            let _ = app.emit(
+                "game:log",
+                serde_json::json!({ "profileId": profile_id, "line": format!("[worker-mods] {dropped}건은 현재 로더({loader_version})와 호환되지 않아 건너뜁니다.") }),
+            );
+        }
+        if !installable.is_empty() {
             let mods_dir = std::path::PathBuf::from(&profile.game_directory).join("mods");
             let app_log = app.clone();
             let pid = profile_id.clone();
@@ -537,7 +554,7 @@ pub async fn game_launch(
                 &http,
                 base,
                 &mods_dir,
-                &pending_worker_updates,
+                &installable,
                 token,
                 &cfg,
                 move |name, pct| {

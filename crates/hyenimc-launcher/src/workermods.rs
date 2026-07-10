@@ -401,6 +401,36 @@ pub async fn resolve_loader_for_updates(
     }
 }
 
+/// 최종 loader_version과 각 update의 [min,max]가 호환되는 update만 남긴다.
+/// 상향으로도 범위를 못 맞춘 모드(예: 현재 로더가 max 초과 → 다운그레이드 회피)를 설치 목록에서 제외.
+/// forge는 `{mc}-` 프리픽스를 떼어 build끼리 비교. loader_version이 비면(제약 없음) 전부 유지.
+pub fn retain_loader_compatible(
+    updates: Vec<WorkerModUpdate>,
+    loader_type: &str,
+    game_version: &str,
+    loader_version: &str,
+) -> Vec<WorkerModUpdate> {
+    if loader_version.is_empty() {
+        return updates;
+    }
+    let norm = |v: &str| -> String {
+        if loader_type == "forge" {
+            crate::loader::forge_build_part(v, game_version).to_string()
+        } else {
+            v.to_string()
+        }
+    };
+    let cur = norm(loader_version);
+    updates
+        .into_iter()
+        .filter(|u| {
+            let min = u.min_loader_version.as_deref().map(&norm);
+            let max = u.max_loader_version.as_deref().map(&norm);
+            loader_version_ok(&cur, min.as_deref(), max.as_deref())
+        })
+        .collect()
+}
+
 pub fn download_url(worker_base: &str, update: &WorkerModUpdate, token: &str) -> String {
     let loader_type = &update.loader_type;
     let game_version = &update.game_version;
@@ -514,6 +544,35 @@ pub async fn install_updates(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn retain_loader_compatible_drops_over_max_keeps_others() {
+        let mk = |id: &str, min: Option<&str>, max: Option<&str>| WorkerModUpdate {
+            mod_id: id.into(), mod_name: id.into(), current_version: None,
+            latest_version: "1.0.0".into(), is_installed: true, category: "required".into(),
+            changelog: None, file: "f.jar".into(), sha256: None, size: None,
+            loader_type: "fabric".into(), game_version: "1.21.1".into(),
+            min_loader_version: min.map(String::from),
+            max_loader_version: max.map(String::from),
+            required_loader_version: None,
+        };
+        // 현재 0.17.0: A(min 0.16.0)=호환 유지, B(max 0.16.5)=초과 제외, C(제약없음)=유지
+        let ups = vec![mk("A", Some("0.16.0"), None), mk("B", None, Some("0.16.5")), mk("C", None, None)];
+        let kept = retain_loader_compatible(ups, "fabric", "1.21.1", "0.17.0");
+        let ids: Vec<_> = kept.iter().map(|u| u.mod_id.as_str()).collect();
+        assert_eq!(ids, vec!["A", "C"]);
+        // loader_version 빈 문자열 → 전부 유지
+        let ups2 = vec![mk("B", None, Some("0.16.5"))];
+        assert_eq!(retain_loader_compatible(ups2, "fabric", "1.21.1", "").len(), 1);
+        // forge 정규화: 현재 full "1.20.1-47.4.20", 모드 max build-only "47.4.10" → 초과 제외
+        let f = WorkerModUpdate { mod_id: "F".into(), mod_name: "F".into(), current_version: None,
+            latest_version: "1.0.0".into(), is_installed: true, category: "required".into(),
+            changelog: None, file: "f.jar".into(), sha256: None, size: None,
+            loader_type: "forge".into(), game_version: "1.20.1".into(),
+            min_loader_version: None, max_loader_version: Some("47.4.10".into()),
+            required_loader_version: None };
+        assert_eq!(retain_loader_compatible(vec![f], "forge", "1.20.1", "1.20.1-47.4.20").len(), 0);
+    }
 
     #[test]
     fn newest_in_range_picks_highest_within_bounds() {
