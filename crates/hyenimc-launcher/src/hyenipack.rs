@@ -549,7 +549,9 @@ pub async fn check_pack_update(
     }))
 }
 
-/// 팩 버전 다운로드(Worker) → 임시 .hyenipack 경로
+/// 팩 버전 다운로드(Worker) → 임시 .hyenipack 경로.
+/// 청크 스트리밍으로 받으며 `on_progress(받은 바이트, 전체 바이트)`로 진행률을 보고한다.
+/// 전체 크기(Content-Length)는 없을 수 있어 `Option<u64>`.
 pub async fn download_pack_version(
     http: &reqwest::Client,
     worker_base: &str,
@@ -557,6 +559,7 @@ pub async fn download_pack_version(
     version: &str,
     token: &str,
     dest: &Path,
+    mut on_progress: impl FnMut(u64, Option<u64>),
 ) -> Result<(), LauncherError> {
     let url = format!(
         "{}/download/v2/modpacks/{}/{}?token={}",
@@ -565,11 +568,20 @@ pub async fn download_pack_version(
         version,
         token
     );
-    let bytes = http.get(&url).send().await?.error_for_status()?.bytes().await?;
+    let mut resp = http.get(&url).send().await?.error_for_status()?;
+    let total = resp.content_length();
     if let Some(p) = dest.parent() {
         tokio::fs::create_dir_all(p).await?;
     }
-    tokio::fs::write(dest, &bytes).await?;
+    let mut file = tokio::fs::File::create(dest).await?;
+    let mut received: u64 = 0;
+    use tokio::io::AsyncWriteExt;
+    while let Some(chunk) = resp.chunk().await? {
+        file.write_all(&chunk).await?;
+        received += chunk.len() as u64;
+        on_progress(received, total);
+    }
+    file.flush().await?;
     Ok(())
 }
 

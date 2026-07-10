@@ -204,6 +204,7 @@ pub async fn pack_apply_update(
         "{}-{}.hyenipack",
         update.hyenipack_id, update.latest_version
     ));
+    // 업데이트 경로는 진행 표시 없음(no-op 콜백) — 추후 필요 시 진행 이벤트를 연결.
     hyenipack::download_pack_version(
         &http,
         &worker_base()?,
@@ -211,6 +212,7 @@ pub async fn pack_apply_update(
         &update.latest_version,
         &token,
         &temp,
+        |_, _| {},
     )
     .await
     .map_err(|e| e.to_string())?;
@@ -241,55 +243,81 @@ pub async fn pack_list_available() -> Result<Vec<hyenimc_launcher::hyenipack::Pa
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PackInstallOutcome {
-    pub token_applied: bool,
+pub struct PackDownloadResult {
+    pub path: String,
+    pub version: String,
 }
 
-/// 워커에서 혜니팩 최신 버전을 받아 지정 프로필에 설치(기존 import 파이프 재사용).
-/// 설치 후 저장소에서 서버 매칭 토큰이 있으면 프로필 config에 기록.
+/// 팩 최신 버전을 프로필 독립 temp로 다운로드(진행 이벤트 emit). 설치는 렌더러가 기존 import 흐름으로.
 #[tauri::command]
-pub async fn pack_install_from_worker(
+pub async fn pack_download_from_worker(
     app: AppHandle,
     db: State<'_, DbState>,
-    crypto: State<'_, CryptoState>,
-    profile_id: String,
     pack_id: String,
-    account_id: Option<String>,
-) -> Result<PackInstallOutcome, String> {
-    let profile = load_profile_pub(&db, &profile_id)?;
-    let dirs = game_dirs_for(&profile)?;
-    let http = reqwest::Client::new();
+) -> Result<PackDownloadResult, String> {
     let base = worker_base()?;
-
+    let http = reqwest::Client::new();
     let version = hyenimc_launcher::hyenipack::fetch_pack_latest_version(&http, &base, &pack_id)
         .await
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "혜니팩을 찾을 수 없습니다(비공개이거나 존재하지 않음).".to_string())?;
-
-    let token = resolve_download_token(&db, Some(&dirs.instance_dir)).ok_or_else(|| {
+    // 프로필이 아직 없으므로 저장소 토큰만 사용(다운로드는 스코프 무관)
+    let token = resolve_download_token(&db, None).ok_or_else(|| {
         "팩 다운로드를 위한 인증이 필요합니다.\n\nDiscord에서 /인증 명령어로 인증하세요.".to_string()
     })?;
+    let data_dir = hyenimc_core::paths::legacy_data_dir()
+        .ok_or_else(|| "데이터 디렉터리를 결정할 수 없습니다.".to_string())?;
+    let dest = data_dir.join(".temp").join(format!("{pack_id}-{version}.hyenipack"));
 
-    let temp = dirs
-        .instance_dir
-        .join(".temp")
-        .join(format!("{pack_id}-{version}.hyenipack"));
+    let app2 = app.clone();
+    let pid = pack_id.clone();
+    let mut last_pct: i64 = -1;
     hyenimc_launcher::hyenipack::download_pack_version(
-        &http, &base, &pack_id, &version, &token, &temp,
+        &http, &base, &pack_id, &version, &token, &dest,
+        move |received, total| {
+            // 정수 % 변화 시에만 emit(이벤트 폭주 방지). total 미상이면 received만.
+            let pct = total.map(|t| if t > 0 { (received * 100 / t) as i64 } else { 0 }).unwrap_or(-1);
+            if pct != last_pct {
+                last_pct = pct;
+                let _ = app2.emit("hyenipack:download-progress", serde_json::json!({
+                    "packId": &pid,
+                    "percent": if pct >= 0 { pct } else { 0 },
+                    "receivedBytes": received,
+                    "totalBytes": total,
+                }));
+            }
+        },
     )
     .await
     .map_err(|e| e.to_string())?;
+    Ok(PackDownloadResult { path: dest.display().to_string(), version })
+}
 
-    // 재사용: 파일 import 파이프(내부 불변 — 실사용 검증 경로)
-    let import_result =
-        hyenipack_import(app, db.clone(), profile_id, temp.display().to_string(), account_id, crypto)
-            .await;
-    let _ = std::fs::remove_file(&temp);
-    import_result?;
+/// 설치 후 토큰 매칭 기록(렌더러가 import 성공 후 호출). true=기록됨.
+#[tauri::command]
+pub fn hyeni_apply_matching_token(db: State<'_, DbState>, profile_id: String) -> Result<bool, String> {
+    let profile = load_profile_pub(&db, &profile_id)?;
+    let dirs = game_dirs_for(&profile)?;
+    Ok(apply_matching_store_token(&db, &dirs.instance_dir))
+}
 
-    // 설치 후 토큰 매칭 기록(팩이 깔아준 servers.dat 기준; 매칭 없으면 렌더러가 /인증 안내)
-    let token_applied = apply_matching_store_token(&db, &dirs.instance_dir);
-    Ok(PackInstallOutcome { token_applied })
+/// 다운로드 temp 파일 정리 — 데이터 디렉터리의 .temp 하위만 허용(임의 경로 삭제 방지).
+#[tauri::command]
+pub fn hyeni_remove_temp_file(path: String) -> Result<(), String> {
+    let data_dir = hyenimc_core::paths::legacy_data_dir()
+        .ok_or_else(|| "데이터 디렉터리를 결정할 수 없습니다.".to_string())?;
+    let temp_root = data_dir.join(".temp");
+    let p = std::path::Path::new(&path);
+    // canonicalize는 파일이 존재해야 하므로, 부모 canonical + 파일명으로 검증
+    let canon_parent = p.parent().and_then(|d| d.canonicalize().ok());
+    let canon_root = temp_root.canonicalize().ok();
+    match (canon_parent, canon_root) {
+        (Some(parent), Some(root)) if parent == root => {
+            let _ = std::fs::remove_file(p);
+            Ok(())
+        }
+        _ => Err("temp 디렉터리 밖의 파일은 삭제할 수 없습니다.".to_string()),
+    }
 }
 
 /// 실행 전 팩 게이트 (game_launch 내부 호출).
