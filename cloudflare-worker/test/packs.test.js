@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:test';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { zipSync } from 'fflate';
+import { zipSync, strToU8 } from 'fflate';
 import { putJson, putObject, getJson, objectExists } from '../src/admin/r2.js';
 import { sha256Hex } from '../src/admin/mods-format.js';
 import { handlePacks } from '../src/admin/packs.js';
@@ -175,5 +175,67 @@ describe('GET modpacks version manifest', () => {
   it('returns 404 for a nonexistent version', async () => {
     const res = await handlePacks(req('GET', '/admin/api/modpacks/hyenipack/versions/9.9.9/manifest'), env);
     expect(res.status).toBe(404);
+  });
+});
+
+function packZip(manifest) {
+  return zipSync({ 'hyenipack.json': strToU8(JSON.stringify(manifest)) });
+}
+async function publishZipReq(id, version, manifest, query = '') {
+  const bytes = packZip(manifest);
+  const sha256 = await sha256Hex(bytes);
+  const sidecar = { hyenipackId: id, version, sha256, changelog: 'c', breaking: false };
+  const fd = new FormData();
+  fd.set('pack', new File([bytes], 'pack.hyenipack', { type: 'application/zip' }));
+  fd.set('latest', JSON.stringify(sidecar));
+  return new Request(`https://example.com/admin/api/modpacks/${id}/versions${query}`, {
+    method: 'POST', body: fd,
+  });
+}
+
+describe('pack meta.json', () => {
+  const mani = (v) => ({
+    formatVersion: 1, hyenipackId: 'metapack', name: '메타팩', version: v,
+    minecraft: { version: '1.21.1', loaderType: 'neoforge', loaderVersion: '21.1.186' },
+    mods: [], breaking: false,
+  });
+
+  it('publish writes meta (name/minecraft from zip, hidden=false)', async () => {
+    const res = await handlePacks(await publishZipReq('metapack', '1.0.0', mani('1.0.0')), env);
+    expect(res.status).toBe(201);
+    const meta = await getJson(env, 'modpacks/metapack/meta.json');
+    expect(meta.name).toBe('메타팩');
+    expect(meta.minecraft.loaderType).toBe('neoforge');
+    expect(meta.hidden).toBe(false);
+  });
+
+  it('publish preserves hidden=true', async () => {
+    await putJson(env, 'modpacks/metapack/meta.json',
+      { name: 'x', minecraft: null, hidden: true, updatedAt: 'z' });
+    await handlePacks(await publishZipReq('metapack', '1.0.0', mani('1.0.0')), env);
+    const meta = await getJson(env, 'modpacks/metapack/meta.json');
+    expect(meta.hidden).toBe(true);        // 게시가 비공개를 풀지 않음
+    expect(meta.name).toBe('메타팩');       // name은 갱신
+  });
+
+  it('backfill(lower version) does not change meta name from newer latest', async () => {
+    await handlePacks(await publishZipReq('metapack', '1.2.0',
+      { ...mani('1.2.0'), name: '신버전팩' }), env);
+    await handlePacks(await publishZipReq('metapack', '1.0.0',
+      { ...mani('1.0.0'), name: '구버전팩' }), env);
+    const meta = await getJson(env, 'modpacks/metapack/meta.json');
+    expect(meta.name).toBe('신버전팩');     // 공개 latest 기준 유지
+  });
+
+  it('rollback updates meta from target version manifest', async () => {
+    await handlePacks(await publishZipReq('metapack', '1.0.0',
+      { ...mani('1.0.0'), name: '팩v1' }), env);
+    await handlePacks(await publishZipReq('metapack', '1.1.0',
+      { ...mani('1.1.0'), name: '팩v2' }), env);
+    const res = await handlePacks(req('PATCH', '/admin/api/modpacks/metapack/latest',
+      { version: '1.0.0' }), env);
+    expect(res.status).toBe(200);
+    const meta = await getJson(env, 'modpacks/metapack/meta.json');
+    expect(meta.name).toBe('팩v1');
   });
 });

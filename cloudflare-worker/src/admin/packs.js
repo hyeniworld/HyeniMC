@@ -3,7 +3,7 @@
 import { unzipSync } from 'fflate';
 import { adminJson } from './router.js';
 import { getJson, putJson, putObject, objectExists, listVersions, listPrefixes, deletePrefix, compareVersions } from './r2.js';
-import { sha256Hex } from './mods-format.js';
+import { sha256Hex, isoNow } from './mods-format.js';
 
 const PACK_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
@@ -85,18 +85,35 @@ async function getPackVersionManifest(env, id, ver) {
   });
 }
 
+/** pack 바이너리(zip)에서 hyenipack.json 파싱. 실패/부재 시 null. */
+function parsePackManifest(buffer) {
+  try {
+    const files = unzipSync(new Uint8Array(buffer), { filter: (f) => f.name === 'hyenipack.json' });
+    const entry = files['hyenipack.json'];
+    if (!entry) return null;
+    return JSON.parse(new TextDecoder().decode(entry));
+  } catch { return null; }
+}
+
 /** 목록 노출용 관용 파서: 팩 누락/엔트리 없음/JSON 오류 등 어떤 실패에도 null을 반환한다.
  * 팩 하나가 깨져도 전체 목록이 무너지지 않도록 상태 구분 없이 조용히 넘어간다. */
 async function readPackManifest(env, id, ver) {
   const obj = await env.RELEASES.get(`modpacks/${id}/versions/${ver}/pack.hyenipack`);
   if (!obj) return null;
-  try {
-    const buf = new Uint8Array(await obj.arrayBuffer());
-    const files = unzipSync(buf, { filter: (f) => f.name === 'hyenipack.json' });
-    const entry = files['hyenipack.json'];
-    if (!entry) return null;
-    return JSON.parse(new TextDecoder().decode(entry));
-  } catch { return null; }
+  return parsePackManifest(await obj.arrayBuffer());
+}
+
+/** meta.json 갱신 — name/minecraft는 대상 manifest 기준(없으면 기존/폴백), hidden은 항상 보존. */
+async function upsertPackMeta(env, id, manifest) {
+  const existing = await getJson(env, `modpacks/${id}/meta.json`);
+  const meta = {
+    name: manifest?.name ?? existing?.name ?? id,
+    minecraft: manifest?.minecraft ?? existing?.minecraft ?? null,
+    hidden: existing?.hidden ?? false,
+    updatedAt: isoNow(),
+  };
+  await putJson(env, `modpacks/${id}/meta.json`, meta);
+  return meta;
 }
 
 async function listPacks(env) {
@@ -164,8 +181,12 @@ async function publishPackVersion(request, env, id) {
   // 공개 latest(쿼리 미지정 구 클라이언트용 폴백)는 더 높거나 같은 버전일 때만 갱신.
   // 같은 버전(overwrite)은 내용 새로고침을 위해 갱신, 낮은 버전(백필)은 유지.
   const curLatest = await getJson(env, `modpacks/${id}/latest.json`);
-  if (!curLatest?.version || compareVersions(sidecar.version, curLatest.version) >= 0) {
+  const isNewLatest = !curLatest?.version || compareVersions(sidecar.version, curLatest.version) >= 0;
+  if (isNewLatest) {
     await putJson(env, `modpacks/${id}/latest.json`, sidecar);
+  }
+  if (isNewLatest || !(await getJson(env, `modpacks/${id}/meta.json`))) {
+    await upsertPackMeta(env, id, parsePackManifest(buffer));
   }
   return adminJson({ id, version: sidecar.version, sha256: actual }, 201);
 }
@@ -178,6 +199,7 @@ async function rollbackPack(request, env, id) {
   const snap = await getJson(env, `modpacks/${id}/versions/${body.version}/latest.json`);
   if (!snap) return adminJson({ error: 'Not Found' }, 404);
   await putJson(env, `modpacks/${id}/latest.json`, snap);
+  await upsertPackMeta(env, id, await readPackManifest(env, id, body.version));
   return adminJson({ id, latestVersion: body.version });
 }
 
