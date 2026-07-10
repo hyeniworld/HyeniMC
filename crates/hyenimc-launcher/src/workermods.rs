@@ -143,11 +143,6 @@ pub fn is_newer_version(remote: &str, local: &str) -> bool {
     version_key(remote) > version_key(local)
 }
 
-/// win이 현재보다 높은 상향인가(현재 미설정=상향으로 간주). 다운그레이드/동일이면 false.
-pub fn is_upgrade(win: &str, cur: &str) -> bool {
-    cur.is_empty() || version_key(win) > version_key(cur)
-}
-
 /// candidates 중 [lo, hi] 범위(빈 문자열/None = 경계 없음)를 만족하는 최신(version_key 최대) 반환.
 pub fn newest_in_range(candidates: &[String], lo: Option<&str>, hi: Option<&str>) -> Option<String> {
     let lo_key = lo.filter(|s| !s.is_empty()).map(version_key);
@@ -333,9 +328,13 @@ pub struct LoaderBump {
     pub version: String,
 }
 
-/// updates의 로더 범위 교집합과 현재 loader_version을 비교해 필요 시 상향 버전을 계산.
+/// updates의 로더 범위 교집합과 현재 loader_version을 비교해 필요 시 이동할 버전을 계산.
+/// loader_version은 자유 변수 — game_version·loader_type만 고정하고, 교집합 [min,max]를
+/// 만족하도록 위/아래 어느 방향으로든 이동한다.
 /// - Ok(None): 변경 불필요(제약 없음 / 현재가 이미 범위 내 / 자동교체 미지원 로더).
-/// - Ok(Some): loader_version을 이 값으로 올려야 함([min,max] 내 최신 릴리스, 설치용 전체 형식).
+/// - Ok(Some): loader_version을 이 값으로 이동해야 함([min,max] 내 최신 안정 릴리스,
+///   설치용 전체 형식). 범위 밖이면 위/아래 어디든 이동하며, 내릴 땐 범위 내 최신 =
+///   최소한의 다운그레이드가 된다.
 /// - Err: 범위를 만족하는 설치 가능한 로더가 없음.
 ///
 /// forge는 `{mc}-{build}` 형식이라 비교 시 build 부분만 정규화해 쓰고, 반환은 전체 형식.
@@ -382,8 +381,7 @@ pub async fn resolve_loader_for_updates(
         crate::loader::installable_loader_versions(http, loader_type, game_version).await?;
     let normalized: Vec<String> = candidates_full.iter().map(|c| norm(c)).collect();
     match newest_in_range(&normalized, lo.as_deref(), hi.as_deref()) {
-        // 상향(현재보다 높음)일 때만 교체 — 계획 하드제약 "다운그레이드 금지 / 상향만".
-        Some(win) if is_upgrade(&win, &cur) => {
+        Some(win) => {
             // 정규화형 승자에 대응하는 전체 형식 후보를 되찾아 설치용으로 반환.
             let full = candidates_full
                 .iter()
@@ -392,43 +390,12 @@ pub async fn resolve_loader_for_updates(
                 .unwrap_or(win);
             Ok(Some(LoaderBump { version: full }))
         }
-        Some(_) => Ok(None), // 다운그레이드/동일 → 변경 없음
         None => Err(LauncherError::Other(format!(
             "모드가 요구하는 로더 버전({}~{})을 설치할 수 없습니다.",
             lo.as_deref().unwrap_or("*"),
             hi.as_deref().unwrap_or("*"),
         ))),
     }
-}
-
-/// 최종 loader_version과 각 update의 [min,max]가 호환되는 update만 남긴다.
-/// 상향으로도 범위를 못 맞춘 모드(예: 현재 로더가 max 초과 → 다운그레이드 회피)를 설치 목록에서 제외.
-/// forge는 `{mc}-` 프리픽스를 떼어 build끼리 비교. loader_version이 비면(제약 없음) 전부 유지.
-pub fn retain_loader_compatible(
-    updates: Vec<WorkerModUpdate>,
-    loader_type: &str,
-    game_version: &str,
-    loader_version: &str,
-) -> Vec<WorkerModUpdate> {
-    if loader_version.is_empty() {
-        return updates;
-    }
-    let norm = |v: &str| -> String {
-        if loader_type == "forge" {
-            crate::loader::forge_build_part(v, game_version).to_string()
-        } else {
-            v.to_string()
-        }
-    };
-    let cur = norm(loader_version);
-    updates
-        .into_iter()
-        .filter(|u| {
-            let min = u.min_loader_version.as_deref().map(&norm);
-            let max = u.max_loader_version.as_deref().map(&norm);
-            loader_version_ok(&cur, min.as_deref(), max.as_deref())
-        })
-        .collect()
 }
 
 pub fn download_url(worker_base: &str, update: &WorkerModUpdate, token: &str) -> String {
@@ -546,32 +513,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn retain_loader_compatible_drops_over_max_keeps_others() {
-        let mk = |id: &str, min: Option<&str>, max: Option<&str>| WorkerModUpdate {
-            mod_id: id.into(), mod_name: id.into(), current_version: None,
-            latest_version: "1.0.0".into(), is_installed: true, category: "required".into(),
-            changelog: None, file: "f.jar".into(), sha256: None, size: None,
-            loader_type: "fabric".into(), game_version: "1.21.1".into(),
-            min_loader_version: min.map(String::from),
-            max_loader_version: max.map(String::from),
-            required_loader_version: None,
-        };
-        // 현재 0.17.0: A(min 0.16.0)=호환 유지, B(max 0.16.5)=초과 제외, C(제약없음)=유지
-        let ups = vec![mk("A", Some("0.16.0"), None), mk("B", None, Some("0.16.5")), mk("C", None, None)];
-        let kept = retain_loader_compatible(ups, "fabric", "1.21.1", "0.17.0");
-        let ids: Vec<_> = kept.iter().map(|u| u.mod_id.as_str()).collect();
-        assert_eq!(ids, vec!["A", "C"]);
-        // loader_version 빈 문자열 → 전부 유지
-        let ups2 = vec![mk("B", None, Some("0.16.5"))];
-        assert_eq!(retain_loader_compatible(ups2, "fabric", "1.21.1", "").len(), 1);
-        // forge 정규화: 현재 full "1.20.1-47.4.20", 모드 max build-only "47.4.10" → 초과 제외
-        let f = WorkerModUpdate { mod_id: "F".into(), mod_name: "F".into(), current_version: None,
-            latest_version: "1.0.0".into(), is_installed: true, category: "required".into(),
-            changelog: None, file: "f.jar".into(), sha256: None, size: None,
-            loader_type: "forge".into(), game_version: "1.20.1".into(),
-            min_loader_version: None, max_loader_version: Some("47.4.10".into()),
-            required_loader_version: None };
-        assert_eq!(retain_loader_compatible(vec![f], "forge", "1.20.1", "1.20.1-47.4.20").len(), 0);
+    fn newest_in_range_supports_downgrade_target() {
+        // 현재 로더(0.17.0)가 max(0.16.5)를 초과하는 상황에서 로더가 내려가야 할 때,
+        // 후보 중 [*,0.16.5] 내 최신(=최소한의 다운그레이드)이 선택되는지 고정.
+        let c = vec!["0.15.0".to_string(), "0.16.0".to_string(), "0.16.5".to_string(), "0.17.0".to_string()];
+        assert_eq!(newest_in_range(&c, None, Some("0.16.5")).as_deref(), Some("0.16.5"));
     }
 
     #[test]
@@ -613,14 +559,6 @@ mod tests {
         let c = vec!["1.20.1-47.4.20".to_string(), "1.20.1-47.4.9".to_string()];
         let norm: Vec<String> = c.iter().map(|v| forge_build_part(v, "1.20.1").to_string()).collect();
         assert_eq!(newest_in_range(&norm, Some("47.4.0"), None).as_deref(), Some("47.4.20"));
-    }
-
-    #[test]
-    fn is_upgrade_blocks_downgrade_and_equal() {
-        assert!(is_upgrade("0.16.20", "0.16.10"));   // 상향
-        assert!(!is_upgrade("0.16.10", "0.16.20"));  // 다운그레이드 금지
-        assert!(!is_upgrade("0.16.10", "0.16.10"));  // 동일 → 변경없음
-        assert!(is_upgrade("0.16.5", ""));           // 현재 미설정 → 상향
     }
 
     #[test]
