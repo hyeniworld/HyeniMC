@@ -25,8 +25,8 @@ interface TargetEdit {
   dependencies: string;
 }
 
-export function ModVersions({ modId, onToast, onChanged }: {
-  modId: string; onToast: (m: string, k?: 'ok' | 'err') => void; onChanged: () => void;
+export function ModVersions({ modId, name, onToast, onChanged }: {
+  modId: string; name?: string; onToast: (m: string, k?: 'ok' | 'err') => void; onChanged: () => void;
 }) {
   const [latest, setLatest] = useState<string | null>(null);
   const [versions, setVersions] = useState<Version[]>([]);
@@ -101,7 +101,10 @@ export function ModVersions({ modId, onToast, onChanged }: {
     <>
     <div class="panel">
       <div class="panel-head">
-        <h3 class="panel-title mono">{modId}</h3>
+        <div>
+          <h3 class="panel-title">{name || modId}</h3>
+          <span class="panel-id mono">modId: {modId}</span>
+        </div>
         <span class="panel-sub">현재 latest: {latest ? <span class="mono">{latest}</span> : '없음'}</span>
       </div>
       <div class="notice">latest 버전은 삭제할 수 없어요. 다른 버전을 latest로 지정한 뒤 삭제하세요.</div>
@@ -117,7 +120,7 @@ export function ModVersions({ modId, onToast, onChanged }: {
                 <span class="vver">{v.version}</span>{v.version === latest && <span class="badge badge-latest"> latest</span>}
               </td>
               <td><span class="badge badge-cat">{v.category}</span></td>
-              <td class="vchangelog truncate">{v.changelog}</td>
+              <td class="vchangelog truncate" title={v.changelog}>{v.changelog}</td>
               <td>
                 <div class="btn-row">
                   <button class="btn btn-sm" disabled={v.version === latest}
@@ -134,6 +137,7 @@ export function ModVersions({ modId, onToast, onChanged }: {
             expanded.has(v.version) && (
               <tr class="vrow-detail" key={v.version + '-d'}>
                 <td colspan={4}>
+                  {v.changelog && <div class="detail-changelog">{v.changelog}</div>}
                   {v.targets.length === 0 ? <span class="dash">타깃 없음</span> : (
                     <table class="subtable">
                       <thead><tr>{['로더', '게임버전', 'minLoader', 'maxLoader', 'dependencies', '파일'].map((h) => <th key={h}>{h}</th>)}</tr></thead>

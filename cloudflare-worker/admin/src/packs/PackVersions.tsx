@@ -83,7 +83,7 @@ export function PackVersions({ packId, onToast, onChanged }: {
                   onClick={() => run(() => api.editPackVersion(packId, v.version, { breaking: !v.breaking }), `${v.version} breaking=${!v.breaking}`)}>
                   {v.breaking ? '⚠ breaking' : 'false'}</button>
               </td>
-              <td class="vchangelog truncate">{v.changelog}</td>
+              <td class="vchangelog truncate" title={v.changelog}>{v.changelog}</td>
               <td>
                 <div class="btn-row">
                   <button class="btn btn-sm" disabled={v.version === latest}
@@ -100,6 +100,7 @@ export function PackVersions({ packId, onToast, onChanged }: {
             expanded.has(v.version) && (
               <tr class="vrow-detail" key={v.version + '-d'}>
                 <td colspan={4}>
+                  {v.changelog && <div class="detail-changelog">{v.changelog}</div>}
                   {(() => {
                     const m = manifests[v.version];
                     if (!m || m === 'loading') return <span class="kv-loading">불러오는 중…</span>;

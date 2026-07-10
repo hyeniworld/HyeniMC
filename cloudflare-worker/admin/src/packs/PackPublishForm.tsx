@@ -40,8 +40,7 @@ export function PackPublishForm({ onToast, onPublished }: {
   }
 
   return (
-    <form class="card" onSubmit={submit}>
-      <h3 class="card-title">새 혜니팩 버전 게시</h3>
+    <form class="dialog-form-body" onSubmit={submit}>
       <p class="card-hint">런처 export 산출물(.hyenipack + 같은 이름의 .latest.json)을 선택하세요.</p>
       <div class="notice">새로 게시하면 그 버전이 바로 latest가 됩니다.</div>
       <div class="form-grid">

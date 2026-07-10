@@ -9,10 +9,10 @@ const emptyFile = (): ModFileInput => ({
   minLoaderVersion: '', maxLoaderVersion: '', dependencies: '{}',
 });
 
-export function ModPublishForm({ onToast, onPublished }: {
-  onToast: (m: string, k?: 'ok' | 'err') => void; onPublished: () => void;
+export function ModPublishForm({ initialModId, onToast, onPublished }: {
+  initialModId?: string; onToast: (m: string, k?: 'ok' | 'err') => void; onPublished: () => void;
 }) {
-  const [modId, setModId] = useState('');
+  const [modId, setModId] = useState(initialModId ?? '');
   const [name, setName] = useState('');
   const [version, setVersion] = useState('');
   const [category, setCategory] = useState('required');
@@ -54,8 +54,7 @@ export function ModPublishForm({ onToast, onPublished }: {
   }
 
   return (
-    <form class="card" onSubmit={submit}>
-      <h3 class="card-title">새 모드 버전 게시</h3>
+    <form class="dialog-form-body" onSubmit={submit}>
       <div class="notice">새로 게시하면 그 버전이 바로 latest가 됩니다.</div>
       <div class="form-grid">
         <Field label="modId"><input value={modId} onInput={(e) => setModId((e.target as HTMLInputElement).value)} /></Field>

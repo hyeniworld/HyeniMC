@@ -2,6 +2,7 @@ import { useEffect, useState } from 'preact/hooks';
 import * as api from '../api';
 import { ModVersions } from './ModVersions';
 import { ModPublishForm } from './ModPublishForm';
+import { Modal } from '../components/Modal';
 import { sortVersions } from '../lib/versions';
 
 interface Mod {
@@ -19,6 +20,7 @@ export function ModsView({ onToast }: { onToast: (m: string, k?: 'ok' | 'err') =
   const [refreshKey, setRefreshKey] = useState(0);
   const [fMc, setFMc] = useState('');
   const [fLoader, setFLoader] = useState('');
+  const [publishOpen, setPublishOpen] = useState(false);
 
   async function load() {
     try { setMods((await api.listMods()).mods); }
@@ -36,11 +38,15 @@ export function ModsView({ onToast }: { onToast: (m: string, k?: 'ok' | 'err') =
     return okMc && okLoader;
   }
   const filteredMods = mods.filter(matchesMod);
+  const sel = mods.find((m) => m.id === selected);
 
   return (
     <div class="workspace">
       <aside class="rail">
-        <h2 class="rail-title">모드</h2>
+        <div class="rail-head">
+          <h2 class="rail-title">모드</h2>
+          <button class="btn btn-sm btn-primary" onClick={() => setPublishOpen(true)}>＋ 게시</button>
+        </div>
         <div class="filterbar">
           <select value={fMc} onChange={(e) => setFMc((e.target as HTMLSelectElement).value)}>
             <option value="">MC 버전 전체</option>
@@ -67,10 +73,13 @@ export function ModsView({ onToast }: { onToast: (m: string, k?: 'ok' | 'err') =
       </aside>
       <div class="main">
         {selected
-          ? <ModVersions modId={selected} onToast={onToast} onChanged={() => setRefreshKey((k) => k + 1)} />
+          ? <ModVersions modId={selected} name={sel?.name} onToast={onToast} onChanged={() => setRefreshKey((k) => k + 1)} />
           : <div class="panel"><p class="panel-placeholder">왼쪽에서 모드를 선택하세요.</p></div>}
-        <ModPublishForm onToast={onToast} onPublished={() => setRefreshKey((k) => k + 1)} />
       </div>
+      <Modal open={publishOpen} title="새 모드 버전 게시" onClose={() => setPublishOpen(false)}>
+        <ModPublishForm initialModId={selected ?? ''} onToast={onToast}
+          onPublished={() => { setPublishOpen(false); setRefreshKey((k) => k + 1); }} />
+      </Modal>
     </div>
   );
 }
