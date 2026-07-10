@@ -54,6 +54,27 @@ export function ModVersions({ modId, name, onToast, onChanged }: {
     catch (e: any) { onToast(e.message, 'err'); }
   }
 
+  /** 삭제 확인 — 핀 지정된 버전이면 경고를 덧붙인다(취소 시 중단). */
+  async function confirmDelete(v: Version) {
+    let warn = '';
+    try {
+      const idx = await api.getModIndex(modId);
+      const pinnedEnvs: string[] = [];
+      for (const [loader, gvs] of Object.entries<any>(idx?.targets ?? {})) {
+        for (const [gv, cell] of Object.entries<any>(gvs)) {
+          if (cell?.pinned === v.version) pinnedEnvs.push(`${loader}·${gv}`);
+        }
+      }
+      if (pinnedEnvs.length) {
+        warn = `\n\n⚠ 이 버전은 ${pinnedEnvs.join(', ')} 환경에 핀 지정되어 있어요. 삭제하면 핀이 해제되어 자동(최고 버전)으로 복귀합니다.`;
+      }
+    } catch { /* 인덱스 조회 실패 시 경고 없이 기본 확인만 */ }
+    setConfirm({
+      msg: `${modId} ${v.version} 버전을 삭제할까요?${warn}`,
+      act: () => run(() => api.deleteModVersion(modId, v.version), `${v.version} 삭제됨`),
+    });
+  }
+
   function openEdit(v: Version) {
     setForm({ changelog: v.changelog, category: v.category });
     setTform(v.targets.map((t) => ({
@@ -128,10 +149,7 @@ export function ModVersions({ modId, name, onToast, onChanged }: {
                     onClick={() => run(() => api.rollbackMod(modId, v.version), `${v.version} → latest`)}>latest로 지정</button>
                   <button class="btn btn-sm" onClick={() => openEdit(v)}>편집</button>
                   <button class="btn btn-sm btn-danger" disabled={v.version === latest}
-                    onClick={() => setConfirm({
-                      msg: `${modId} ${v.version} 버전을 삭제할까요?`,
-                      act: () => run(() => api.deleteModVersion(modId, v.version), `${v.version} 삭제됨`),
-                    })}>삭제</button>
+                    onClick={() => confirmDelete(v)}>삭제</button>
                 </div>
               </td>
             </tr>,
