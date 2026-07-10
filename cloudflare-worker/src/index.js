@@ -193,6 +193,40 @@ async function handleModpacksAPI(request, env, corsHeaders) {
 
   const path = new URL(request.url).pathname;
 
+  // GET /api/v2/modpacks — 공개 팩 목록(비공개 제외). 완전 공개, 다운로드만 토큰.
+  if (path === '/api/v2/modpacks' && request.method === 'GET') {
+    const packs = [];
+    let cursor;
+    do {
+      const page = await env.RELEASES.list({ prefix: 'modpacks/', delimiter: '/', cursor });
+      for (const prefix of page.delimitedPrefixes || []) {
+        const id = prefix.slice('modpacks/'.length).replace(/\/$/, '');
+        if (!MODPACK_ID_PATTERN.test(id)) continue;
+        try {
+          const [metaObj, latestObj] = await Promise.all([
+            env.RELEASES.get(`modpacks/${id}/meta.json`),
+            env.RELEASES.get(`modpacks/${id}/latest.json`),
+          ]);
+          const meta = metaObj ? JSON.parse(await metaObj.text()) : null;
+          if (meta?.hidden) continue;
+          if (!latestObj) continue;
+          const latest = JSON.parse(await latestObj.text());
+          packs.push({
+            id,
+            name: meta?.name ?? id,
+            latestVersion: latest.version ?? null,
+            breaking: !!latest.breaking,
+            minecraft: meta?.minecraft ?? null,
+          });
+        } catch (e) {
+          console.error(`[Modpacks API] list: skip ${id} (${e.message})`);
+        }
+      }
+      cursor = page.truncated ? page.cursor : undefined;
+    } while (cursor);
+    return jsonResponse({ packs }, 200, corsHeaders, 'public, max-age=60');
+  }
+
   const latestMatch = path.match(/^\/api\/v2\/modpacks\/([^\/]+)\/latest$/);
   if (latestMatch) {
     const id = latestMatch[1];
