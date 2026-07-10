@@ -129,6 +129,35 @@ pub async fn neoforge_versions(http: &reqwest::Client) -> Result<Vec<String>, La
     Ok(parse_maven_versions(&xml))
 }
 
+/// forge 메이븐 버전(`{mc}-{build}`, 예 `1.20.1-47.4.20`)에서 `{mc}-` 프리픽스를 떼어 build만 남긴다.
+/// 프리픽스가 없으면(build-only 입력) 원본 그대로. 비교(version_key)가 build끼리 이뤄지게 정규화.
+pub fn forge_build_part<'a>(version: &'a str, mc_version: &str) -> &'a str {
+    version.strip_prefix(&format!("{mc_version}-")).unwrap_or(version)
+}
+
+/// 주어진 로더/ MC 버전에 설치 가능한 로더 버전 목록(설치용 전체 형식). 자동 교체는
+/// fabric/neoforge/forge만 지원(그 외는 빈 목록 → 로더 상향 없음).
+pub async fn installable_loader_versions(
+    http: &reqwest::Client,
+    loader_type: &str,
+    mc_version: &str,
+) -> Result<Vec<String>, LauncherError> {
+    match loader_type {
+        "fabric" => Ok(fabric_loader_versions(http, mc_version)
+            .await?
+            .into_iter()
+            .map(|v| v.version)
+            .collect()),
+        "neoforge" => Ok(neoforge_versions(http)
+            .await?
+            .into_iter()
+            .filter(|v| neoforge_matches_mc(v, mc_version))
+            .collect()),
+        "forge" => forge_versions(http, mc_version).await, // 이미 mc 필터·전체 형식
+        _ => Ok(Vec::new()),
+    }
+}
+
 /// Fabric 설치 — profile json 저장 + 라이브러리 다운로드. 반환: 버전 id.
 pub async fn install_fabric(
     http: &reqwest::Client,

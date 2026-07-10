@@ -143,11 +143,43 @@ pub fn is_newer_version(remote: &str, local: &str) -> bool {
     version_key(remote) > version_key(local)
 }
 
+/// candidates 중 [lo, hi] 범위(빈 문자열/None = 경계 없음)를 만족하는 최신(version_key 최대) 반환.
+pub fn newest_in_range(candidates: &[String], lo: Option<&str>, hi: Option<&str>) -> Option<String> {
+    let lo_key = lo.filter(|s| !s.is_empty()).map(version_key);
+    let hi_key = hi.filter(|s| !s.is_empty()).map(version_key);
+    candidates
+        .iter()
+        .filter(|c| {
+            let k = version_key(c);
+            lo_key.as_ref().is_none_or(|l| &k >= l) && hi_key.as_ref().is_none_or(|h| &k <= h)
+        })
+        .max_by_key(|c| version_key(c))
+        .cloned()
+}
+
+/// (min,max) 범위들의 교집합: lo = 최대 min, hi = 최소 max. 빈/None은 제약 없음.
+pub fn loader_range_intersection(
+    ranges: &[(Option<String>, Option<String>)],
+) -> (Option<String>, Option<String>) {
+    let mut lo: Option<String> = None;
+    let mut hi: Option<String> = None;
+    for (min, max) in ranges {
+        if let Some(m) = min.as_deref().filter(|s| !s.is_empty()) {
+            if lo.as_deref().is_none_or(|cur| version_key(m) > version_key(cur)) {
+                lo = Some(m.to_string());
+            }
+        }
+        if let Some(m) = max.as_deref().filter(|s| !s.is_empty()) {
+            if hi.as_deref().is_none_or(|cur| version_key(m) < version_key(cur)) {
+                hi = Some(m.to_string());
+            }
+        }
+    }
+    (lo, hi)
+}
+
 /// 프로필 로더 버전이 모드가 요구하는 [min, max] 범위 내인지 (Electron checkLoaderVersionCompatibility).
-/// min/max가 없거나 빈 문자열이면 해당 제약 없음.
-// check_all_updates의 스킵 경로가 제거되어(로더 상향은 Task 3에서 판단) 현재는 테스트만 사용.
-// Task 3의 resolve_loader_for_updates가 이 함수를 재사용한다.
-#[allow(dead_code)]
+/// min/max가 없거나 빈 문자열이면 해당 제약 없음. resolve_loader_for_updates가 재사용한다.
 fn loader_version_ok(current: &str, min: Option<&str>, max: Option<&str>) -> bool {
     let cur = version_key(current);
     let above_min = match min.filter(|m| !m.is_empty()) {
@@ -290,6 +322,78 @@ pub async fn check_all_updates(
     Ok(updates)
 }
 
+/// 로더 상향 결과.
+#[derive(Debug, Clone)]
+pub struct LoaderBump {
+    pub version: String,
+}
+
+/// updates의 로더 범위 교집합과 현재 loader_version을 비교해 필요 시 상향 버전을 계산.
+/// - Ok(None): 변경 불필요(제약 없음 / 현재가 이미 범위 내 / 자동교체 미지원 로더).
+/// - Ok(Some): loader_version을 이 값으로 올려야 함([min,max] 내 최신 릴리스, 설치용 전체 형식).
+/// - Err: 범위를 만족하는 설치 가능한 로더가 없음.
+///
+/// forge는 `{mc}-{build}` 형식이라 비교 시 build 부분만 정규화해 쓰고, 반환은 전체 형식.
+/// fabric/neoforge는 정규화가 항등(그대로 비교).
+pub async fn resolve_loader_for_updates(
+    http: &reqwest::Client,
+    loader_type: &str,
+    game_version: &str,
+    current_loader_version: &str,
+    updates: &[WorkerModUpdate],
+) -> Result<Option<LoaderBump>, LauncherError> {
+    // fabric/neoforge/forge 외에는 자동 교체 미지원 → 변경 없음.
+    if !matches!(loader_type, "fabric" | "neoforge" | "forge") {
+        return Ok(None);
+    }
+    // forge만 mc 프리픽스를 떼어 build 부분끼리 비교. 그 외는 항등.
+    let norm = |v: &str| -> String {
+        if loader_type == "forge" {
+            crate::loader::forge_build_part(v, game_version).to_string()
+        } else {
+            v.to_string()
+        }
+    };
+
+    let ranges: Vec<(Option<String>, Option<String>)> = updates
+        .iter()
+        .map(|u| {
+            (
+                u.min_loader_version.as_deref().map(&norm),
+                u.max_loader_version.as_deref().map(&norm),
+            )
+        })
+        .collect();
+    let (lo, hi) = loader_range_intersection(&ranges);
+    if lo.is_none() && hi.is_none() {
+        return Ok(None); // 제약 없음
+    }
+    let cur = norm(current_loader_version);
+    if !cur.is_empty() && loader_version_ok(&cur, lo.as_deref(), hi.as_deref()) {
+        return Ok(None); // 이미 범위 내
+    }
+
+    let candidates_full =
+        crate::loader::installable_loader_versions(http, loader_type, game_version).await?;
+    let normalized: Vec<String> = candidates_full.iter().map(|c| norm(c)).collect();
+    match newest_in_range(&normalized, lo.as_deref(), hi.as_deref()) {
+        Some(win) => {
+            // 정규화형 승자에 대응하는 전체 형식 후보를 되찾아 설치용으로 반환.
+            let full = candidates_full
+                .iter()
+                .find(|c| norm(c) == win)
+                .cloned()
+                .unwrap_or(win);
+            Ok(Some(LoaderBump { version: full }))
+        }
+        None => Err(LauncherError::Other(format!(
+            "모드가 요구하는 로더 버전({}~{})을 설치할 수 없습니다.",
+            lo.as_deref().unwrap_or("*"),
+            hi.as_deref().unwrap_or("*"),
+        ))),
+    }
+}
+
 pub fn download_url(worker_base: &str, update: &WorkerModUpdate, token: &str) -> String {
     let loader_type = &update.loader_type;
     let game_version = &update.game_version;
@@ -403,6 +507,47 @@ pub async fn install_updates(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn newest_in_range_picks_highest_within_bounds() {
+        let c = vec!["0.16.5".to_string(), "0.16.10".to_string(), "0.17.0".to_string(), "0.15.0".to_string()];
+        assert_eq!(newest_in_range(&c, Some("0.16.0"), Some("0.16.10")).as_deref(), Some("0.16.10"));
+        assert_eq!(newest_in_range(&c, Some("0.16.0"), None).as_deref(), Some("0.17.0"));
+        assert_eq!(newest_in_range(&c, None, Some("0.15.0")).as_deref(), Some("0.15.0"));
+        assert_eq!(newest_in_range(&c, Some("0.18.0"), None), None);          // 범위 밖
+        assert_eq!(newest_in_range(&c, Some(""), Some("")).as_deref(), Some("0.17.0")); // 빈=제약없음
+    }
+
+    #[test]
+    fn loader_range_intersection_narrows() {
+        let ranges = vec![
+            (Some("0.16.0".to_string()), None),
+            (Some("0.15.0".to_string()), Some("0.17.0".to_string())),
+            (None, Some("0.16.10".to_string())),
+        ];
+        let (lo, hi) = loader_range_intersection(&ranges);
+        assert_eq!(lo.as_deref(), Some("0.16.0"));  // max of mins
+        assert_eq!(hi.as_deref(), Some("0.16.10")); // min of maxs
+    }
+
+    #[test]
+    fn loader_range_intersection_none_when_unconstrained() {
+        let ranges = vec![(None, None), (Some(String::new()), Some(String::new()))];
+        let (lo, hi) = loader_range_intersection(&ranges);
+        assert_eq!(lo, None);
+        assert_eq!(hi, None);
+    }
+
+    #[test]
+    fn forge_build_part_strips_mc_prefix_for_comparison() {
+        use crate::loader::forge_build_part;
+        assert_eq!(forge_build_part("1.20.1-47.4.20", "1.20.1"), "47.4.20");
+        assert_eq!(forge_build_part("47.4.20", "1.20.1"), "47.4.20"); // build-only 입력은 그대로
+        // build 부분만 비교하면 47.4.20 > 47.4.9 로 정상 정렬(문자열 비교였다면 47.4.9가 뒤).
+        let c = vec!["1.20.1-47.4.20".to_string(), "1.20.1-47.4.9".to_string()];
+        let norm: Vec<String> = c.iter().map(|v| forge_build_part(v, "1.20.1").to_string()).collect();
+        assert_eq!(newest_in_range(&norm, Some("47.4.0"), None).as_deref(), Some("47.4.20"));
+    }
 
     #[test]
     fn parses_versions_from_filenames() {
