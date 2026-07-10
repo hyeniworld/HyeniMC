@@ -406,9 +406,97 @@ pub async fn game_launch(
             .ok_or_else(|| "Java를 찾을 수 없습니다. 설정에서 Java 경로를 지정하세요.".to_string())?,
     };
 
-    // ③ 로더 설치 → 실효 version_id 결정 (vanilla면 게임 버전 그대로)
+    // ②.9 워커 모드 사전 확인 + 로더 호환 판단 (로더 설치 전에 loader_version 확정)
+    // 서버 필수 모드의 최신 버전이 현재 로더 버전 범위를 벗어나면 [min,max] 내 최신 로더로 상향한다
+    // (다운그레이드 없음). 실제 로더 설치는 아래 ③가 이 loader_version으로 수행. force면 건너뜀.
     let http = reqwest::Client::new();
-    let loader_version = profile.loader_version.clone().unwrap_or_default();
+    let mut loader_version = profile.loader_version.clone().unwrap_or_default();
+    let mut pending_worker_updates: Vec<hyenimc_launcher::workermods::WorkerModUpdate> = Vec::new();
+    let mut worker_install_token: Option<String> = None;
+    let mut worker_base_url: Option<String> = None;
+    {
+        let game_dir = std::path::PathBuf::from(&profile.game_directory);
+        if !force && crate::hyeni::should_check(&game_dir, profile.server_address.as_deref()) {
+            let _ = app.emit(
+                "game:log",
+                serde_json::json!({ "profileId": profile_id, "line": "[worker-mods] 모드 업데이트 확인 중..." }),
+            );
+            let base = crate::pack::worker_base().map_err(|_| {
+                crate::pack::forceable(
+                    "업데이트 서버 주소가 설정되지 않아 모드 최신 여부를 확인할 수 없습니다.\n그대로 실행하면 서버 접속이 안 될 수 있습니다.",
+                )
+            })?;
+            let mods_dir = game_dir.join("mods");
+            let updates = hyenimc_launcher::workermods::check_all_updates(
+                &http,
+                &base,
+                &mods_dir,
+                &profile.game_version,
+                &profile.loader_type,
+                true, // include_all — 실행 전엔 적용 가능한 모든 모드 확인
+                true, // has_authorized_server — should_check 통과 시에만 진입
+            )
+            .await
+            .map_err(|_| {
+                crate::pack::forceable(
+                    "업데이트 서버에 연결할 수 없어 모드 최신 여부를 확인하지 못했습니다.\n그대로 실행하면 서버 접속이 안 될 수 있습니다.",
+                )
+            })?;
+            if !updates.is_empty() {
+                let token = match hyenimc_launcher::hyeni::read_hyenihelper_token(&game_dir) {
+                    Some(t) => t,
+                    None => {
+                        log::warn!(
+                            "워커 모드 {}건 업데이트 필요하나 인증 토큰 없음 — 실행 중단",
+                            updates.len()
+                        );
+                        return Err("모드 업데이트를 위한 인증이 필요합니다.\n\nDiscord에서 /인증 명령어로 인증하세요.".to_string());
+                    }
+                };
+                // 로더 호환 판단 → 필요 시 loader_version 상향 + 프로필 반영
+                match hyenimc_launcher::workermods::resolve_loader_for_updates(
+                    &http,
+                    &profile.loader_type,
+                    &profile.game_version,
+                    &loader_version,
+                    &updates,
+                )
+                .await
+                {
+                    Ok(Some(bump)) if bump.version != loader_version => {
+                        let _ = app.emit(
+                            "game:log",
+                            serde_json::json!({ "profileId": profile_id, "line": format!("[loader] 모드 호환을 위해 로더 버전을 {}로 변경합니다.", bump.version) }),
+                        );
+                        loader_version = bump.version.clone();
+                        let patch = hyenimc_core::profile::ProfilePatch {
+                            loader_version: Some(bump.version.clone()),
+                            ..Default::default()
+                        };
+                        if let Err(e) = hyenimc_core::profile::update_profile(
+                            &db.0.lock().unwrap(),
+                            &profile_id,
+                            &patch,
+                            now_secs(),
+                        ) {
+                            log::warn!("로더 버전 프로필 반영 실패: {e}");
+                        }
+                    }
+                    Ok(_) => {}
+                    Err(e) => {
+                        return Err(crate::pack::forceable(&format!(
+                            "{e}\n그대로 실행하면 서버 접속이 안 될 수 있습니다."
+                        )));
+                    }
+                }
+                pending_worker_updates = updates;
+                worker_install_token = Some(token);
+                worker_base_url = Some(base);
+            }
+        }
+    }
+
+    // ③ 로더 설치 → 실효 version_id 결정 (loader_version은 ②.9에서 확정, vanilla면 게임 버전 그대로)
     let version_id = match profile.loader_type.as_str() {
         "fabric" if !loader_version.is_empty() => {
             let _ = app.emit("game:log", serde_json::json!({ "profileId": profile_id, "line": "[loader] Fabric 설치 확인 중..." }));
@@ -439,75 +527,37 @@ pub async fn game_launch(
         _ => profile.game_version.clone(),
     };
 
-    // ③.5 워커 모드 자동 업데이트 (혜니월드 서버 프로필) — Electron launch 흐름과 동일.
-    // 서버 접속에 필요한 모드에 업데이트가 있으면 설치하고, 인증(config token)이 없으면
-    // 실행을 중단한다(딥링크 /인증 필요).
-    // force(강제 실행) 시엔 이 확인을 건너뛴다 — 사용자가 위험을 감수하고 그대로 실행.
-    {
-        let game_dir = std::path::PathBuf::from(&profile.game_directory);
-        if !force && crate::hyeni::should_check(&game_dir, profile.server_address.as_deref()) {
-            let _ = app.emit(
-                "game:log",
-                serde_json::json!({ "profileId": profile_id, "line": "[worker-mods] 모드 업데이트 확인 중..." }),
-            );
-            // Worker URL 미설정 = 확인 불가 → 강제 실행 가능(사용자 선택)
-            let base = crate::pack::worker_base().map_err(|_| {
-                crate::pack::forceable(
-                    "업데이트 서버 주소가 설정되지 않아 모드 최신 여부를 확인할 수 없습니다.\n그대로 실행하면 서버 접속이 안 될 수 있습니다.",
-                )
-            })?;
-            let mods_dir = game_dir.join("mods");
-            // 서버 접근 불가 → 강제 실행 가능. (Electron은 이 경우 조용히 실행했으나 안내를 추가)
-            let updates = hyenimc_launcher::workermods::check_all_updates(
+    // ③.5 워커 모드 설치 (②.9에서 확인한 업데이트를 로더 설치 뒤에 설치)
+    if let (Some(token), Some(base)) = (worker_install_token.as_ref(), worker_base_url.as_ref()) {
+        if !pending_worker_updates.is_empty() {
+            let mods_dir = std::path::PathBuf::from(&profile.game_directory).join("mods");
+            let app_log = app.clone();
+            let pid = profile_id.clone();
+            hyenimc_launcher::workermods::install_updates(
                 &http,
-                &base,
+                base,
                 &mods_dir,
-                &profile.game_version,
-                &profile.loader_type,
-                true, // include_all — 실행 전엔 적용 가능한 모든 모드 확인(Electron checkAllMods)
-                true, // has_authorized_server — 이 블록은 should_check 통과 시에만 진입
+                &pending_worker_updates,
+                token,
+                &cfg,
+                move |name, pct| {
+                    let _ = app_log.emit(
+                        "game:log",
+                        serde_json::json!({ "profileId": &pid, "line": format!("[worker-mods] {name} {pct}%") }),
+                    );
+                    let _ = app_log.emit(
+                        "download:progress",
+                        serde_json::json!({
+                            "profileId": &pid,
+                            "phase": "worker-mods",
+                            "percent": pct,
+                            "currentFile": name,
+                        }),
+                    );
+                },
             )
             .await
-            .map_err(|_| {
-                crate::pack::forceable(
-                    "업데이트 서버에 연결할 수 없어 모드 최신 여부를 확인하지 못했습니다.\n그대로 실행하면 서버 접속이 안 될 수 있습니다.",
-                )
-            })?;
-            if !updates.is_empty() {
-                let token = match hyenimc_launcher::hyeni::read_hyenihelper_token(&game_dir) {
-                    Some(t) => t,
-                    None => {
-                        log::warn!(
-                            "워커 모드 {}건 업데이트 필요하나 인증 토큰 없음 (config/hyenihelper-config.json) — 실행 중단",
-                            updates.len()
-                        );
-                        return Err("모드 업데이트를 위한 인증이 필요합니다.\n\nDiscord에서 /인증 명령어로 인증하세요.".to_string());
-                    }
-                };
-                let app_log = app.clone();
-                let pid = profile_id.clone();
-                hyenimc_launcher::workermods::install_updates(
-                    &http, &base, &mods_dir, &updates, &token, &cfg,
-                    move |name, pct| {
-                        let _ = app_log.emit(
-                            "game:log",
-                            serde_json::json!({ "profileId": &pid, "line": format!("[worker-mods] {name} {pct}%") }),
-                        );
-                        // 워커 모드 단계도 진행률 바에 표시 (베이스 다운로드와 동일 이벤트)
-                        let _ = app_log.emit(
-                            "download:progress",
-                            serde_json::json!({
-                                "profileId": &pid,
-                                "phase": "worker-mods",
-                                "percent": pct,
-                                "currentFile": name,
-                            }),
-                        );
-                    },
-                )
-                .await
-                .map_err(|e| e.to_string())?;
-            }
+            .map_err(|e| e.to_string())?;
         }
     }
 
