@@ -141,7 +141,7 @@ pub async fn worker_mods_install(
 
 /// hyenimc:// 딥링크 처리 — main.rs의 on_open_url/single-instance에서 호출.
 pub fn handle_deep_link(app: &AppHandle, url: &str) {
-    let Some((token, servers)) = hy::parse_auth_url(url) else {
+    let Some((token, servers, _hyenipack)) = hy::parse_auth_url(url) else {
         if url.starts_with("hyenimc://") {
             let _ = app.emit(
                 "auth:error",

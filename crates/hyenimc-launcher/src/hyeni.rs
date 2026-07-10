@@ -116,12 +116,14 @@ pub fn read_hyenihelper_token(game_dir: &Path) -> Option<String> {
         .map(String::from)
 }
 
-/// hyenimc://auth?token=X&server=A,B 파싱 (순수)
-pub fn parse_auth_url(url: &str) -> Option<(String, Vec<String>)> {
+/// hyenimc://auth?token=X&server=A,B&hyenipack=ID 파싱 (순수).
+/// 세 번째 = hyenipack 쿼리 파라미터(없거나 비면 None — 하위호환).
+pub fn parse_auth_url(url: &str) -> Option<(String, Vec<String>, Option<String>)> {
     let rest = url.strip_prefix("hyenimc://auth")?;
     let query = rest.strip_prefix('?').unwrap_or("");
     let mut token = None;
     let mut servers = Vec::new();
+    let mut hyenipack = None;
     for pair in query.split('&') {
         let (k, v) = pair.split_once('=').unwrap_or((pair, ""));
         match k {
@@ -133,10 +135,13 @@ pub fn parse_auth_url(url: &str) -> Option<(String, Vec<String>)> {
                     .filter(|s| !s.is_empty())
                     .collect();
             }
+            "hyenipack" => hyenipack = Some(percent_decode(v)),
             _ => {}
         }
     }
-    token.filter(|t| !t.is_empty()).map(|t| (t, servers))
+    token
+        .filter(|t| !t.is_empty())
+        .map(|t| (t, servers, hyenipack.filter(|p| !p.is_empty())))
 }
 
 fn percent_decode(s: &str) -> String {
@@ -249,16 +254,30 @@ mod tests {
 
     #[test]
     fn auth_url_parsing() {
-        let (token, servers) =
+        let (token, servers, _p) =
             parse_auth_url("hyenimc://auth?token=abc%2B1&server=a.devbug.ing,b.devbug.ing").unwrap();
         assert_eq!(token, "abc+1");
         assert_eq!(servers, vec!["a.devbug.ing", "b.devbug.ing"]);
 
-        let (t2, s2) = parse_auth_url("hyenimc://auth?token=xyz").unwrap();
+        let (t2, s2, _p2) = parse_auth_url("hyenimc://auth?token=xyz").unwrap();
         assert_eq!(t2, "xyz");
         assert!(s2.is_empty());
 
         assert!(parse_auth_url("hyenimc://auth?server=a").is_none()); // token 필수
         assert!(parse_auth_url("hyenimc://other?token=x").is_none());
+    }
+
+    #[test]
+    fn parse_auth_url_with_hyenipack() {
+        let (t, s, p) = parse_auth_url("hyenimc://auth?token=abc&server=mc.a.com&hyenipack=season3").unwrap();
+        assert_eq!(t, "abc");
+        assert_eq!(s, vec!["mc.a.com"]);
+        assert_eq!(p.as_deref(), Some("season3"));
+        // 파라미터 없음 → None (하위호환)
+        let (_, _, p2) = parse_auth_url("hyenimc://auth?token=abc").unwrap();
+        assert_eq!(p2, None);
+        // 빈 값 → None
+        let (_, _, p3) = parse_auth_url("hyenimc://auth?token=abc&hyenipack=").unwrap();
+        assert_eq!(p3, None);
     }
 }

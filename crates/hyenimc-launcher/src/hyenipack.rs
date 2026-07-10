@@ -573,6 +573,64 @@ pub async fn download_pack_version(
     Ok(())
 }
 
+// ── 공개 팩 목록/latest (Worker) ─────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PackListMinecraft {
+    pub version: String,
+    pub loader_type: String,
+    #[serde(default)]
+    pub loader_version: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PackListItem {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub latest_version: Option<String>,
+    #[serde(default)]
+    pub breaking: bool,
+    #[serde(default)]
+    pub minecraft: Option<PackListMinecraft>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct PackListResponse {
+    pub packs: Vec<PackListItem>,
+}
+
+/// 공개 팩 목록(GET /api/v2/modpacks). 토큰 불필요.
+pub async fn fetch_pack_list(
+    http: &reqwest::Client,
+    worker_base: &str,
+) -> Result<Vec<PackListItem>, LauncherError> {
+    let url = format!("{}/api/v2/modpacks", worker_base.trim_end_matches('/'));
+    let resp: PackListResponse = http.get(&url).send().await?.error_for_status()?.json().await?;
+    Ok(resp.packs)
+}
+
+/// 팩 공개 latest 버전. 404(비공개/부재) → Ok(None).
+pub async fn fetch_pack_latest_version(
+    http: &reqwest::Client,
+    worker_base: &str,
+    id: &str,
+) -> Result<Option<String>, LauncherError> {
+    let url = format!("{}/api/v2/modpacks/{}/latest", worker_base.trim_end_matches('/'), id);
+    let resp = http.get(&url).send().await?;
+    if resp.status() == reqwest::StatusCode::NOT_FOUND {
+        return Ok(None);
+    }
+    #[derive(Deserialize)]
+    struct L {
+        version: String,
+    }
+    let l: L = resp.error_for_status()?.json().await?;
+    Ok(Some(l.version))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -826,6 +884,18 @@ mod tests {
         // F6: 폴더 replace — stale 삭제 + 신규 설치
         assert!(!dirs.instance_dir.join("scripts/stale.zs").exists());
         assert_eq!(std::fs::read(dirs.instance_dir.join("scripts/new.zs")).unwrap(), b"NEW");
+    }
+
+    #[test]
+    fn pack_list_item_deserializes_worker_response() {
+        let json = r#"{"packs":[{"id":"season3","name":"시즌3 팩","latestVersion":"1.2.0","breaking":false,
+            "minecraft":{"version":"1.21.1","loaderType":"neoforge","loaderVersion":"21.1.186"}},
+            {"id":"legacy","name":"legacy","latestVersion":"0.9.0","breaking":true,"minecraft":null}]}"#;
+        let resp: PackListResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(resp.packs.len(), 2);
+        assert_eq!(resp.packs[0].minecraft.as_ref().unwrap().loader_type, "neoforge");
+        assert!(resp.packs[1].minecraft.is_none());
+        assert!(resp.packs[1].breaking);
     }
 
     #[test]
