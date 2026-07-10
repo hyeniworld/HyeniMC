@@ -446,13 +446,22 @@ pub async fn game_launch(
                 let token = match hyenimc_launcher::hyeni::read_hyenihelper_token(&game_dir) {
                     Some(t) => t,
                     None => {
-                        log::warn!(
-                            "워커 모드 {}건 업데이트 필요하나 인증 토큰 없음 — 실행 중단",
-                            updates.len()
-                        );
-                        return Err("모드 업데이트를 위한 인증이 필요합니다.\n\nDiscord에서 /인증 명령어로 인증하세요.".to_string());
+                        // 저장소에서 이 프로필 서버와 매칭되는 토큰이 있으면 config에 기록하고 사용
+                        if crate::pack::apply_matching_store_token(&db, &game_dir) {
+                            hyenimc_launcher::hyeni::read_hyenihelper_token(&game_dir)
+                                .unwrap_or_default()
+                        } else {
+                            log::warn!(
+                                "워커 모드 {}건 업데이트 필요하나 인증 토큰 없음 — 실행 중단",
+                                updates.len()
+                            );
+                            return Err("모드 업데이트를 위한 인증이 필요합니다.\n\nDiscord에서 /인증 명령어로 인증하세요.".to_string());
+                        }
                     }
                 };
+                if token.is_empty() {
+                    return Err("모드 업데이트를 위한 인증이 필요합니다.\n\nDiscord에서 /인증 명령어로 인증하세요.".to_string());
+                }
                 // 로더 호환 판단 → 필요 시 loader_version 상향 + 프로필 반영
                 match hyenimc_launcher::workermods::resolve_loader_for_updates(
                     &http,
