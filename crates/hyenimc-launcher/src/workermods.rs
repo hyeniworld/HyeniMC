@@ -322,7 +322,7 @@ pub async fn check_all_updates(
     Ok(updates)
 }
 
-/// 로더 상향 결과.
+/// 로더 이동 결과(범위를 만족하는 버전으로 상향/하향).
 #[derive(Debug, Clone)]
 pub struct LoaderBump {
     pub version: String,
