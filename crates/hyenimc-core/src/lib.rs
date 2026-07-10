@@ -6,6 +6,7 @@
 pub mod account;
 pub mod crypto;
 pub mod db;
+pub mod hyeni_tokens;
 pub mod mod_cache;
 pub mod paths;
 pub mod profile;
@@ -26,6 +27,8 @@ pub enum CoreError {
     DataDirNotFound(String),
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
+    #[error("serialization error: {0}")]
+    Serde(#[from] serde_json::Error),
     #[error("crypto error: {0}")]
     Crypto(String),
 }
