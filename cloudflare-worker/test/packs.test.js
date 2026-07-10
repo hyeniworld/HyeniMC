@@ -238,6 +238,28 @@ describe('pack meta.json', () => {
     const meta = await getJson(env, 'modpacks/metapack/meta.json');
     expect(meta.name).toBe('팩v1');
   });
+
+  it('legacy pack(meta absent): backfill seeds meta from public latest, not backfilled version', async () => {
+    // meta 없는 레거시 상태 재현: 1.2.0을 게시한 뒤 meta만 삭제
+    await handlePacks(await publishZipReq('legacy2', '1.2.0', { ...mani('1.2.0'), hyenipackId: 'legacy2', name: '최신이름' }), env);
+    await env.RELEASES.delete('modpacks/legacy2/meta.json');
+    // 하위 버전 백필
+    await handlePacks(await publishZipReq('legacy2', '1.0.0', { ...mani('1.0.0'), hyenipackId: 'legacy2', name: '옛이름' }), env);
+    const meta = await getJson(env, 'modpacks/legacy2/meta.json');
+    expect(meta.name).toBe('최신이름');   // 공개 latest(1.2.0) 기준
+  });
+
+  it('edit and delete do not touch meta.hidden', async () => {
+    await handlePacks(await publishZipReq('vispack2', '1.0.0', { ...mani('1.0.0'), hyenipackId: 'vispack2' }), env);
+    await handlePacks(await publishZipReq('vispack2', '1.1.0', { ...mani('1.1.0'), hyenipackId: 'vispack2' }), env);
+    await handlePacks(req('PATCH', '/admin/api/modpacks/vispack2/visibility', { hidden: true }), env);
+    // 편집(비-latest 버전) 후에도 hidden 유지
+    await handlePacks(req('PATCH', '/admin/api/modpacks/vispack2/versions/1.0.0', { changelog: 'edited' }), env);
+    expect((await getJson(env, 'modpacks/vispack2/meta.json')).hidden).toBe(true);
+    // 비-latest 버전 삭제 후에도 hidden 유지
+    await handlePacks(req('DELETE', '/admin/api/modpacks/vispack2/versions/1.0.0'), env);
+    expect((await getJson(env, 'modpacks/vispack2/meta.json')).hidden).toBe(true);
+  });
 });
 
 describe('PATCH /admin/api/modpacks/{id}/visibility', () => {

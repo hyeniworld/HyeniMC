@@ -213,8 +213,14 @@ async function publishPackVersion(request, env, id) {
   if (isNewLatest) {
     await putJson(env, `modpacks/${id}/latest.json`, sidecar);
   }
-  if (isNewLatest || !(await getJson(env, `modpacks/${id}/meta.json`))) {
+  if (isNewLatest) {
     await upsertPackMeta(env, id, parsePackManifest(buffer));
+  } else if (!(await getJson(env, `modpacks/${id}/meta.json`))) {
+    // 레거시 팩(meta 없음)에 하위 버전 백필: meta는 공개 latest 기준으로 시딩
+    const latestManifest = curLatest?.version
+      ? await readPackManifest(env, id, curLatest.version)
+      : null;
+    await upsertPackMeta(env, id, latestManifest ?? parsePackManifest(buffer));
   }
   return adminJson({ id, version: sidecar.version, sha256: actual }, 201);
 }

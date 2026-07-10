@@ -186,7 +186,7 @@ async function handleCurseForgeProxy(request, env, corsHeaders) {
 const MODPACK_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const MODPACK_VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
 
-/** 팩 비공개 여부 — modpacks/{id}/meta.json의 hidden. meta 없음/손상 = 공개. */
+/** 팩 비공개 여부 — modpacks/{id}/meta.json의 hidden. meta 없음/손상 = 공개(fail-open: meta 파손이 정상 팩 서빙을 막지 않게). 공개 목록은 반대로 손상 팩을 skip한다(보수적) — 의도된 비대칭. */
 async function isPackHidden(env, id) {
   const obj = await env.RELEASES.get(`modpacks/${id}/meta.json`);
   if (!obj) return false;
@@ -230,6 +230,7 @@ async function handleModpacksAPI(request, env, corsHeaders) {
             minecraft: meta?.minecraft ?? null,
           });
         } catch (e) {
+          // 손상 meta/latest는 목록에서 skip(보수적). 단건 라우트(isPackHidden)는 fail-open — 의도된 비대칭.
           console.error(`[Modpacks API] list: skip ${id} (${e.message})`);
         }
       }
