@@ -96,20 +96,68 @@ pub async fn worker_mods_install(
     profile_path: String,
     updates: Vec<workermods::WorkerModUpdate>,
 ) -> Result<Vec<workermods::InstallResult>, String> {
-    let base = crate::pack::worker_base()?;
+    // 진단 로그: 설치 요청 진입. 셋업 단계 실패는 지금까지 로그가 전혀 없어
+    // 렌더러 토스트(제네릭 "모드 설치에 실패")만 보였다 — 각 단계를 로그파일에 남긴다.
+    log::info!(
+        "[worker-mods] 설치 요청: {} 모드, profile={}",
+        updates.len(),
+        profile_path
+    );
+    for u in &updates {
+        log::info!(
+            "[worker-mods]   대상 {} {} (설치됨={}, {}/{})",
+            u.mod_id,
+            u.latest_version,
+            u.is_installed,
+            u.loader_type,
+            u.file
+        );
+    }
+
+    let base = crate::pack::worker_base().map_err(|e| {
+        log::error!("[worker-mods] worker_base 실패: {e}");
+        e
+    })?;
     let profile_dir = PathBuf::from(&profile_path);
 
     // 다운로드 인증 토큰 = HyeniHelper config 토큰(딥링크 /인증). game_launch·Electron과 동일 출처.
     // (기존엔 MS 계정 access_token을 보내 Worker가 401로 거부 — 오이식 수정.
     //  Worker /download/v2는 config token을 TOKEN_CHECK_API_URL 화이트리스트로 검증한다.)
-    let token = hy::read_hyenihelper_token(&profile_dir).ok_or_else(|| {
-        "모드 업데이트를 위한 인증이 필요합니다.\n\nDiscord에서 /인증 명령어로 인증하세요.".to_string()
-    })?;
+    //
+    // config 토큰 1순위 → 없으면 저장소(hyeni_tokens) 폴백. 팩 설치(resolve_download_token)와
+    // 동일 규칙 — 신규 팩 프로필은 HyeniHelper 미설치라 apply_auth가 config에 토큰을 아직 못 써서
+    // (config=없음, 저장소=있음) 상태가 된다. 다운로드는 스코프 무관이므로 저장소 토큰으로 진행.
+    let token = match hy::read_hyenihelper_token(&profile_dir) {
+        Some(t) => {
+            log::info!("[worker-mods] 토큰 출처: 프로필 config");
+            t
+        }
+        None => {
+            let db = app.state::<DbState>();
+            let store = {
+                let conn = db.0.lock().unwrap();
+                hyenimc_core::hyeni_tokens::any_token(&conn).ok().flatten()
+            };
+            match store {
+                Some(t) => {
+                    log::info!("[worker-mods] 토큰 출처: 저장소 폴백(config 없음)");
+                    t
+                }
+                None => {
+                    log::warn!("[worker-mods] config·저장소 모두 토큰 없음 → 인증 필요 안내");
+                    return Err("모드 업데이트를 위한 인증이 필요합니다.\n\nDiscord에서 /인증 명령어로 인증하세요.".to_string());
+                }
+            }
+        }
+    };
 
     let settings = {
         let db = app.state::<DbState>();
         let conn = db.0.lock().unwrap();
-        hyenimc_core::settings::get_settings(&conn).map_err(|e| e.to_string())?
+        hyenimc_core::settings::get_settings(&conn).map_err(|e| {
+            log::error!("[worker-mods] settings 조회 실패: {e}");
+            e.to_string()
+        })?
     };
     let cfg = crate::game::download_config(&settings);
     let http = reqwest::Client::new();
@@ -130,7 +178,20 @@ pub async fn worker_mods_install(
         },
     )
     .await
-    .map_err(|e| e.to_string())?;
+    .map_err(|e| {
+        log::error!("[worker-mods] install_updates 설정 단계 오류: {e}");
+        e.to_string()
+    })?;
+
+    let ok = results.iter().filter(|r| r.success).count();
+    log::info!("[worker-mods] 설치 완료: 성공 {}/{}", ok, results.len());
+    for r in results.iter().filter(|r| !r.success) {
+        log::warn!(
+            "[worker-mods] 실패: {} — {}",
+            r.mod_id,
+            r.error.as_deref().unwrap_or("(사유 없음)")
+        );
+    }
 
     let _ = app.emit(
         "worker-mods:update-complete",
