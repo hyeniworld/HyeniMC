@@ -76,3 +76,5 @@ src/main/gen/
 /target
 apps/launcher/src-tauri/target
 apps/launcher/src-tauri/gen
+
+/.tauri
