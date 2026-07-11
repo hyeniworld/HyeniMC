@@ -2,6 +2,8 @@
 
 HyeniMC 프로젝트의 모든 문서가 정리되어 있습니다.
 
+> **현재 구조 (2026-07~)**: 사용자 런처는 **Tauri v2 + Rust**로 리뉴얼됐고(v0.4.0), 기존 Electron은 **제작자 도구**로 존치합니다. 두 앱은 렌더러·SQLite를 공유합니다. 개요는 루트 [README.md](../README.md), 진행 현황은 [architecture/QA_AND_RELEASE.md](architecture/QA_AND_RELEASE.md) 참조. (일부 개발/배포 문서는 Electron 시절 기준이라 갱신 대기 상태입니다.)
+
 ## ⚠️ 중요 공지
 
 > **이미지 저작권 안내**  
@@ -17,10 +19,14 @@ HyeniMC 프로젝트의 모든 문서가 정리되어 있습니다.
 ### 🏗️ Architecture (아키텍처)
 시스템 설계 및 구조 관련 문서
 
-- **[ARCHITECTURE.md](architecture/ARCHITECTURE.md)** - 전체 시스템 아키텍처
+- **[QA_AND_RELEASE.md](architecture/QA_AND_RELEASE.md)** ⭐ - QA 매트릭스 & 배포(사용자 런처 현행)
+- **[TAURI_MIGRATION_PHASE1.md](architecture/TAURI_MIGRATION_PHASE1.md)** - Tauri 리뉴얼(M0~M5) 설계
+- **[HYENIPACK_SPEC.md](architecture/HYENIPACK_SPEC.md)** - 혜니팩(모드팩) 매니페스트 스펙
+- **[AUTH_PROTOCOL.md](architecture/AUTH_PROTOCOL.md)** - 인증 프로토콜 설계(딥링크 `hyenimc://`)
+- **[SERVER_DETECTION_OPTIONS.md](architecture/SERVER_DETECTION_OPTIONS.md)** - 서버 감지 방식 검토
+- **[ARCHITECTURE.md](architecture/ARCHITECTURE.md)** - 전체 시스템 아키텍처(⚠️ Electron 시절 기준, 갱신 대기)
 - **[DESIGN.md](architecture/DESIGN.md)** - UI/UX 디자인 시스템
 - **[THEME_SYSTEM.md](architecture/THEME_SYSTEM.md)** - 테마 시스템 구조
-- **[AUTH_PROTOCOL.md](architecture/AUTH_PROTOCOL.md)** - 인증 프로토콜 설계
 
 ### 📖 Guides (사용자 가이드)
 사용자 및 관리자를 위한 가이드

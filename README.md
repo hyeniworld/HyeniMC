@@ -1,12 +1,12 @@
 # HyeniMC 🚀
 
-**아름답고 빠른 크로스플랫폼 마인크래프트 런처**
+**혜니월드 커뮤니티 전용 마인크래프트 런처**
 
-혜니월드 커뮤니티를 위한 프로필 기반 마인크래프트 런처입니다.
+프로필 기반으로 마인크래프트를 관리·실행하고, 혜니월드 전용 모드팩(혜니팩)을 손쉽게 설치·업데이트합니다.
 
-![Version](https://img.shields.io/badge/version-0.1.0-blue)
+![Version](https://img.shields.io/badge/version-0.4.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-lightgrey)
 
 **한국어** | [English](README_EN.md)
 
@@ -21,113 +21,79 @@
 
 ---
 
-## ✨ 주요 기능
+## 🧭 프로젝트 구성 (두 개의 앱)
 
-### 🎮 게임 관리
-- ✅ **프로필 관리**: 여러 프로필 생성, 편집, 삭제
-- ✅ **프로필 격리**: 각 프로필마다 독립된 세이브, 모드, 설정
-- ✅ **버전 선택**: 모든 마인크래프트 버전 지원 (1.0 ~ 최신)
-- ✅ **자동 다운로드**: 게임 파일, 라이브러리, 에셋 자동 다운로드
-- ✅ **병렬 다운로드**: 최대 20개 파일 동시 다운로드로 **4배 빠른 속도!**
+HyeniMC는 **렌더러(React UI)와 SQLite 데이터베이스를 공유**하는 두 개의 앱으로 이루어져 있습니다.
 
-### 🔐 계정 관리
-- ✅ **Microsoft 로그인**: 정품 계정으로 멀티플레이 가능
-- ✅ **오프라인 모드**: 싱글플레이 및 크랙 서버 지원
-- ✅ **멀티 계정**: 여러 계정 추가 및 전환
-- ✅ **자동 토큰 갱신**: 로그인 상태 자동 유지
-- ✅ **암호화 저장**: AES-256-GCM으로 토큰 안전 보관
+| 앱 | 스택 | 대상 | 역할 |
+|----|------|------|------|
+| **사용자 런처** | **Tauri v2 + Rust** | 일반 사용자 | 프로필·게임 실행·혜니팩·워커 모드·리소스/셰이더팩·크래시 리포트. 경량 배포(자체 자동 업데이트). |
+| **제작자 도구** | **Electron + Go** | 팩 제작자 | 혜니팩 제작/export, 모드·모드팩 검색·설치, 의존성 해결, 배포 관리. **기능 동결**(사용자 런처엔 진입점 숨김). |
 
-### ⚙️ 시스템
-- ✅ **자동 Java 감지**: 시스템의 모든 Java 설치 자동 탐지
-- ✅ **플랫폼 최적화**: macOS (Apple Silicon/Intel), Windows, Linux 지원
-- ✅ **재시도 로직**: 네트워크 오류 시 자동 재시도 (exponential backoff)
-- ✅ **체크섬 검증**: SHA1 해시로 파일 무결성 보장
-- ✅ **Shared 리소스**: 라이브러리/에셋 중복 방지로 디스크 절약
-
-### 🧩 모드 & 모드팩
-- ✅ **모드 로더**: Fabric, NeoForge, Quilt 완전 지원
-- ✅ **모드 검색**: Modrinth, CurseForge 통합 검색
-- ✅ **자동 업데이트**: 설치된 모드 최신 버전 확인 및 업데이트
-- ✅ **의존성 해결**: 필수 모드 자동 설치
-- ✅ **모드팩 지원**: .mrpack, .zip 가져오기 및 설치
-- ✅ **HyeniHelper**: 혜니월드 전용 모드 자동 관리
-
-### 🎨 리소스 & 커스터마이징
-- ✅ **리소스팩**: 설치, 활성화, 관리
-- ✅ **셰이더팩**: Optifine, Iris 셰이더 지원
-- ✅ **실시간 감지**: 파일 변경 자동 감지 및 반영
-
-### 🎨 UI/UX
-- ✅ **모던 디자인**: 깔끔하고 직관적인 인터페이스
-- ✅ **실시간 진행률**: 전체 & 개별 파일 진행률 표시
-- ✅ **다크 모드**: 눈에 편한 다크 테마
-- ✅ **강혜니 테마**: 혜니월드 전용 커스텀 테마
+> 기존 Electron 단일 런처를 **사용자 런처는 Tauri+Rust로 리뉴얼**하고, 기존 Electron은 **제작자 도구로 존치**하는 방향으로 전환했습니다. 두 앱은 같은 `~/.hyenimc`(`%APPDATA%\hyenimc`) 데이터를 in-place로 공유합니다. 상세 설계는 [docs/architecture/](docs/architecture/) 참조.
 
 ---
 
-## 📦 설치 및 개발
+## ✨ 주요 기능
+
+### 🎮 사용자 런처 (Tauri)
+- ✅ **프로필 관리**: 생성·편집·삭제·즐겨찾기, 프로필별 독립 세이브/모드/설정
+- ✅ **게임 실행**: 바닐라 · **Fabric · NeoForge · Forge** 로더 자동 설치 후 실행
+- ✅ **Microsoft 로그인**: 정품 계정, 멀티 계정, 자동 토큰 갱신, **AES-256-GCM 암호화** 저장
+- ✅ **Java 자동 감지**: 시스템 Java 설치 탐색(진입 지연 없이 탭 진입 시 감지)
+- ✅ **혜니팩(모드팩)**: 온라인 목록/검색 설치 · 로컬 `.hyenipack` 가져오기 · 신버전 감지 → 적용(사용자 파일 보존, breaking 시 실행 차단)
+- ✅ **워커 모드 자동 관리**: 혜니월드 서버 프로필의 필수 모드(HyeniHelper 등) sha256 검증 설치·업데이트
+- ✅ **리소스팩/셰이더팩**: 팩 제공분/사용자 추가분 구분 표시(읽기전용) + 폴더 열기 + 실시간 파일 감시
+- ✅ **크래시 리포트**: 로그/리포트 zip 내보내기 + 로그 폴더 열기
+- ✅ **자동 업데이트**: 새 릴리스 감지 → 다운로드 → 교체 설치(기존 Electron 판 위 설치 시 자동 제거 + 데이터 보존)
+- ✅ **병렬 다운로드**: 파일 동시 다운로드 + sha1/sha256 무결성 검증 + shared 리소스 중복 방지
+
+### 🛠️ 제작자 도구 (Electron, 제작자 전용)
+- ✅ **혜니팩 제작/Export** (매니페스트 기반)
+- ✅ **모드 검색·설치** (Modrinth · CurseForge) + **의존성 자동 해결**
+- ✅ **모드팩 검색·설치** (.mrpack · .zip · CurseForge)
+- ✅ **배포 관리** (관리 패널 연동 — 모드/혜니팩 게시·롤백)
+
+---
+
+## 📦 개발 및 빌드
 
 ### 사전 요구사항
-- **Node.js** 18+
-- **Go** 1.21+
+- **Node.js** 20+ (공용 렌더러 빌드)
+- **Rust** stable (사용자 런처 — Tauri v2)
 - **Java** 17+ (게임 실행용)
-- **Azure AD 앱** (Microsoft 로그인용) - [빠른 설정 가이드](docs/guides/QUICKSTART.md)
-- **Buf CLI** (Protobuf 코드 생성용) - `npm install`로 자동 설치됨
+- **Azure AD 앱** (Microsoft 로그인용) — [빠른 설정 가이드](docs/guides/QUICKSTART.md)
+- *(제작자 도구 빌드 시에만)* **Go** 1.21+, **Buf CLI**(`npm install`로 자동 설치)
 
-### 개발 환경 설정
-
+### 환경변수
+`build.rs`/`generate:config`가 빌드 시 `.env`를 읽어 주입합니다.
 ```bash
-# 1. 저장소 클론
-git clone https://github.com/yourusername/HyeniMC.git
-cd HyeniMC
-
-# 2. 의존성 설치
-npm install
-
-# 3. 환경변수 설정
 cp .env.example .env
-# .env 파일 편집하여 다음 값 입력:
-# - HYENIMC_WORKER_URL: Cloudflare Worker 주소
-# - AZURE_CLIENT_ID: Azure Portal의 Client ID
-# 자세한 설정 방법은 .env.example 파일 참조
-
-# 4. Protobuf 코드 생성
-npm run proto:gen
-
-# 5. 백엔드 빌드
-npm run backend:build:mac-universal  # macOS
-# 또는
-npm run backend:build:win-x64        # Windows
-
-# 6. 개발 모드 실행
-npm run dev
+# HYENIMC_WORKER_URL      : Cloudflare Worker 주소
+# AZURE_CLIENT_ID         : Azure Portal의 OAuth Client ID
+# AUTHORIZED_SERVER_DOMAINS : 인증 허용 서버 도메인
 ```
 
-### 빌드 및 패키징
-
+### 사용자 런처 (Tauri)
 ```bash
-# Protobuf 코드 생성 (필수)
-npm run proto:gen
-
-# 프로덕션 빌드
-npm run build
-
-# 플랫폼별 패키징 (백엔드 빌드 포함)
-npm run package:mac    # macOS
-npm run package:win    # Windows
-npm run package:linux  # Linux
+npm install
+npm run dev:tauri      # 개발 실행 (vite + Rust 앱, 핫리로드)
+npm run build:tauri    # 배포 번들 (Windows NSIS / macOS dmg)
 ```
+> `sync-version`이 `package.json` 버전을 `tauri.conf.json`·`Cargo.toml`에 전파합니다(버전 단일 소스).
 
-### GitHub Actions 자동 배포
+### 제작자 도구 (Electron)
+```bash
+npm run dev            # Electron 개발 실행 (Go 백엔드 필요)
+npm run backend:build:win-x64   # Go 사이드카 빌드 (또는 :mac-arm64 / :mac-x64)
+npm run package:win    # 패키징 (또는 :mac)
+```
+> 두 앱은 같은 SQLite를 공유하므로 **동시 실행은 비권장**합니다.
 
-릴리즈를 위해서는 GitHub Secrets 설정이 필요합니다:
+### 릴리스 (사용자 런처)
+`v*.*.*` 태그를 push하면 [`.github/workflows/release-launcher.yml`](.github/workflows/release-launcher.yml)이 Windows/macOS 번들을 빌드·서명하고 GitHub Release에 번들 + `latest.json`(업데이트 피드)을 게시합니다.
 
-1. **GitHub 저장소 → Settings → Secrets and variables → Actions**
-2. 다음 Secret 추가:
-   - `HYENIMC_WORKER_URL`: Cloudflare Worker 주소
-   - `AZURE_CLIENT_ID`: Azure Portal의 Microsoft OAuth Client ID
-
-자세한 내용은 [버전 관리 가이드](docs/deployment/VERSION_MANAGEMENT.md)를 참조하세요.
+필요한 리포지토리 Secret: `TAURI_SIGNING_PRIVATE_KEY`, `HYENIMC_WORKER_URL`, `AZURE_CLIENT_ID`, `AUTHORIZED_SERVER_DOMAINS`. 자세한 내용은 [QA & 배포 문서](docs/architecture/QA_AND_RELEASE.md).
 
 ---
 
@@ -135,81 +101,47 @@ npm run package:linux  # Linux
 
 ```
 HyeniMC/
+├── apps/launcher/          # 사용자 런처 (Tauri v2)
+│   └── src-tauri/          # Rust 앱 크레이트 (hyenimc-app) + tauri.conf.json
+├── crates/                 # Rust 워크스페이스
+│   ├── hyenimc-core/       # DB·설정·계정·토큰 저장소 등 코어
+│   └── hyenimc-launcher/   # 다운로드·설치·로더·게임 실행·혜니팩·워커모드
 ├── src/
-│   ├── main/              # Electron 메인 프로세스
-│   │   ├── backend/       # Go 백엔드 서버 (HTTP API)
-│   │   ├── services/      # 게임 런처, 다운로드 매니저
-│   │   └── ipc/           # IPC 핸들러
-│   ├── renderer/          # React UI
-│   │   ├── components/    # React 컴포넌트
-│   │   └── pages/         # 페이지
-│   └── shared/            # 공유 타입/상수
-├── proto/                 # gRPC 프로토콜 정의
-└── bin/                   # 빌드된 실행 파일
+│   ├── renderer/           # React UI (두 앱 공용)
+│   ├── main/               # 제작자 도구 Electron 메인 프로세스
+│   └── shared/             # 공유 타입/상수
+├── backend/                # 제작자 도구 Go 백엔드(사이드카)
+├── cloudflare-worker/      # 배포 Worker + 관리 패널(/admin)
+└── docs/                   # 설계·QA·가이드 문서
 ```
 
 ### 기술 스택
-- **Frontend**: React 18, TypeScript, TailwindCSS, Vite, Zustand
-- **Backend**: Electron 28, Node.js, Go 1.21
-- **API 통합**: Modrinth API, CurseForge API (Cloudflare Worker)
-- **모드 로더**: Fabric, NeoForge, Quilt
-- **인증**: Microsoft OAuth 2.0, AES-256-GCM 암호화
-- **자동 업데이트**: electron-updater, GitHub Releases
+- **사용자 런처**: Tauri v2, Rust, rusqlite, reqwest, tauri-plugin-{updater,log,deep-link}
+- **제작자 도구**: Electron, Node.js, Go 1.21 (gRPC 사이드카)
+- **공용 렌더러**: React 18, TypeScript, TailwindCSS, Vite
+- **모드 로더**: Fabric, NeoForge, Forge
+- **인증**: Microsoft OAuth 2.0, AES-256-GCM 암호화, 혜니월드 딥링크 인증(`hyenimc://`)
+- **배포/업데이트**: Tauri updater(사용자 런처, GitHub Releases + `latest.json`), electron-updater(제작자 도구)
 
 ---
 
-## 🚀 성능 최적화
+## 📋 로드맵
 
-**⚡ 2.3배 빠른 다운로드 속도!** (Modrinth 앱 분석 및 적용)
+### ✅ Tauri 리뉴얼 (M0~M6, 완료 — v0.4.0)
+- ✅ Rust 워크스페이스 + Tauri v2 셸 + 기존 SQLite **in-place 호환**
+- ✅ 프로필·계정·게임 실행(바닐라/Fabric/NeoForge/Forge)·Java 감지
+- ✅ 혜니팩 설치/업데이트 · 워커 모드 자동 관리 · 리소스/셰이더팩 · 크래시 리포트
+- ✅ 자동 업데이트 + Windows 교체 설치(Electron 판 자동 제거·데이터 보존)
+- ✅ 릴리스 파이프라인 end-to-end 실증(태그 → 서명 번들 + `latest.json`)
 
-- **HTTP Keep-Alive**: TCP 연결 재사용으로 레이턴시 50-100ms 절약
-- **Semaphore 병렬 처리**: 효율적인 동시성 제어 (다운로드 10개 + I/O 10개)
-- **다운로드/I/O 분리**: 네트워크 다운로드와 파일 쓰기를 동시 처리
-- **빠른 재시도**: 100ms 대기로 신속한 오류 복구
-- **체크섬 검증**: SHA1 해시로 파일 무결성 보장
-- **증분 다운로드**: 이미 다운로드된 파일 스킵
-- **메모리 최적화**: 스트리밍 다운로드로 메모리 사용 최소화
+### 🚧 남은 검증/작업
+- 🔜 breaking 업데이트 차단 · 크래시 리포트 export 최종 QA
+- 🔜 **macOS 교체 설치**(Developer ID 서명/공증 인프라)
+- 🔜 Electron → Tauri **전환 브릿지**(마지막 electron-updater `latest.yml` 릴리스)
 
-📊 [다운로드 최적화 상세 문서](docs/performance/DOWNLOAD_OPTIMIZATION.md)
+상세 진행 현황: [QA & 배포 매트릭스](docs/architecture/QA_AND_RELEASE.md)
 
----
-
-## 📋 개발 로드맵
-
-### ✅ Phase 1-4: 기본 런처 (완료)
-- ✅ 프로필 관리 (생성, 편집, 삭제, 복제)
-- ✅ 버전 관리 (모든 마인크래프트 버전)
-- ✅ Java 자동 감지 및 관리
-- ✅ 바닐라 마인크래프트 실행
-- ✅ 프로필 격리 및 독립 경로 구조
-- ✅ 병렬 다운로드 최적화 (20개 동시)
-- ✅ 자동 업데이트 시스템
-
-### ✅ Phase 5: 계정 관리 (완료)
-- ✅ Microsoft OAuth 2.0 로그인
-- ✅ 오프라인 계정 지원
-- ✅ 멀티 계정 관리 및 전환
-- ✅ 자동 토큰 갱신
-- ✅ AES-256-GCM 암호화 저장
-
-### ✅ Phase 6-8: 모드 지원 (완료)
-- ✅ **Fabric 로더** - 완전 지원
-- ✅ **NeoForge 로더** - 완전 지원
-- ✅ **Quilt 로더** - 완전 지원
-- ✅ **모드 검색 및 설치** (Modrinth, CurseForge)
-- ✅ **모드 관리 UI** - 활성화/비활성화, 삭제
-- ✅ **모드 자동 업데이트** - 최신 버전 확인 및 업데이트
-- ✅ **의존성 자동 해결** - 필수 모드 자동 설치
-- ✅ **HyeniHelper 모드** - 자동 업데이트 및 관리
-
-### ✅ Phase 9-10: 모드팩 & 리소스 (완료)
-- ✅ **모드팩 검색 및 설치** (Modrinth, CurseForge)
-- ✅ **모드팩 가져오기** - .mrpack, .zip 지원
-- ✅ **리소스팩 관리** - 설치, 활성화, 삭제
-- ✅ **셰이더팩 관리** - Optifine, Iris 셰이더 지원
-- ✅ **파일 감시** - 실시간 모드/리소스팩 변경 감지
-
-### 🚧 Phase 11: 추가 기능 (계획)
+### 💡 Phase 11: 추가 기능 (계획)
 - 🔜 **스킨 관리** - 스킨 변경 및 미리보기
 - 🔜 **서버 목록** - 즐겨찾기 서버 관리
 - 🔜 **월드 백업** - 자동 백업 및 복원
@@ -219,30 +151,11 @@ HyeniMC/
 
 ## 📚 문서
 
-모든 문서는 [docs/](docs/) 디렉토리에 정리되어 있습니다.
+모든 문서는 [docs/](docs/) 디렉토리에 있습니다.
 
-### 빠른 링크
-- **[프로젝트 구조](docs/PROJECT_STRUCTURE.md)** 📁 - 전체 디렉토리 구조 및 파일 설명
-- **[빠른 시작 가이드](docs/guides/QUICKSTART.md)** - Microsoft OAuth 설정
-- **[개발 가이드](docs/development/DEVELOPMENT.md)** - 개발 환경 설정
-- **[버전 관리](docs/deployment/VERSION_MANAGEMENT.md)** ⭐ - 릴리즈 및 배포 가이드
-- **[테스트 가이드](docs/development/TESTING.md)** - 기능별 테스트 방법
-- **[아키텍처](docs/architecture/DESIGN.md)** - 시스템 설계 및 기술 스택
-
-### 전체 문서 목록
-📖 [docs/README.md](docs/README.md) - 모든 문서 목록 및 구조
-
----
-
-## 🤝 기여하기
-
-기여는 언제나 환영합니다! Pull Request를 보내주세요.
-
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+- **[아키텍처/설계](docs/architecture/)** — 시스템 설계, 혜니팩 스펙, 인증 프로토콜, QA & 배포
+- **[빠른 시작 가이드](docs/guides/QUICKSTART.md)** — Microsoft OAuth 설정
+- **[전체 문서 목록](docs/README.md)**
 
 ---
 

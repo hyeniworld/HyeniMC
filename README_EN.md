@@ -1,12 +1,12 @@
 # HyeniMC 🚀
 
-**Beautiful and Fast Cross-Platform Minecraft Launcher**
+**A Minecraft launcher for the HyeniWorld community**
 
-A profile-based Minecraft launcher for the HyeniWorld community.
+Manage and launch Minecraft with profiles, and install/update the HyeniWorld modpacks (HyeniPacks) with one click.
 
-![Version](https://img.shields.io/badge/version-0.1.0-blue)
+![Version](https://img.shields.io/badge/version-0.4.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-lightgrey)
 
 [한국어](README.md) | **English**
 
@@ -14,120 +14,86 @@ A profile-based Minecraft launcher for the HyeniWorld community.
 
 ## ⚠️ Important Notice
 
-> **Image Copyright Notice**  
-> All Hyeni-related images, illustrations, and artwork included in this project are **copyrighted by Hyeni**.  
-> Unauthorized use, reproduction, distribution, and derivative works are prohibited. This launcher is **exclusively for the HyeniWorld community**.  
-> For details, please refer to [LICENSE.md](LICENSE.md) or [LICENSE_EN.md](LICENSE_EN.md).
+> **Image Copyright**  
+> All Kang Hyeni–related images, illustrations, and artwork in this project are **copyrighted by Kang Hyeni**.  
+> Unauthorized use, reproduction, distribution, or derivative works are prohibited. This launcher is **for the HyeniWorld community only**.  
+> See [LICENSE.md](LICENSE.md) for details.
 
 ---
 
-## ✨ Key Features
+## 🧭 Project Layout (Two Apps)
 
-### 🎮 Game Management
-- ✅ **Profile Management**: Create, edit, and delete multiple profiles
-- ✅ **Profile Isolation**: Independent saves, mods, and settings for each profile
-- ✅ **Version Selection**: Support for all Minecraft versions (1.0 ~ latest)
-- ✅ **Auto Download**: Automatic download of game files, libraries, and assets
-- ✅ **Parallel Downloads**: **4x faster** with up to 20 concurrent downloads
+HyeniMC consists of two apps that **share the React renderer (UI) and the SQLite database**.
 
-### 🔐 Account Management
-- ✅ **Microsoft Login**: Multiplayer with genuine accounts
-- ✅ **Offline Mode**: Support for singleplayer and cracked servers
-- ✅ **Multi-Account**: Add and switch between multiple accounts
-- ✅ **Auto Token Refresh**: Automatically maintain login status
-- ✅ **Encrypted Storage**: Secure token storage with AES-256-GCM
+| App | Stack | Audience | Role |
+|-----|-------|----------|------|
+| **User Launcher** | **Tauri v2 + Rust** | End users | Profiles, game launch, HyeniPacks, worker mods, resource/shader packs, crash reports. Lightweight, with self-updating. |
+| **Creator Tool** | **Electron + Go** | Pack creators | HyeniPack authoring/export, mod & modpack search/install, dependency resolution, deployment management. **Feature-frozen** (hidden in the user launcher). |
 
-### ⚙️ System
-- ✅ **Auto Java Detection**: Automatically detect all Java installations
-- ✅ **Platform Optimization**: macOS (Apple Silicon/Intel), Windows, Linux support
-- ✅ **Retry Logic**: Automatic retry on network errors (exponential backoff)
-- ✅ **Checksum Verification**: File integrity with SHA1 hash
-- ✅ **Shared Resources**: Save disk space by preventing library/asset duplication
-
-### 🧩 Mods & Modpacks
-- ✅ **Mod Loaders**: Full support for Fabric, NeoForge, Quilt
-- ✅ **Mod Search**: Integrated search for Modrinth and CurseForge
-- ✅ **Auto Updates**: Check and update installed mods to latest versions
-- ✅ **Dependency Resolution**: Automatically install required mods
-- ✅ **Modpack Support**: Import and install .mrpack, .zip files
-- ✅ **HyeniHelper**: Automatic management of HyeniWorld-exclusive mod
-
-### 🎨 Resources & Customization
-- ✅ **Resource Packs**: Install, activate, and manage
-- ✅ **Shader Packs**: Support for Optifine and Iris shaders
-- ✅ **Real-time Detection**: Automatically detect and reflect file changes
-
-### 🎨 UI/UX
-- ✅ **Modern Design**: Clean and intuitive interface
-- ✅ **Real-time Progress**: Overall & individual file progress display
-- ✅ **Dark Mode**: Eye-friendly dark theme
-- ✅ **Hyeni Theme**: Custom theme exclusive to HyeniWorld
+> The single Electron launcher was **renewed into a Tauri + Rust user launcher**, while the original Electron app is **kept as a creator tool**. Both apps share the same `~/.hyenimc` (`%APPDATA%\hyenimc`) data in place. See [docs/architecture/](docs/architecture/) for the design.
 
 ---
 
-## 📦 Installation & Development
+## ✨ Features
+
+### 🎮 User Launcher (Tauri)
+- ✅ **Profile management**: create/edit/delete/favorite, isolated saves/mods/settings per profile
+- ✅ **Game launch**: Vanilla · **Fabric · NeoForge · Forge** (loader auto-installed)
+- ✅ **Microsoft login**: genuine accounts, multi-account, auto token refresh, **AES-256-GCM** encrypted storage
+- ✅ **Java auto-detection**: scans installed JREs (lazily on tab open, no startup delay)
+- ✅ **HyeniPacks (modpacks)**: online list/search install · local `.hyenipack` import · new-version detection → apply (preserves user files; blocks launch on breaking updates)
+- ✅ **Worker mods**: sha256-verified install/update of required mods (HyeniHelper, etc.) for HyeniWorld server profiles
+- ✅ **Resource/shader packs**: distinguishes pack-provided vs user-added (read-only) + open folder + live file watching
+- ✅ **Crash reports**: export logs/report zip + open logs folder
+- ✅ **Auto-update**: detect → download → replace install (removes an existing Electron build and preserves data)
+- ✅ **Parallel downloads**: concurrent downloads + sha1/sha256 integrity checks + shared-resource dedup
+
+### 🛠️ Creator Tool (Electron, creators only)
+- ✅ **HyeniPack authoring/export** (manifest-based)
+- ✅ **Mod search/install** (Modrinth · CurseForge) + **dependency resolution**
+- ✅ **Modpack search/install** (.mrpack · .zip · CurseForge)
+- ✅ **Deployment management** (integrated with the admin panel — publish/rollback mods & packs)
+
+---
+
+## 📦 Development & Build
 
 ### Prerequisites
-- **Node.js** 18+
-- **Go** 1.21+
-- **Java** 17+ (for running the game)
-- **Azure AD App** (for Microsoft login) - [Quick Setup Guide](docs/guides/QUICKSTART.md)
-- **Buf CLI** (for Protobuf code generation) - Automatically installed via `npm install`
+- **Node.js** 20+ (shared renderer build)
+- **Rust** stable (user launcher — Tauri v2)
+- **Java** 17+ (to run the game)
+- **Azure AD app** (for Microsoft login) — [Quickstart](docs/guides/QUICKSTART.md)
+- *(Creator tool only)* **Go** 1.21+, **Buf CLI** (auto-installed via `npm install`)
 
-### Development Setup
-
+### Environment
+`build.rs`/`generate:config` reads `.env` at build time.
 ```bash
-# 1. Clone the repository
-git clone https://github.com/yourusername/HyeniMC.git
-cd HyeniMC
-
-# 2. Install dependencies
-npm install
-
-# 3. Environment setup
 cp .env.example .env
-# Edit .env file and enter:
-# - HYENIMC_WORKER_URL: Your Cloudflare Worker URL
-# - AZURE_CLIENT_ID: Your Azure OAuth Client ID
-# See .env.example for detailed instructions
-
-# 4. Generate Protobuf code
-npm run proto:gen
-
-# 5. Build backend
-npm run backend:build:mac-universal  # macOS
-# or
-npm run backend:build:win-x64        # Windows
-
-# 6. Run in development mode
-npm run dev
+# HYENIMC_WORKER_URL        : Cloudflare Worker URL
+# AZURE_CLIENT_ID           : Azure Portal OAuth Client ID
+# AUTHORIZED_SERVER_DOMAINS : allowed auth server domains
 ```
 
-### Build & Package
-
+### User Launcher (Tauri)
 ```bash
-# Generate Protobuf code (required)
-npm run proto:gen
-
-# Production build
-npm run build
-
-# Platform-specific packaging (includes backend build)
-npm run package:mac    # macOS
-npm run package:win    # Windows
-npm run package:linux  # Linux
+npm install
+npm run dev:tauri      # dev (vite + Rust app, hot reload)
+npm run build:tauri    # release bundle (Windows NSIS / macOS dmg)
 ```
+> `sync-version` propagates the `package.json` version into `tauri.conf.json`/`Cargo.toml` (single source of truth).
 
-### GitHub Actions Automated Deployment
+### Creator Tool (Electron)
+```bash
+npm run dev            # Electron dev (requires the Go backend)
+npm run backend:build:win-x64   # build the Go sidecar (or :mac-arm64 / :mac-x64)
+npm run package:win    # package (or :mac)
+```
+> The two apps share the same SQLite DB, so **running them at the same time is not recommended**.
 
-For releases, GitHub Secrets configuration is required:
+### Release (User Launcher)
+Pushing a `v*.*.*` tag runs [`.github/workflows/release-launcher.yml`](.github/workflows/release-launcher.yml), which builds & signs Windows/macOS bundles and publishes them plus `latest.json` (update feed) to a GitHub Release.
 
-1. **GitHub Repository → Settings → Secrets and variables → Actions**
-2. Add the following Secrets:
-   - `HYENIMC_WORKER_URL`: Your Cloudflare Worker URL
-   - `AZURE_CLIENT_ID`: Microsoft OAuth Client ID from Azure Portal
-
-For more details, refer to the [Version Management Guide](docs/deployment/VERSION_MANAGEMENT.md).
+Required repo secrets: `TAURI_SIGNING_PRIVATE_KEY`, `HYENIMC_WORKER_URL`, `AZURE_CLIENT_ID`, `AUTHORIZED_SERVER_DOMAINS`. See the [QA & release doc](docs/architecture/QA_AND_RELEASE.md).
 
 ---
 
@@ -135,137 +101,91 @@ For more details, refer to the [Version Management Guide](docs/deployment/VERSIO
 
 ```
 HyeniMC/
+├── apps/launcher/          # User launcher (Tauri v2)
+│   └── src-tauri/          # Rust app crate (hyenimc-app) + tauri.conf.json
+├── crates/                 # Rust workspace
+│   ├── hyenimc-core/       # DB, settings, accounts, token store
+│   └── hyenimc-launcher/   # download, install, loaders, launch, HyeniPack, worker mods
 ├── src/
-│   ├── main/              # Electron main process
-│   │   ├── backend/       # Go backend server (HTTP API)
-│   │   ├── services/      # Game launcher, download manager
-│   │   └── ipc/           # IPC handlers
-│   ├── renderer/          # React UI
-│   │   ├── components/    # React components
-│   │   └── pages/         # Pages
-│   └── shared/            # Shared types/constants
-├── proto/                 # gRPC protocol definitions
-└── bin/                   # Built executables
+│   ├── renderer/           # React UI (shared by both apps)
+│   ├── main/               # Creator-tool Electron main process
+│   └── shared/             # shared types/constants
+├── backend/                # Creator-tool Go backend (sidecar)
+├── cloudflare-worker/      # deployment Worker + admin panel (/admin)
+└── docs/                   # design, QA, guides
 ```
 
 ### Tech Stack
-- **Frontend**: React 18, TypeScript, TailwindCSS, Vite, Zustand
-- **Backend**: Electron 28, Node.js, Go 1.21
-- **API Integration**: Modrinth API, CurseForge API (Cloudflare Worker)
-- **Mod Loaders**: Fabric, NeoForge, Quilt
-- **Authentication**: Microsoft OAuth 2.0, AES-256-GCM encryption
-- **Auto Updates**: electron-updater, GitHub Releases
+- **User launcher**: Tauri v2, Rust, rusqlite, reqwest, tauri-plugin-{updater,log,deep-link}
+- **Creator tool**: Electron, Node.js, Go 1.21 (gRPC sidecar)
+- **Shared renderer**: React 18, TypeScript, TailwindCSS, Vite
+- **Mod loaders**: Fabric, NeoForge, Forge
+- **Auth**: Microsoft OAuth 2.0, AES-256-GCM encryption, HyeniWorld deep-link auth (`hyenimc://`)
+- **Update/deploy**: Tauri updater (user launcher, GitHub Releases + `latest.json`), electron-updater (creator tool)
 
 ---
 
-## 🚀 Performance Optimization
+## 📋 Roadmap
 
-- **Parallel Downloads**: 4x faster with 20 concurrent connections
-- **Checksum Verification**: File integrity with SHA1 hash
-- **Incremental Downloads**: Skip already downloaded files
-- **Memory Optimization**: Minimize memory usage with streaming downloads
+### ✅ Tauri renewal (M0–M6, done — v0.4.0)
+- ✅ Rust workspace + Tauri v2 shell + **in-place SQLite** compatibility
+- ✅ Profiles, accounts, game launch (Vanilla/Fabric/NeoForge/Forge), Java detection
+- ✅ HyeniPack install/update, worker-mod management, resource/shader packs, crash reports
+- ✅ Auto-update + Windows replace install (removes the Electron build, preserves data)
+- ✅ End-to-end release pipeline proven (tag → signed bundles + `latest.json`)
 
----
+### 🚧 Remaining
+- 🔜 Final QA: breaking-update blocking, crash-report export
+- 🔜 **macOS replace install** (Developer ID signing/notarization)
+- 🔜 Electron → Tauri **migration bridge** (final electron-updater `latest.yml` release)
 
-## 📋 Development Roadmap
+Details: [QA & release matrix](docs/architecture/QA_AND_RELEASE.md)
 
-### ✅ Phase 1-4: Basic Launcher (Completed)
-- ✅ Profile management (create, edit, delete, clone)
-- ✅ Version management (all Minecraft versions)
-- ✅ Auto Java detection and management
-- ✅ Vanilla Minecraft execution
-- ✅ Profile isolation and independent path structure
-- ✅ Parallel download optimization (20 concurrent)
-- ✅ Auto-update system
-
-### ✅ Phase 5: Account Management (Completed)
-- ✅ Microsoft OAuth 2.0 login
-- ✅ Offline account support
-- ✅ Multi-account management and switching
-- ✅ Auto token refresh
-- ✅ AES-256-GCM encrypted storage
-
-### ✅ Phase 6-8: Mod Support (Completed)
-- ✅ **Fabric Loader** - Full support
-- ✅ **NeoForge Loader** - Full support
-- ✅ **Quilt Loader** - Full support
-- ✅ **Mod Search & Install** (Modrinth, CurseForge)
-- ✅ **Mod Management UI** - Enable/disable, delete
-- ✅ **Auto Mod Updates** - Check and update to latest versions
-- ✅ **Auto Dependency Resolution** - Automatically install required mods
-- ✅ **HyeniHelper Mod** - Auto-update and management
-
-### ✅ Phase 9-10: Modpacks & Resources (Completed)
-- ✅ **Modpack Search & Install** (Modrinth, CurseForge)
-- ✅ **Modpack Import** - .mrpack, .zip support
-- ✅ **Resource Pack Management** - Install, activate, delete
-- ✅ **Shader Pack Management** - Optifine, Iris shader support
-- ✅ **File Watching** - Real-time mod/resource pack change detection
-
-### 🚧 Phase 11: Additional Features (Planned)
-- 🔜 **Skin Management** - Change and preview skins
-- 🔜 **Server List** - Manage favorite servers
-- 🔜 **World Backup** - Automatic backup and restore
-- 🔜 **Performance Profiles** - Low/high-end optimization presets
+### 💡 Phase 11: Planned features
+- 🔜 **Skin management** - change & preview skins
+- 🔜 **Server list** - manage favorite servers
+- 🔜 **World backup** - automatic backup & restore
+- 🔜 **Performance profiles** - low-/high-spec optimization presets
 
 ---
 
 ## 📚 Documentation
 
-All documentation is organized in the [docs/](docs/) directory.
+All docs live in [docs/](docs/).
 
-### Quick Links
-- **[Project Structure](docs/PROJECT_STRUCTURE.md)** 📁 - Full directory structure and file descriptions
-- **[Quick Start Guide](docs/guides/QUICKSTART.md)** - Microsoft OAuth setup
-- **[Development Guide](docs/development/DEVELOPMENT.md)** - Development environment setup
-- **[Version Management](docs/deployment/VERSION_MANAGEMENT.md)** ⭐ - Release and deployment guide
-- **[Testing Guide](docs/development/TESTING.md)** - Feature-specific testing methods
-- **[Architecture](docs/architecture/DESIGN.md)** - System design and tech stack
-
-### Full Documentation List
-📖 [docs/README.md](docs/README.md) - All documentation list and structure
-
----
-
-## 🤝 Contributing
-
-Contributions are always welcome! Please send a Pull Request.
-
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+- **[Architecture/design](docs/architecture/)** — system design, HyeniPack spec, auth protocol, QA & release
+- **[Quickstart](docs/guides/QUICKSTART.md)** — Microsoft OAuth setup
+- **[Full doc index](docs/README.md)**
 
 ---
 
 ## 📄 License & Copyright
 
 ### Software License
-The source code of this project is licensed under the **MIT License**.
+The source code of this project is under the **MIT License**.
 
-### ⚠️ Important: Image and Artwork Copyright
+### ⚠️ Important: Image & Artwork Copyright
 
-**All Hyeni-related images, illustrations, and artwork included in this project are copyrighted by Hyeni.**
+**All Kang Hyeni–related images, illustrations, and artwork in this project are copyrighted by Kang Hyeni.**
 
-- ❌ **Unauthorized Use Prohibited**: Hyeni images and illustrations cannot be used without explicit permission from the copyright holder.
-- ❌ **Commercial Use Prohibited**: Any form of commercial use is prohibited.
-- ❌ **Derivative Works Restricted**: Derivative works and modifications without permission from the copyright holder are prohibited.
-- ✅ **Permitted Use**: This launcher may only be used for Hyeni and the HyeniWorld community.
-- 🔓 **Special Permission**: If explicit written permission is obtained from the copyright holder (Hyeni), use is permitted within the scope of the permission.
+- ❌ **No unauthorized use**: Kang Hyeni images/illustrations may not be used without explicit permission from the copyright holder.
+- ❌ **No commercial use**: any form of commercial use is prohibited.
+- ❌ **Restricted derivatives**: derivative works/modifications without permission are prohibited.
+- ✅ **Allowed scope**: this launcher may only be used for Kang Hyeni and the HyeniWorld community.
+- 🔓 **Special permission**: use is allowed within the granted scope with explicit written permission from the copyright holder (Kang Hyeni).
 
 ### Usage Restrictions
-This program is **exclusively for Hyeni and the HyeniWorld community**.
+This program is made **exclusively for Kang Hyeni and the HyeniWorld community**.
 - Use for other purposes is not permitted.
-- Cannot be used for other streamers, communities, or servers.
-- When creating a derivative launcher based on this program, all Hyeni-related images and branding must be removed.
+- It may not be used for other streamers, communities, or servers.
+- Any derivative launcher based on this program must remove all Kang Hyeni–related images and branding.
 
-For details, please refer to [LICENSE.md](LICENSE.md) or [LICENSE_EN.md](LICENSE_EN.md).
+See [LICENSE.md](LICENSE.md) for details.
 
 ---
 
-## 👨‍💻 Creator
+## 👨‍💻 Credits
 
 Made with ❤️ for HyeniWorld
 
-**⚠️ Disclaimer**: This project is not officially associated with Mojang Studios. Minecraft is a trademark of Mojang Studios.
+**⚠️ Disclaimer**: This project is not officially affiliated with Mojang Studios. Minecraft is a trademark of Mojang Studios.
