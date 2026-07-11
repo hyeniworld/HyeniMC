@@ -215,10 +215,33 @@ fn dir_stats(dir: &std::path::Path) -> (u64, u64) {
     (size, files)
 }
 
-/// 캐시 통계 {size, files} — SettingsPage 표시용 (기존 스텁을 실구현으로 대체).
+/// 캐시 통계 {size, files} — SettingsPage 캐시 탭 표시용.
+/// shared/(에셋 수만 개+라이브러리) 전수 walk라 무거우므로 spawn_blocking으로 offload —
+/// UI 스레드를 막지 않아, 측정 중에도 탭 전환/설정 조작이 자유롭다.
 #[tauri::command]
-pub fn settings_cache_stats() -> serde_json::Value {
-    let (size, files) = cache_dir().map(|d| dir_stats(&d)).unwrap_or((0, 0));
+pub async fn settings_cache_stats() -> serde_json::Value {
+    let started = std::time::Instant::now();
+    log::info!("[cache-stats] 측정 시작");
+    let (size, files) = tauri::async_runtime::spawn_blocking(|| {
+        match cache_dir() {
+            Ok(d) => {
+                log::info!("[cache-stats] walk 대상: {}", d.display());
+                dir_stats(&d)
+            }
+            Err(e) => {
+                log::warn!("[cache-stats] 캐시 경로 결정 실패: {e}");
+                (0, 0)
+            }
+        }
+    })
+    .await
+    .unwrap_or((0, 0));
+    log::info!(
+        "[cache-stats] 측정 완료: {} bytes / {} files ({} ms)",
+        size,
+        files,
+        started.elapsed().as_millis()
+    );
     serde_json::json!({ "size": size, "files": files })
 }
 

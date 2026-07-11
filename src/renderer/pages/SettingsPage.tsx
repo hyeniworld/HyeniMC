@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { SectionCard } from '../components/common/SectionCard';
 import { Slider } from '../components/common/Slider';
@@ -53,7 +53,12 @@ export const SettingsPage: React.FC = () => {
   const [tab, setTab] = useState<'download'|'java'|'resolution'|'cache'|'update'|'auth'>('download');
   const [javaList, setJavaList] = useState<Array<{ path: string; version: string; majorVersion: number; vendor?: string; architecture: string }>>([]);
   const [systemMemory, setSystemMemory] = useState(16384);
-  const [cacheStats, setCacheStats] = useState<{ size: number; files: number }>({ size: 0, files: 0 });
+  const [cacheStats, setCacheStats] = useState<{ size: number; files: number } | null>(null);
+  const [cacheStatsLoading, setCacheStatsLoading] = useState(false);
+  const cacheLoadedRef = useRef(false);
+  const [javaLoading, setJavaLoading] = useState(false);
+  const javaLoadedRef = useRef(false);
+  const mountedRef = useRef(true);
   const [currentVersion, setCurrentVersion] = useState('');
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<'checking' | 'available' | 'not-available' | 'error' | null>(null);
@@ -73,6 +78,49 @@ export const SettingsPage: React.FC = () => {
     }
   };
 
+  // 캐시 통계 측정(무거운 디스크 walk) — 언마운트 후 setState 방지(mountedRef).
+  const loadCacheStats = useCallback(async () => {
+    setCacheStatsLoading(true);
+    try {
+      const stats = await window.electronAPI.settings.getCacheStats();
+      if (mountedRef.current) setCacheStats(stats);
+    } catch {
+      if (mountedRef.current) setCacheStats({ size: 0, files: 0 });
+    } finally {
+      if (mountedRef.current) setCacheStatsLoading(false);
+    }
+  }, []);
+
+  // 캐시 탭을 처음 열 때만 lazy 측정. 다른 탭으로 전환해도 측정은 백그라운드로 계속되고
+  // 결과는 mountedRef 가드로 안전하게 반영된다(측정 중 탭 전환 무해).
+  useEffect(() => {
+    if (tab === 'cache' && !cacheLoadedRef.current) {
+      cacheLoadedRef.current = true;
+      loadCacheStats();
+    }
+  }, [tab, loadCacheStats]);
+
+  // Java 감지(~400ms, 파일시스템 스캔+java -version)를 설정 마운트에서 제거하고
+  // Java 탭 첫 진입 시로 지연 — 설정 창이 즉시 뜬다. 캐시 State라 2회차부터는 즉시.
+  const loadJava = useCallback(async () => {
+    setJavaLoading(true);
+    try {
+      const list = await window.electronAPI.java.getCached();
+      if (mountedRef.current) setJavaList(list || []);
+    } catch {
+      // 실패 시 빈 목록 유지
+    } finally {
+      if (mountedRef.current) setJavaLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (tab === 'java' && !javaLoadedRef.current) {
+      javaLoadedRef.current = true;
+      loadJava();
+    }
+  }, [tab, loadJava]);
+
   const handleRemoveToken = async () => {
     if (!tokenToDelete) return;
     setRemovingToken(true);
@@ -89,26 +137,25 @@ export const SettingsPage: React.FC = () => {
   };
 
   useEffect(() => {
+    // StrictMode(dev)는 mount→cleanup→mount로 이펙트를 이중 호출한다. cleanup에서 false로
+    // 둔 mountedRef를 재mount 때 반드시 true로 되돌려야 한다(안 그러면 영구 false → 이후
+    // 모든 비동기 setState 가드가 막혀 캐시 측정 결과가 반영 안 됨).
+    mountedRef.current = true;
     (async () => {
       try {
         // Get system memory
         const sysMem = await window.electronAPI.system.getMemory?.() || 16384;
         setSystemMemory(sysMem);
-        
+
         // Get settings
         const gs = await window.electronAPI.settings.get();
         const filled = fillDefaults(gs || {});
         setSettings(filled);
         setOriginal(filled);
-        
-        // Get cached Java installations (no re-detection)
-        const cachedJava = await window.electronAPI.java.getCached();
-        setJavaList(cachedJava || []);
-        
-        // Get cache stats
-        const stats = await window.electronAPI.settings.getCacheStats();
-        setCacheStats(stats);
-        
+
+        // Java 감지·캐시 통계는 여기서 미리 하지 않는다 — java 감지(~400ms)와 shared/ 전수 walk가
+        // 설정 열기를 지연시킨다. 각각 Java 탭·캐시 탭 진입 시 lazy 로드(위 useEffect)로 옮겼다.
+
         // Get launcher version
         const versionResult = await window.electronAPI.launcher.getVersion();
         if (versionResult.success) {
@@ -139,6 +186,7 @@ export const SettingsPage: React.FC = () => {
     });
 
     return () => {
+      mountedRef.current = false;
       cleanup1?.();
       cleanup2?.();
       cleanup3?.();
@@ -329,14 +377,19 @@ export const SettingsPage: React.FC = () => {
         )}
 
         {tab==='java' && (
-          <SectionCard title="Java" subtitle="프로필에서 미설정 시 사용됩니다." action={<button onClick={async()=>{ const list=await window.electronAPI.java.detect(true); setJavaList(list||[]); }} className="px-3 py-1.5 text-sm bg-gray-800 border border-gray-700 rounded-md hover:bg-gray-750">재감지</button>}>
+          <SectionCard title="Java" subtitle="프로필에서 미설정 시 사용됩니다." action={<button disabled={javaLoading} onClick={async()=>{ setJavaLoading(true); try { const list=await window.electronAPI.java.detect(true); if(mountedRef.current) setJavaList(list||[]); } finally { if(mountedRef.current) setJavaLoading(false); } }} className="px-3 py-1.5 text-sm bg-gray-800 border border-gray-700 rounded-md hover:bg-gray-750 disabled:opacity-50">{javaLoading ? '감지 중…' : '재감지'}</button>}>
             <div className="space-y-6">
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-sm text-gray-300 font-medium">Java 설치 목록</span>
                   <span className="text-xs text-gray-500">{javaList.length}개 감지됨</span>
                 </div>
-                {javaList.length > 0 ? (
+                {javaLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-gray-400 py-2 mb-4">
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    Java 설치 감지 중…
+                  </div>
+                ) : javaList.length > 0 ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
                     {javaList.map(j => {
                       const active = s.java?.java_path === j.path;
@@ -590,16 +643,23 @@ export const SettingsPage: React.FC = () => {
               {/* Cache statistics */}
               <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-4">
                 <div className="text-sm text-gray-400 mb-3">캐시 통계</div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <div className="text-2xl font-semibold text-purple-400">{(cacheStats.size / 1024 / 1024 / 1024).toFixed(2)} GB</div>
-                    <div className="text-xs text-gray-500">현재 사용량</div>
+                {cacheStats === null || cacheStatsLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-gray-400 py-2">
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    캐시 용량 측정 중…
                   </div>
-                  <div>
-                    <div className="text-2xl font-semibold text-purple-400">{cacheStats.files.toLocaleString()}</div>
-                    <div className="text-xs text-gray-500">캐시된 파일 수</div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-2xl font-semibold text-purple-400">{(cacheStats.size / 1024 / 1024 / 1024).toFixed(2)} GB</div>
+                      <div className="text-xs text-gray-500">현재 사용량</div>
+                    </div>
+                    <div>
+                      <div className="text-2xl font-semibold text-purple-400">{cacheStats.files.toLocaleString()}</div>
+                      <div className="text-xs text-gray-500">캐시된 파일 수</div>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
               
               {/* Cache settings */}
@@ -630,8 +690,7 @@ export const SettingsPage: React.FC = () => {
                       const result = await window.electronAPI.settings.resetCache();
                       if (result.success) {
                         toast.success('캐시 삭제 완료', result.message);
-                        const stats = await window.electronAPI.settings.getCacheStats();
-                        setCacheStats(stats);
+                        await loadCacheStats(); // 삭제 후 재측정(측정 중 표시 포함)
                       } else {
                         toast.error('캐시 삭제 실패', result.message);
                       }

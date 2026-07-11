@@ -215,9 +215,17 @@ pub async fn java_get_cached(
     cache: State<'_, JavaCache>,
 ) -> Result<Vec<hyenimc_launcher::java::JavaInstallation>, String> {
     if let Some(list) = cache.0.lock().unwrap().clone() {
+        log::info!("[java] 캐시 적중 ({}개) — 감지 생략", list.len());
         return Ok(list);
     }
+    log::info!("[java] 캐시 없음 → Java 감지 시작(파일시스템 스캔)");
+    let started = std::time::Instant::now();
     let list = hyenimc_launcher::java::detect_java_installations().await;
+    log::info!(
+        "[java] 감지 완료: {}개 ({} ms)",
+        list.len(),
+        started.elapsed().as_millis()
+    );
     *cache.0.lock().unwrap() = Some(list.clone());
     Ok(list)
 }
