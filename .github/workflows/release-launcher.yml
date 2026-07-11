@@ -85,6 +85,9 @@ jobs:
       - name: Build & release (Tauri)
         uses: tauri-apps/tauri-action@v0
         env:
+          # tauri-action이 GitHub Release 생성/자산 업로드에 사용. GitHub이 자동 제공하는
+          # 토큰이라 별도 시크릿 등록 불필요(permissions: contents: write와 함께 동작).
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # updater 서명 — createUpdaterArtifacts:true가 이 키로 latest.json/*.sig를 서명
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
