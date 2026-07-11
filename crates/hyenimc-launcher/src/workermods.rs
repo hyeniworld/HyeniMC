@@ -132,10 +132,47 @@ pub fn parse_mod_version(file_stem: &str) -> Option<String> {
     Some(version)
 }
 
-fn version_key(v: &str) -> Vec<u32> {
-    v.split(['.', '-', '+'])
+/// 알려진 pre-release 접미사면 (순위, 번호). 순위: snapshot/dev=0 < alpha=1 < beta=2 < pre/rc=3 < 정식=4.
+/// 미인식 접미사(로더 빌드 등)는 None — 호출측이 기존 숫자 세그먼트 방식으로 처리.
+fn prerelease_rank(suffix: &str) -> Option<(u8, u32)> {
+    let lower = suffix.to_lowercase();
+    let (rank, rest) = if let Some(r) = lower.strip_prefix("alpha") {
+        (1, r)
+    } else if let Some(r) = lower.strip_prefix("beta") {
+        (2, r)
+    } else if let Some(r) = lower.strip_prefix("pre") {
+        (3, r)
+    } else if let Some(r) = lower.strip_prefix("rc") {
+        (3, r)
+    } else if let Some(r) = lower.strip_prefix("snapshot") {
+        (0, r)
+    } else if let Some(r) = lower.strip_prefix("dev") {
+        (0, r)
+    } else {
+        return None;
+    };
+    let num = rest.trim_start_matches(['.', '-']).parse::<u32>().unwrap_or(0);
+    Some((rank, num))
+}
+
+/// (숫자 세그먼트, pre-release 순위, pre 번호). 정식 x.y.z는 순위 4 —
+/// 같은 x.y.z에서 `1.2.3-beta001 < 1.2.3`이 되도록(SemVer 의미, 워커 배포 형식과 정합).
+fn version_key(v: &str) -> (Vec<u32>, u8, u32) {
+    if let Some((core, suffix)) = v.split_once('-') {
+        if let Some((rank, num)) = prerelease_rank(suffix) {
+            let nums = core
+                .split(['.', '+'])
+                .filter_map(|p| p.parse::<u32>().ok())
+                .collect();
+            return (nums, rank, num);
+        }
+    }
+    // pre-release 접미사가 아니면 기존 동작: 모든 숫자 세그먼트(forge 풀 형식 등), 정식 취급
+    let nums = v
+        .split(['.', '-', '+'])
         .filter_map(|p| p.parse::<u32>().ok())
-        .collect()
+        .collect();
+    (nums, 4, 0)
 }
 
 /// remote가 local보다 최신인가 (동일/구버전이면 false — 다운그레이드 없음)
@@ -576,6 +613,24 @@ mod tests {
         assert!(!is_newer_version("1.0.5", "1.0.5"));
         assert!(!is_newer_version("1.0.4", "1.0.5")); // 다운그레이드 없음
         assert!(is_newer_version("1.10.0", "1.9.9"));
+    }
+
+    #[test]
+    fn newer_version_prerelease_semantics() {
+        // 정식이 같은 x.y.z의 프리릴리즈보다 최신 — beta 설치자가 정식을 받아야 함
+        assert!(is_newer_version("1.2.3", "1.2.3-beta001"));
+        assert!(!is_newer_version("1.2.3-beta001", "1.2.3"));
+        // 프리릴리즈끼리: 번호 증가, 레이블 단계(alpha<beta<pre)
+        assert!(is_newer_version("1.2.3-beta002", "1.2.3-beta001"));
+        assert!(is_newer_version("1.2.3-pre001", "1.2.3-beta005"));
+        assert!(is_newer_version("1.2.3-beta001", "1.2.3-alpha009"));
+        // 상위 x.y.z의 프리릴리즈 > 하위 정식 (핀으로 의도 배포 시 업데이트 동작)
+        assert!(is_newer_version("1.2.4-alpha001", "1.2.3"));
+        assert!(!is_newer_version("1.2.3-pre001", "1.2.4"));
+        // 레거시 SNAPSHOT: 같은 자릿수 정식이 더 최신
+        assert!(is_newer_version("1.0.0", "1.0-SNAPSHOT"));
+        // 미인식 접미사(forge 풀 형식 등)는 기존 숫자 세그먼트 동작 유지
+        assert!(is_newer_version("1.20.1-47.3.0", "1.20.1-47.2.0"));
     }
 
     #[test]

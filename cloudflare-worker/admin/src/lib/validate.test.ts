@@ -25,6 +25,14 @@ describe('validateModPublish', () => {
     const bad = { ...base, files: [{ ...base.files[0], dependencies: '{bad' }] };
     expect(validateModPublish(bad).length).toBeGreaterThan(0);
   });
+  it('accepts empty minLoaderVersion (하한 없음)', () => {
+    const noMin = { ...base, files: [{ ...base.files[0], minLoaderVersion: '' }] };
+    expect(validateModPublish(noMin)).toEqual([]);
+  });
+  it('accepts prerelease mod version, rejects malformed suffix', () => {
+    expect(validateModPublish({ ...base, version: '1.0.6-beta001' })).toEqual([]);
+    expect(validateModPublish({ ...base, version: '1.0.6-beta1' }).length).toBeGreaterThan(0);
+  });
 });
 
 describe('validatePackPublish', () => {

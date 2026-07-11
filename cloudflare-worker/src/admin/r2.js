@@ -23,15 +23,39 @@ export async function objectExists(env, key) {
   return head !== null;
 }
 
-const VERSION_SEG = /\/versions\/(\d+\.\d+\.\d+)\//;
+const VERSION_SEG = /\/versions\/(\d+\.\d+\.\d+(?:-(?:alpha|beta|pre)\d{3})?)\//;
 
-export function compareVersions(a, b) {
-  const pa = a.split('.').map(Number);
-  const pb = b.split('.').map(Number);
-  for (let i = 0; i < 3; i++) {
-    if ((pa[i] || 0) > (pb[i] || 0)) return 1;
-    if ((pa[i] || 0) < (pb[i] || 0)) return -1;
+/** 프리릴리즈 버전(x.y.z-(alpha|beta|pre)NNN) 여부. 자동 latest/auto 승격에서 제외하는 데 쓴다. */
+export function isPrerelease(v) {
+  return /-(?:alpha|beta|pre)\d{3}$/.test(v || '');
+}
+
+// 같은 x.y.z 안에서 정식(4) > pre(3) > beta(2) > alpha(1). 레이블 사전순이 단계 순서와 일치.
+const LABEL_RANK = { alpha: 1, beta: 2, pre: 3 };
+
+function parseVersionKey(v) {
+  const m = (v || '').match(/^(\d+)\.(\d+)\.(\d+)(?:-(alpha|beta|pre)(\d{3}))?$/);
+  if (m) {
+    return {
+      nums: [Number(m[1]), Number(m[2]), Number(m[3])],
+      rank: m[4] ? LABEL_RANK[m[4]] : 4,
+      num: m[5] ? Number(m[5]) : 0,
+    };
   }
+  // 형식 밖(레거시 등) — 기존 동작 근사: 숫자 세그먼트만, 정식 취급
+  const parts = (v || '').split('.').map(Number);
+  return { nums: [parts[0] || 0, parts[1] || 0, parts[2] || 0], rank: 4, num: 0 };
+}
+
+/** x.y.z(-(alpha|beta|pre)NNN)? 비교. 프리릴리즈는 같은 x.y.z의 정식보다 낮다(SemVer 의미). */
+export function compareVersions(a, b) {
+  const pa = parseVersionKey(a);
+  const pb = parseVersionKey(b);
+  for (let i = 0; i < 3; i++) {
+    if (pa.nums[i] !== pb.nums[i]) return pa.nums[i] > pb.nums[i] ? 1 : -1;
+  }
+  if (pa.rank !== pb.rank) return pa.rank > pb.rank ? 1 : -1;
+  if (pa.num !== pb.num) return pa.num > pb.num ? 1 : -1;
   return 0;
 }
 

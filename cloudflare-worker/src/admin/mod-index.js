@@ -1,5 +1,5 @@
 /** 모드 인덱스: (loader,gameVersion)별 해석 latest(auto/pinned)를 계산·저장한다. */
-import { getJson, putJson, listVersions, compareVersions } from './r2.js';
+import { getJson, putJson, listVersions, compareVersions, isPrerelease } from './r2.js';
 import { isoNow } from './mods-format.js';
 
 /** 모든 버전 manifest를 스캔해 (loader,gv)별 auto(최고버전) 계산 + 기존 pinned 보존. */
@@ -25,7 +25,9 @@ export async function rebuildModIndex(env, id) {
   for (const [loader, gvs] of Object.entries(offers)) {
     targets[loader] = {};
     for (const [gv, versions] of Object.entries(gvs)) {
-      const auto = [...versions].sort(compareVersions).at(-1);
+      // 프리릴리즈는 auto(자동 최신)에서 제외 — 일반 사용자에게 자동 배포되지 않도록. 노출은 핀으로만.
+      const stable = versions.filter((v) => !isPrerelease(v));
+      const auto = stable.length ? [...stable].sort(compareVersions).at(-1) : null;
       const prevPinned = existingTargets[loader]?.[gv]?.pinned ?? null;
       const pinned = prevPinned && versions.includes(prevPinned) ? prevPinned : null;
       targets[loader][gv] = { auto, pinned };

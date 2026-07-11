@@ -522,7 +522,7 @@ async function getVersionsList(env, corsHeaders, modId, version = 'v1') {
   // Extract versions from paths
   const versions = new Set();
   for (const obj of list.objects) {
-    const match = obj.key.match(/mods\/[^\/]+\/versions\/(\d+\.\d+\.\d+)\//);
+    const match = obj.key.match(/mods\/[^\/]+\/versions\/(\d+\.\d+\.\d+(?:-(?:alpha|beta|pre)\d{3})?)\//);
     if (match) {
       versions.add(match[1]);
     }
@@ -686,19 +686,30 @@ async function isValidToken(token, env) {
 }
 
 /**
- * Compare semantic versions
+ * Compare semantic versions — x.y.z(-(alpha|beta|pre)NNN)?
+ * 프리릴리즈는 같은 x.y.z의 정식보다 낮다(alpha<beta<pre<정식). 형식 밖은 숫자 세그먼트 비교.
  */
+const PRERELEASE_LABEL_RANK = { alpha: 1, beta: 2, pre: 3 };
+
 function compareVersions(a, b) {
-  const aParts = a.split('.').map(Number);
-  const bParts = b.split('.').map(Number);
-  
-  for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
-    const aPart = aParts[i] || 0;
-    const bPart = bParts[i] || 0;
-    
-    if (aPart > bPart) return 1;
-    if (aPart < bPart) return -1;
+  const parse = (v) => {
+    const m = (v || '').match(/^(\d+)\.(\d+)\.(\d+)(?:-(alpha|beta|pre)(\d{3}))?$/);
+    if (m) {
+      return {
+        nums: [Number(m[1]), Number(m[2]), Number(m[3])],
+        rank: m[4] ? PRERELEASE_LABEL_RANK[m[4]] : 4,
+        num: m[5] ? Number(m[5]) : 0,
+      };
+    }
+    const parts = (v || '').split('.').map(Number);
+    return { nums: [parts[0] || 0, parts[1] || 0, parts[2] || 0], rank: 4, num: 0 };
+  };
+  const pa = parse(a);
+  const pb = parse(b);
+  for (let i = 0; i < 3; i++) {
+    if (pa.nums[i] !== pb.nums[i]) return pa.nums[i] > pb.nums[i] ? 1 : -1;
   }
-  
+  if (pa.rank !== pb.rank) return pa.rank > pb.rank ? 1 : -1;
+  if (pa.num !== pb.num) return pa.num > pb.num ? 1 : -1;
   return 0;
 }

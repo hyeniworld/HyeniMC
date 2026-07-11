@@ -37,7 +37,7 @@ export function ModPublishForm({ initialModId, onToast, onPublished }: {
       fileMap.set(field, f.file!);
       return {
         loader: f.loader, gameVersion: f.gameVersion, fileField: field, fileName: f.fileName,
-        minLoaderVersion: f.minLoaderVersion,
+        minLoaderVersion: f.minLoaderVersion || null,
         maxLoaderVersion: f.maxLoaderVersion || null,
         dependencies: JSON.parse(f.dependencies || '{}'),
       };
@@ -56,10 +56,11 @@ export function ModPublishForm({ initialModId, onToast, onPublished }: {
   return (
     <form class="dialog-form-body" onSubmit={submit}>
       <div class="notice">기존 latest보다 높거나 같은 버전을 게시하면 latest가 됩니다(낮은 버전은 백필만). 환경별 latest는 자동 재계산됩니다(핀 우선).</div>
+      <div class="notice">프리릴리즈는 <span class="mono">x.y.z-(alpha|beta|pre)NNN</span> 형식만 지원합니다(예: <span class="mono">1.2.3-beta001</span>, 순서 alpha&lt;beta&lt;pre&lt;정식). 프리릴리즈는 latest·환경별 자동 최신으로 <b>승격되지 않으며</b>, 배포하려면 환경별 핀으로 지정해야 합니다 — 핀 = 해당 환경 <b>모든 사용자</b>에게 배포.</div>
       <div class="form-grid">
         <Field label="modId"><input value={modId} onInput={(e) => setModId((e.target as HTMLInputElement).value)} /></Field>
         <Field label="name"><input value={name} onInput={(e) => setName((e.target as HTMLInputElement).value)} /></Field>
-        <Field label="version (x.y.z)"><input value={version} onInput={(e) => setVersion((e.target as HTMLInputElement).value)} /></Field>
+        <Field label="version"><input value={version} placeholder="1.2.3 또는 1.2.3-beta001" onInput={(e) => setVersion((e.target as HTMLInputElement).value)} /></Field>
         <Field label="category">
           <select value={category} onChange={(e) => setCategory((e.target as HTMLSelectElement).value)}>
             <option value="required">required</option>

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'preact/hooks';
 import * as api from '../api';
 import { sortVersions } from '../lib/versions';
+import { isPrerelease } from '../lib/validate';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 
 interface Version { version: string; targets: { loader: string; gameVersion: string }[]; }
 type Cell = { auto: string; pinned: string | null };
@@ -12,6 +14,7 @@ export function ModResolution({ modId, versions, onToast }: {
   onToast: (m: string, k?: 'ok' | 'err') => void;
 }) {
   const [index, setIndex] = useState<Index>({ targets: {} });
+  const [preConfirm, setPreConfirm] = useState<{ loader: string; gameVersion: string; version: string } | null>(null);
 
   async function load() {
     try { setIndex(await api.getModIndex(modId)); }
@@ -63,6 +66,11 @@ export function ModResolution({ modId, versions, onToast }: {
                   <select value={r.pinned ?? ''}
                     onChange={(e) => {
                       const val = (e.target as HTMLSelectElement).value;
+                      // 프리릴리즈 핀 = 해당 환경 전원 배포 — 실수 방지 확인
+                      if (val && isPrerelease(val)) {
+                        setPreConfirm({ loader: r.loader, gameVersion: r.gameVersion, version: val });
+                        return;
+                      }
                       pin(r.loader, r.gameVersion, val === '' ? null : val);
                     }}>
                     <option value="">자동 ({r.auto ?? '—'})</option>
@@ -74,6 +82,13 @@ export function ModResolution({ modId, versions, onToast }: {
           })}
         </tbody>
       </table>
+      <ConfirmDialog open={!!preConfirm}
+        message={`${preConfirm?.version}은(는) 프리릴리즈입니다.\n\n핀하면 ${preConfirm?.loader}·${preConfirm?.gameVersion} 환경의 모든 사용자에게 즉시 배포됩니다. 테스트가 목적이면 로컬 설치(mods/에 jar 직접)를 권장합니다.\n\n계속할까요?`}
+        onCancel={() => setPreConfirm(null)}
+        onConfirm={() => {
+          if (preConfirm) pin(preConfirm.loader, preConfirm.gameVersion, preConfirm.version);
+          setPreConfirm(null);
+        }} />
     </div>
   );
 }

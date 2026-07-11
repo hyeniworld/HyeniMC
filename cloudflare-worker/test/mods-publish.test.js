@@ -147,3 +147,33 @@ describe('POST /admin/api/mods/{id}/versions', () => {
     }
   });
 });
+
+describe('minLoaderVersion optional at publish', () => {
+  it('accepts a file without minLoaderVersion; manifest null, registry falls back to 0.0.0', async () => {
+    const noMin = {
+      ...meta,
+      files: [{ ...meta.files[0], minLoaderVersion: null }],
+    };
+    const res = await handleMods(publishReq('hyenihelper', noMin, { jar0: 'JARBYTES' }), env);
+    expect(res.status).toBe(201);
+
+    const manifest = await getJson(env, 'mods/hyenihelper/versions/1.0.5/manifest.json');
+    expect(manifest.loaders.neoforge.gameVersions['1.21.1'].minLoaderVersion).toBeNull();
+
+    const registry = await getJson(env, 'mods/registry.json');
+    const entry = registry.mods.find((m) => m.id === 'hyenihelper');
+    expect(entry.loaders[0].minVersion).toBe('0.0.0'); // 구(Electron) 런처 호환 폴백
+  });
+
+  it('normalizes empty-string minLoaderVersion to null in manifest', async () => {
+    const emptyMin = {
+      ...meta,
+      version: '1.0.6',
+      files: [{ ...meta.files[0], minLoaderVersion: '', fileName: 'hyenihelper-neoforge-1.21.1-1.0.6.jar' }],
+    };
+    const res = await handleMods(publishReq('hyenihelper', emptyMin, { jar0: 'JARBYTES' }), env);
+    expect(res.status).toBe(201);
+    const manifest = await getJson(env, 'mods/hyenihelper/versions/1.0.6/manifest.json');
+    expect(manifest.loaders.neoforge.gameVersions['1.21.1'].minLoaderVersion).toBeNull();
+  });
+});

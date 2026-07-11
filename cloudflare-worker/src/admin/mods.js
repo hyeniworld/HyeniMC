@@ -1,12 +1,13 @@
 /** 모드 관리 핸들러: 목록/버전/게시/롤백/편집/삭제. */
 import { adminJson } from './router.js';
-import { getJson, listVersions, putObject, putJson, objectExists, deletePrefix, compareVersions } from './r2.js';
+import { getJson, listVersions, putObject, putJson, objectExists, deletePrefix, compareVersions, isPrerelease } from './r2.js';
 import { sha256Hex, buildManifest, isoNow } from './mods-format.js';
 import { rebuildRegistry } from './registry.js';
 import { rebuildModIndex, setModPin } from './mod-index.js';
 
 export const MOD_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
-export const VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
+// 정식 x.y.z 또는 프리릴리즈 x.y.z-(alpha|beta|pre)NNN(3자리). 프리릴리즈는 자동 승격 제외(핀 전용).
+export const VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-(?:alpha|beta|pre)\d{3})?$/;
 export const LOADER_PATTERN = /^[a-z0-9]+$/;
 export const GAME_VERSION_PATTERN = /^\d+\.\d+(\.\d+)?$/;
 export const FILE_NAME_PATTERN = /^[A-Za-z0-9._+-]+\.jar$/;
@@ -146,7 +147,7 @@ async function publishModVersion(request, env, id) {
   // 검증
   if (meta.modId !== id) return adminJson({ error: 'modId가 경로와 불일치합니다.' }, 400);
   if (!VERSION_PATTERN.test(meta.version || '')) {
-    return adminJson({ error: '버전 형식은 x.y.z 여야 합니다.' }, 400);
+    return adminJson({ error: '버전 형식은 x.y.z 또는 x.y.z-(alpha|beta|pre)NNN(예: 1.2.3-beta001) 이어야 합니다.' }, 400);
   }
   if (!Array.isArray(meta.files) || meta.files.length === 0) {
     return adminJson({ error: 'files가 비어 있습니다.' }, 400);
@@ -210,8 +211,10 @@ async function publishModVersion(request, env, id) {
   await putJson(env, manifestKey, manifest);
   // 전역 latest(쿼리 미지정 구 클라이언트용 폴백)는 더 높거나 같은 버전일 때만 갱신.
   // 같은 버전(overwrite)은 내용 새로고침을 위해 갱신, 낮은 버전(백필)은 유지.
+  // 프리릴리즈는 자동 승격하지 않는다(테스트 산출물 — 노출은 환경별 핀으로만, 명시적 "latest로 지정"은 허용).
   const curLatest = await getJson(env, `mods/${id}/latest.json`);
-  if (!curLatest?.version || compareVersions(meta.version, curLatest.version) >= 0) {
+  if (!isPrerelease(meta.version) &&
+      (!curLatest?.version || compareVersions(meta.version, curLatest.version) >= 0)) {
     await putJson(env, `mods/${id}/latest.json`, manifest);
   }
   await rebuildRegistry(env);

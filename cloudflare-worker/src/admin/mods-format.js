@@ -31,7 +31,7 @@ export function buildManifest(meta) {
         file: f.fileName,
         sha256: f.sha256,
         size: f.size,
-        minLoaderVersion: f.minLoaderVersion,
+        minLoaderVersion: f.minLoaderVersion || null, // 빈값/누락 = 하한 없음 (registry '0.0.0' 폴백, 런처 무제약)
         maxLoaderVersion: f.maxLoaderVersion ?? null,
         downloadPath: `mods/${modId}/versions/${version}/${loader}/${f.gameVersion}/${f.fileName}`,
         dependencies: f.dependencies ?? {},
