@@ -306,9 +306,15 @@ pub async fn check_all_updates(
         {
             Ok(resp) => match resp.json().await {
                 Ok(v) => v,
-                Err(_) => continue,
+                Err(e) => {
+                    log::warn!("[workermods] {} latest 응답 파싱 실패(스킵): {e}", item.id);
+                    continue;
+                }
             },
-            Err(_) => continue,
+            Err(e) => {
+                log::warn!("[workermods] {} latest 조회 실패(스킵): {e}", item.id);
+                continue;
+            }
         };
 
         // 로더/게임버전 지원 여부
