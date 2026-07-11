@@ -16,7 +16,7 @@ npm run build:tauri   # 배포 번들 (arm64/x64 dmg + nsis)
 
 우선순위: **Windows > macOS**. 각 항목 [ ]=미검증, [x]=검증 완료.
 
-> **진행 현황 (2026-07-11, Windows 검증)**: A·B 전체 + C(breaking 제외) + D(크래시 리포트 제외) 완료. **남은 것**: C의 breaking 업데이트(적용 전 차단), D의 크래시 리포트 export, **E 전체**(자동 업데이트 — updater 서버/릴리스 구성 후 GitHub Action 실행 필요). F(이식 완결 검증)는 별도 미착수.
+> **진행 현황 (2026-07-11, Windows 검증)**: A·B 전체 + C(breaking 제외) + D(크래시 리포트 제외) + **E.1 자동 업데이트 + E.2 교체 설치** 완료(릴리스 파이프라인 end-to-end 검증). **남은 것**: C의 breaking 업데이트(적용 전 차단), D의 크래시 리포트 export, E.3 macOS(Developer ID 서명 필요). F(이식 완결 검증)는 별도 미착수.
 
 ### A. 코어 (플랫폼 공통) — ✅ 완료 (2026-07-11)
 - [x] 앱 기동 → 기존 프로필 목록이 실데이터로 표시 (`[db] legacy DB connected`)
@@ -42,8 +42,8 @@ npm run build:tauri   # 배포 번들 (arm64/x64 dmg + nsis)
 - [x] 리소스/셰이더팩 리스트 (팩 제공분/사용자 추가분 구분 배지) + 폴더 열기 + 파일 감시 반영
 - [ ] 크래시 리포트 export (Downloads에 zip — Windows USERPROFILE 경로 확인) + 로그 폴더 열기
 
-### E. 자동 업데이트 & 교체 설치 — ⚠️ Windows 교체 설치 완료, 자동 업데이트(E.1)·macOS 남음
-- [ ] 런처 업데이트 확인/다운로드/설치 (updater 서버/릴리스 구성 후 — 태그 push → release-launcher.yml)
+### E. 자동 업데이트 & 교체 설치 — ✅ Windows(자동 업데이트 E.1 + 교체 설치 E.2) 완료, macOS(E.3)만 남음
+- [x] 런처 업데이트 확인/다운로드/설치 — **검증 완료 2026-07-11** (v0.3.9→v0.4.0). `v0.4.0` 태그 push → release-launcher.yml이 서명 번들 + latest.json을 GitHub Release 게시 → 설치된 0.3.9가 감지·다운로드·설치·데이터 보존. 파이프라인 수정: package-lock.json 추적(`npm ci` EUSAGE), tauri-action에 GITHUB_TOKEN env 배선.
 - [x] **Windows**: 기존 Electron 판 위에 Tauri NSIS 설치 → 기존 판 자동 제거 + 데이터 보존 (installer-hooks.nsh) — **검증 완료 2026-07-11**. electron-builder 언인스톨 키가 appId 문자열이 아니라 GUID(`85ce1611-…`, appId에서 계산·버전 무관)라 초기 훅이 못 찾던 버그 수정. v0.1.0~0.3.4 전 버전 동일 appId → 모두 커버.
 - [ ] **macOS**: Squirrel.Mac zip 교체 검증 (동일 Developer ID) / 실패 시 브릿지 릴리스
 
