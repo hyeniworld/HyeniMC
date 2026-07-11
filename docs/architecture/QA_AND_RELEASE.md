@@ -14,33 +14,35 @@ npm run build:tauri   # 배포 번들 (arm64/x64 dmg + nsis)
 
 ## QA 매트릭스 (일괄 테스트 — 사용자 진행)
 
-우선순위: **Windows > macOS**. 각 항목 [ ]=미검증.
+우선순위: **Windows > macOS**. 각 항목 [ ]=미검증, [x]=검증 완료.
 
-### A. 코어 (플랫폼 공통)
-- [ ] 앱 기동 → 기존 프로필 목록이 실데이터로 표시 (`[db] legacy DB connected`)
-- [ ] 전역 설정 로드/저장 (메모리 슬라이더, Java 경로, 해상도)
-- [ ] 프로필 생성(커스텀 탭만 보임 — 온라인/파일 탭 숨김 확인) → 삭제 → 즐겨찾기
-- [ ] MS 로그인(시스템 브라우저 → 콜백) → 계정 목록 → 재인증(만료 자동 갱신)
+> **진행 현황 (2026-07-11, Windows 검증)**: A·B 전체 + C(breaking 제외) + D(크래시 리포트 제외) 완료. **남은 것**: C의 breaking 업데이트(적용 전 차단), D의 크래시 리포트 export, **E 전체**(자동 업데이트 — updater 서버/릴리스 구성 후 GitHub Action 실행 필요). F(이식 완결 검증)는 별도 미착수.
 
-### B. 게임 실행 매트릭스 {바닐라, Fabric, NeoForge} × {Windows x64, macOS arm64}
-- [ ] 바닐라 다운로드(진행률 모달) → 실행 → 창 표시
-- [ ] Fabric 프로필 실행 (로더 자동 설치, **부모 jar 클래스패스** — G8)
-- [ ] NeoForge 프로필 실행 (installer 자동 실행, 콘솔 창 안 뜸 — Windows)
-- [ ] 게임 로그 스트림 표시 / 종료 시 플레이타임 기록
-- [ ] Java 자동 감지 (Windows: ProgramFiles 벤더 폴더/JAVA_HOME)
+### A. 코어 (플랫폼 공통) — ✅ 완료 (2026-07-11)
+- [x] 앱 기동 → 기존 프로필 목록이 실데이터로 표시 (`[db] legacy DB connected`)
+- [x] 전역 설정 로드/저장 (메모리 슬라이더, Java 경로, 해상도)
+- [x] 프로필 생성(커스텀 탭만 보임 — 온라인/파일 탭 숨김 확인) → 삭제 → 즐겨찾기
+- [x] MS 로그인(시스템 브라우저 → 콜백) → 계정 목록 → 재인증(만료 자동 갱신)
 
-### C. 혜니팩 & 업데이트
-- [ ] 혜니팩 import → 모드 설치(url 피닝분 다운로드 + zip 동봉분 추출) → overrides 적용
-- [ ] 팩 업데이트: 신버전 감지(실행 전/시작 배너) → 적용 → 모드 diff 정확 → 사용자 파일 보존
+### B. 게임 실행 매트릭스 {바닐라, Fabric, NeoForge} × {Windows x64, macOS arm64} — ✅ 완료 (2026-07-11)
+- [x] 바닐라 다운로드(진행률 모달) → 실행 → 창 표시
+- [x] Fabric 프로필 실행 (로더 자동 설치, **부모 jar 클래스패스** — G8)
+- [x] NeoForge 프로필 실행 (installer 자동 실행, 콘솔 창 안 뜸 — Windows)
+- [x] 게임 로그 스트림 표시 / 종료 시 플레이타임 기록
+- [x] Java 자동 감지 (Windows: ProgramFiles 벤더 폴더/JAVA_HOME)
+
+### C. 혜니팩 & 업데이트 — ⚠️ breaking 업데이트만 미검증
+- [x] 혜니팩 import → 모드 설치(url 피닝분 다운로드 + zip 동봉분 추출) → overrides 적용
+- [x] 팩 업데이트: 신버전 감지(실행 전/시작 배너) → 적용 → 모드 diff 정확 → 사용자 파일 보존
 - [ ] breaking 업데이트 시 적용 전 실행 차단(강제 불가) / **Worker 접근 불가 시 [강제 실행]/[닫기] 다이얼로그**(설정 토글 아님)
-- [ ] worker mods 자동 관리 (혜니월드 서버 프로필에서만 체크, sha256 설치)
+- [x] worker mods 자동 관리 (혜니월드 서버 프로필에서만 체크, sha256 설치)
 
-### D. 혜니월드 통합
-- [ ] `hyenimc://auth?token=…&server=…` 딥링크 → servers.dat 매칭 프로필에 config 기록 (Windows/macOS 번들)
-- [ ] 리소스/셰이더팩 리스트 (팩 제공분/사용자 추가분 구분 배지) + 폴더 열기 + 파일 감시 반영
+### D. 혜니월드 통합 — ⚠️ 크래시 리포트만 미검증
+- [x] `hyenimc://auth?token=…&server=…` 딥링크 → servers.dat 매칭 프로필에 config 기록 (Windows/macOS 번들)
+- [x] 리소스/셰이더팩 리스트 (팩 제공분/사용자 추가분 구분 배지) + 폴더 열기 + 파일 감시 반영
 - [ ] 크래시 리포트 export (Downloads에 zip — Windows USERPROFILE 경로 확인) + 로그 폴더 열기
 
-### E. 자동 업데이트 & 교체 설치
+### E. 자동 업데이트 & 교체 설치 — ❌ 미검증 (updater 서버/릴리스 구성 필요)
 - [ ] 런처 업데이트 확인/다운로드/설치 (updater 서버 구성 후)
 - [ ] **Windows**: 기존 Electron 판 위에 Tauri NSIS 설치 → 기존 판 자동 제거 + 데이터 보존 (installer-hooks.nsh)
 - [ ] **macOS**: Squirrel.Mac zip 교체 검증 (동일 Developer ID) / 실패 시 브릿지 릴리스
