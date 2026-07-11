@@ -23,9 +23,13 @@ export const WorkerModUpdatePanel: React.FC<WorkerModUpdatePanelProps> = ({
   onInstall,
   onDismiss
 }) => {
-  // Installed mods are auto-selected and cannot be unselected
+  // 설치된 업데이트 + 신규 필수 모드는 기본 선택(서버 접속에 필요하므로 자동 체크)
   const [selectedMods, setSelectedMods] = useState<Set<string>>(
-    new Set(updates.filter(u => u.isInstalled).map(u => u.modId))
+    new Set(
+      updates
+        .filter(u => u.isInstalled || u.category === 'required')
+        .map(u => u.modId)
+    )
   );
 
   // Categorize updates
@@ -41,6 +45,11 @@ export const WorkerModUpdatePanel: React.FC<WorkerModUpdatePanelProps> = ({
   
   const newOptionalMods = useMemo(
     () => updates.filter(u => !u.isInstalled && u.category === 'optional'),
+    [updates]
+  );
+
+  const loaderChange = useMemo(
+    () => updates.find(u => u.requiredLoaderVersion)?.requiredLoaderVersion ?? null,
     [updates]
   );
 
@@ -86,9 +95,14 @@ export const WorkerModUpdatePanel: React.FC<WorkerModUpdatePanelProps> = ({
           <p className="text-sm text-gray-400 mt-1">
             {installedUpdates.length > 0 && `${installedUpdates.length}개 업데이트`}
             {installedUpdates.length > 0 && (newRequiredMods.length + newOptionalMods.length) > 0 && ', '}
-            {(newRequiredMods.length + newOptionalMods.length) > 0 && 
+            {(newRequiredMods.length + newOptionalMods.length) > 0 &&
               `${newRequiredMods.length + newOptionalMods.length}개 신규`}
           </p>
+          {loaderChange && (
+            <p className="text-sm text-amber-300 mt-1 flex items-center gap-1">
+              🔧 모드 로더도 함께 업데이트됩니다 <span className="font-mono">(→ {loaderChange})</span>
+            </p>
+          )}
         </div>
         
         <div className="flex items-center gap-2">

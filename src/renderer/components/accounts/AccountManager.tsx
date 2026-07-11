@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useToast } from '../../contexts/ToastContext';
-import { User, UserPlus, Trash2, LogIn, ChevronDown, RefreshCw } from 'lucide-react';
+import { User, Trash2, LogIn, ChevronDown, RefreshCw } from 'lucide-react';
+import { ConfirmModal } from '../common/ConfirmModal';
 
 interface Account {
   id: string;
@@ -16,13 +17,16 @@ interface AccountManagerProps {
   onAccountChange: (accountId: string | undefined) => void;
 }
 
+// Tauri invoke 에러는 문자열로 전달되어 error.message가 없을 수 있다 — 실제 사유를 노출.
+const errText = (e: any, fallback: string): string =>
+  e?.message || (typeof e === 'string' ? e : fallback);
+
 export function AccountManager({ selectedAccountId, onAccountChange }: AccountManagerProps) {
   const toast = useToast();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
-  const [showOfflineModal, setShowOfflineModal] = useState(false);
-  const [offlineUsername, setOfflineUsername] = useState('');
   const [loading, setLoading] = useState(false);
+  const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
 
   useEffect(() => {
     loadAccounts();
@@ -56,33 +60,8 @@ export function AccountManager({ selectedAccountId, onAccountChange }: AccountMa
     }
   };
 
-  const handleAddOffline = async () => {
-    if (!offlineUsername.trim()) {
-      toast.warning('입력 필요', '사용자 이름을 입력해주세요');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const account = await window.electronAPI.account.addOffline(offlineUsername.trim());
-      await loadAccounts();
-      onAccountChange(account.id);
-      setShowOfflineModal(false);
-      setOfflineUsername('');
-    } catch (error: any) {
-      toast.error('추가 실패', error.message || '오프라인 계정 추가에 실패했습니다');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleRemoveAccount = async (accountId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    
-    if (!confirm('이 계정을 삭제하시겠습니까?')) {
-      return;
-    }
-
+  const performRemove = async (accountId: string) => {
+    setConfirmRemoveId(null);
     try {
       await window.electronAPI.account.remove(accountId);
       if (selectedAccountId === accountId) {
@@ -90,20 +69,21 @@ export function AccountManager({ selectedAccountId, onAccountChange }: AccountMa
       }
       await loadAccounts();
     } catch (error: any) {
-      toast.error('삭제 실패', error.message || '계정 삭제에 실패했습니다');
+      toast.error('삭제 실패', errText(error, '계정 삭제에 실패했습니다'));
     }
   };
 
   const handleRefreshAccount = async (accountId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setLoading(true);
-    
+
     try {
       await window.electronAPI.account.refresh(accountId);
       await loadAccounts();
       toast.success('계정 갱신 완료', 'Microsoft에서 최신 정보를 가져왔습니다');
     } catch (error: any) {
-      toast.error('갱신 실패', error.message || '계정 갱신에 실패했습니다');
+      // Rust 에러는 문자열로 오므로 error.message가 없을 수 있음 — 실제 사유 노출
+      toast.error('갱신 실패', errText(error, '계정 갱신에 실패했습니다'));
     } finally {
       setLoading(false);
     }
@@ -123,7 +103,7 @@ export function AccountManager({ selectedAccountId, onAccountChange }: AccountMa
             <>
               {selectedAccount.uuid ? (
                 <img
-                  src={`https://crafatar.com/avatars/${selectedAccount.uuid}?size=32&overlay&t=${Math.floor(Date.now() / 3600000)}`}
+                  src={`https://mc-heads.net/avatar/${selectedAccount.uuid}/32`}
                   alt={selectedAccount.name}
                   className="w-6 h-6 rounded"
                   onError={(e) => {
@@ -157,26 +137,11 @@ export function AccountManager({ selectedAccountId, onAccountChange }: AccountMa
               onClick={() => setShowDropdown(false)}
             />
             <div className="absolute right-0 mt-2 w-72 bg-gray-800 border border-gray-700 rounded-lg shadow-2xl z-50 max-h-96 overflow-y-auto">
-              {/* Default Account */}
-              <div
-                onClick={() => {
-                  onAccountChange(undefined);
-                  setShowDropdown(false);
-                }}
-                className={`p-3 hover:bg-gray-700/50 cursor-pointer transition-colors ${
-                  !selectedAccountId ? 'bg-purple-500/10 border-l-4 border-purple-500' : ''
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 bg-gray-700 rounded flex items-center justify-center">
-                    <User className="w-5 h-5 text-gray-400" />
-                  </div>
-                  <div>
-                    <div className="font-medium text-sm">Player</div>
-                    <div className="text-xs text-gray-400">오프라인 (기본)</div>
-                  </div>
+              {accounts.length === 0 && (
+                <div className="p-4 text-center text-xs text-gray-500">
+                  Microsoft 계정으로 로그인하세요
                 </div>
-              </div>
+              )}
 
               {/* Account List */}
               {accounts.map((account) => (
@@ -194,7 +159,7 @@ export function AccountManager({ selectedAccountId, onAccountChange }: AccountMa
                     <div className="flex items-center gap-2">
                       {account.uuid ? (
                         <img
-                          src={`https://crafatar.com/avatars/${account.uuid}?size=32&overlay&t=${Math.floor(Date.now() / 3600000)}`}
+                          src={`https://mc-heads.net/avatar/${account.uuid}/32`}
                           alt={account.name}
                           className="w-8 h-8 rounded"
                           onError={(e) => {
@@ -214,11 +179,7 @@ export function AccountManager({ selectedAccountId, onAccountChange }: AccountMa
                       <div>
                         <div className="font-medium text-sm">{account.name}</div>
                         <div className="text-xs text-gray-400">
-                          {account.type === 'microsoft' ? (
-                            <span className="text-blue-400">🔐 Microsoft</span>
-                          ) : (
-                            <span className="text-gray-500">오프라인</span>
-                          )}
+                          <span className="text-blue-400">🔐 Microsoft</span>
                         </div>
                       </div>
                     </div>
@@ -233,7 +194,10 @@ export function AccountManager({ selectedAccountId, onAccountChange }: AccountMa
                         </button>
                       )}
                       <button
-                        onClick={(e) => handleRemoveAccount(account.id, e)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setConfirmRemoveId(account.id);
+                        }}
                         className="p-1 hover:bg-red-600/20 rounded text-red-400 hover:text-red-300"
                         title="계정 삭제"
                       >
@@ -248,7 +212,7 @@ export function AccountManager({ selectedAccountId, onAccountChange }: AccountMa
               <div className="border-t border-gray-700 my-1" />
 
               {/* Add Account Buttons */}
-              <div className="p-2 space-y-1">
+              <div className="p-2">
                 <button
                   onClick={() => {
                     setShowDropdown(false);
@@ -260,63 +224,21 @@ export function AccountManager({ selectedAccountId, onAccountChange }: AccountMa
                   <LogIn className="w-4 h-4" />
                   Microsoft 로그인
                 </button>
-                <button
-                  onClick={() => {
-                    setShowDropdown(false);
-                    setShowOfflineModal(true);
-                  }}
-                  disabled={loading}
-                  className="w-full px-3 py-2 text-sm bg-gray-700 hover:bg-gray-600 rounded flex items-center justify-center gap-2 disabled:opacity-50 transition-colors"
-                >
-                  <UserPlus className="w-4 h-4" />
-                  오프라인 계정 추가
-                </button>
               </div>
             </div>
           </>
         )}
       </div>
 
-      {/* Add Offline Account Modal */}
-      {showOfflineModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="card max-w-md w-full">
-            <h3 className="text-xl font-bold mb-4">오프라인 계정 추가</h3>
-            <p className="text-sm text-gray-400 mb-4">
-              오프라인 계정은 싱글플레이 또는 크랙 서버에서만 사용할 수 있습니다.
-            </p>
-            <input
-              type="text"
-              value={offlineUsername}
-              onChange={(e) => setOfflineUsername(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleAddOffline()}
-              placeholder="사용자 이름"
-              className="input mb-4"
-              maxLength={16}
-              autoFocus
-            />
-            <div className="flex gap-2 justify-end">
-              <button
-                onClick={() => {
-                  setShowOfflineModal(false);
-                  setOfflineUsername('');
-                }}
-                className="btn-secondary"
-                disabled={loading}
-              >
-                취소
-              </button>
-              <button
-                onClick={handleAddOffline}
-                className="btn-primary"
-                disabled={loading || !offlineUsername.trim()}
-              >
-                추가
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmModal
+        open={confirmRemoveId !== null}
+        title="계정 삭제"
+        message="이 계정을 삭제하시겠습니까?"
+        confirmLabel="삭제"
+        danger
+        onConfirm={() => confirmRemoveId && performRemove(confirmRemoveId)}
+        onCancel={() => setConfirmRemoveId(null)}
+      />
     </>
   );
 }

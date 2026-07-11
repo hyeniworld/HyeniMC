@@ -1,6 +1,7 @@
 # Dependencies
 node_modules/
-package-lock.json
+# package-lock.json은 추적한다 — CI(release-launcher.yml)가 `npm ci`로 재현 설치하며,
+# 이 파일이 없으면 EUSAGE로 실패한다.
 yarn.lock
 pnpm-lock.yaml
 
@@ -71,3 +72,10 @@ src/main/gen/
 
 .wrangler
 .dev.vars
+
+# Rust (Tauri)
+/target
+apps/launcher/src-tauri/target
+apps/launcher/src-tauri/gen
+
+/.tauri

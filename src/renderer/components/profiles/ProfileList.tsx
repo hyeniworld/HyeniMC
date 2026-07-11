@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Play, Settings, Trash2, Plus, FolderOpen, Clock, Loader2, Star, Sparkles, Package, AlertTriangle } from 'lucide-react';
 import { CreateProfileModal } from './CreateProfileModal';
 import { ExportHyeniPackModal } from './ExportHyeniPackModal';
@@ -8,10 +8,14 @@ import { useAccount } from '../../App';
 import { useToast } from '../../contexts/ToastContext';
 import { sortProfiles } from '../../utils/profileSorter';
 import { DecorationCharacter } from '../common/HyeniDecorations';
+import { ConfirmModal } from '../common/ConfirmModal';
+import { errorText } from '../../utils/errorText';
 import { isAuthorizedServer } from '@shared/config/server-config';
+import { FORCE_LAUNCH_MARKER } from '@shared/constants/launch';
 
 export function ProfileList() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { selectedAccountId } = useAccount();
   const toast = useToast();
   const [profiles, setProfiles] = useState<any[]>([]);
@@ -20,8 +24,17 @@ export function ProfileList() {
   const [runningProfiles, setRunningProfiles] = useState<Set<string>>(new Set());
   const [launchingProfiles, setLaunchingProfiles] = useState<Set<string>>(new Set());
   const [showCreateModal, setShowCreateModal] = useState(false);
+  // 딥링크 제안('설치')으로 넘어온 혜니팩 id — 모달을 혜니팩 탭 + 자동 선택으로 연다.
+  const [createHyeniPackId, setCreateHyeniPackId] = useState<string | undefined>(undefined);
+  // 딥링크로 새 팩 제안이 오면 key를 올려 열려 있는 모달을 강제 재마운트(닫고 새로 열기와 동일 효과)
+  const [createModalKey, setCreateModalKey] = useState(0);
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportingProfile, setExportingProfile] = useState<any>(null);
+  const [confirmStopId, setConfirmStopId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  // 업데이트 확인 실패 시 강제 실행 확인 다이얼로그
+  const [forcePrompt, setForcePrompt] = useState<{ profileId: string; message: string } | null>(null);
   const showDownload = useDownloadStore(s => s.show);
   const setDl = useDownloadStore(s => s.setProgress);
   const resetDownload = useDownloadStore(s => s.reset);
@@ -90,6 +103,18 @@ export function ProfileList() {
     };
   }, []);
 
+  // 딥링크 제안('설치')으로 전달된 state.hyeniPackId 1회 소비 → 혜니팩 탭으로 모달 오픈.
+  // 모달이 이미 열려 있어도 key 증가로 강제 재마운트(= 기존 모달을 닫고 새로 열기).
+  useEffect(() => {
+    const packId = (location.state as { hyeniPackId?: string } | null)?.hyeniPackId;
+    if (!packId) return;
+    setCreateHyeniPackId(packId);
+    setCreateModalKey((k) => k + 1);
+    setShowCreateModal(true);
+    // state 클리어(뒤로가기/재마운트 시 재오픈 방지)
+    navigate('.', { replace: true, state: null });
+  }, [location.state, navigate]);
+
   const loadProfiles = async () => {
     try {
       setLoading(true);
@@ -108,10 +133,16 @@ export function ProfileList() {
     }
   };
 
-  const handleLaunch = async (profileId: string) => {
+  const handleLaunch = async (profileId: string, force = false) => {
     try {
       const profile = profiles.find(p => p.id === profileId);
       if (!profile) return;
+
+      // 계정 필수 — 오프라인 미지원(정품 서버 전용). 실행 준비 전에 안내.
+      if (!selectedAccountId) {
+        toast.warning('로그인 필요', 'Microsoft 계정으로 로그인해야 게임을 실행할 수 있습니다.');
+        return;
+      }
 
       // Check if already running
       if (runningProfiles.has(profileId)) {
@@ -133,31 +164,34 @@ export function ProfileList() {
       setDl({ phase: 'precheck', percent: 0, message: '실행 준비 중...', versionId: profile.name });
 
       try {
-        // Pass accountId to launch
-        await window.electronAPI.profile.launch(profileId, selectedAccountId);
-        
+        // Pass accountId + force to launch
+        await window.electronAPI.profile.launch(profileId, selectedAccountId, force);
+
         // global modal will auto-hide on game:started via hook
       } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : '알 수 없는 오류';
-        setDl({ error: errorMsg });
-        
-        // Remove from launching on error
-        setLaunchingProfiles(prev => {
-          const ns = new Set(prev);
-          ns.delete(profileId);
-          return ns;
-        });
-        
-        // 3초 후 자동으로 모달 닫기
-        setTimeout(() => {
+        const raw = err instanceof Error ? err.message : String(err);
+        const clearLaunching = () =>
+          setLaunchingProfiles(prev => {
+            const ns = new Set(prev);
+            ns.delete(profileId);
+            return ns;
+          });
+        // 업데이트 확인 실패(강제 실행 가능) → 다운로드 모달 대신 [강제 실행]/[닫기] 확인 다이얼로그
+        if (raw.includes(FORCE_LAUNCH_MARKER)) {
           resetDownload();
-        }, 3000);
+          clearLaunching();
+          setForcePrompt({ profileId, message: raw.split(FORCE_LAUNCH_MARKER)[1]?.trim() || '업데이트 서버에 연결할 수 없습니다.' });
+          return;
+        }
+        setDl({ error: errorText(err, '게임 실행에 실패했습니다.') });
+        clearLaunching();
+        setTimeout(() => resetDownload(), 3000);
       } finally {
         // no local listeners to cleanup (global hook handles events)
       }
   } catch (err) {
       console.error('Failed to launch profile:', err);
-      const errorMsg = err instanceof Error ? err.message : '알 수 없는 오류';
+      const errorMsg = errorText(err, '게임 실행에 실패했습니다.');
       
       // Remove from launching on error
       setLaunchingProfiles(prev => {
@@ -176,11 +210,10 @@ export function ProfileList() {
     }
   };
 
-  const handleStop = async (profileId: string) => {
-    if (!confirm('정말로 게임을 중단하시겠습니까?')) {
-      return;
-    }
+  const handleStop = (profileId: string) => setConfirmStopId(profileId);
 
+  const performStop = async (profileId: string) => {
+    setConfirmStopId(null);
     try {
       await window.electronAPI.game.stop(profileId);
       toast.success('게임 중단', '게임이 종료되었습니다.');
@@ -191,11 +224,11 @@ export function ProfileList() {
     }
   };
 
-  const handleDelete = async (profileId: string) => {
-    if (!confirm('정말로 이 프로필을 삭제하시겠습니까?')) {
-      return;
-    }
+  const handleDelete = (profileId: string) => setConfirmDeleteId(profileId);
 
+  const performDelete = async (profileId: string) => {
+    setConfirmDeleteId(null);
+    setDeletingId(profileId);
     try {
       await window.electronAPI.profile.delete(profileId);
       toast.success('삭제 완료', '프로필이 삭제되었습니다.');
@@ -204,12 +237,22 @@ export function ProfileList() {
       console.error('Failed to delete profile:', err);
       const errorMsg = err instanceof Error ? err.message : '프로필 삭제에 실패했습니다.';
       toast.error('삭제 실패', errorMsg);
+      // 삭제 실패 시 백엔드가 프로필을 '불완전'으로 표시했을 수 있으므로 목록을 갱신해 안내를 노출한다.
+      await loadProfiles();
+    } finally {
+      setDeletingId(null);
     }
   };
 
   const handleCreateSuccess = () => {
     setShowCreateModal(false);
+    setCreateHyeniPackId(undefined);
     loadProfiles();
+  };
+
+  const handleCreateClose = () => {
+    setShowCreateModal(false);
+    setCreateHyeniPackId(undefined);
   };
 
   const handleToggleFavorite = async (profileId: string, e: React.MouseEvent) => {
@@ -292,13 +335,25 @@ export function ProfileList() {
         /* Profile Grid */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {profiles.map((profile) => (
-            <div 
-              key={profile.id} 
-              onClick={() => navigate(`/profile/${profile.id}`)}
+            <div
+              key={profile.id}
+              onClick={() => { if (deletingId === profile.id) return; navigate(`/profile/${profile.id}`); }}
               className={`card hover:border-hyeni-pink-500 hover:shadow-lg hover:shadow-hyeni-pink-500/10 transition-all duration-200 group cursor-pointer relative ${
                 profile.favorite ? 'ring-2 ring-yellow-400/50 bg-gradient-to-br from-yellow-900/10' : ''
               }`}
             >
+              {/* 삭제 중 오버레이 (파일 정리 동안 표시 — 프리즈 대신 명시적 피드백) */}
+              {deletingId === profile.id && (
+                <div
+                  className="absolute inset-0 bg-gray-900/70 backdrop-blur-sm rounded-xl flex items-center justify-center z-30"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center gap-2 text-gray-200 text-sm font-medium">
+                    <Loader2 className="w-4 h-4 animate-spin" /> 삭제 중...
+                  </div>
+                </div>
+              )}
+
               {/* Favorite Badge */}
               {profile.favorite && (
                 <div className="absolute top-0 left-0 px-2 py-0.5 bg-yellow-400 text-black text-xs font-semibold rounded-br">
@@ -314,6 +369,7 @@ export function ProfileList() {
                     {profile.installationStatus === 'installing' && '설치 중'}
                     {profile.installationStatus === 'failed' && '설치 실패'}
                     {profile.installationStatus === 'incomplete' && '설치 미완료'}
+                    {profile.installationStatus === 'delete-failed' && '삭제 실패'}
                   </span>
                 </div>
               )}
@@ -375,9 +431,12 @@ export function ProfileList() {
                         {profile.installationStatus === 'installing' && '모드팩 설치가 진행 중이었습니다'}
                         {profile.installationStatus === 'failed' && '모드팩 설치에 실패했습니다'}
                         {profile.installationStatus === 'incomplete' && '모드팩이 정상적으로 설치되지 않았습니다'}
+                        {profile.installationStatus === 'delete-failed' && '삭제에 실패한 불완전한 프로필입니다'}
                       </p>
                       <p className="text-red-400">
-                        이 프로필은 플레이할 수 없습니다. 프로필을 삭제하고 다시 설치해주세요.
+                        {profile.installationStatus === 'delete-failed'
+                          ? '일부 파일이 지워지지 않았습니다. 잠시 후 다시 삭제해주세요.'
+                          : '이 프로필은 플레이할 수 없습니다. 프로필을 삭제하고 다시 설치해주세요.'}
                       </p>
                     </div>
                   </div>
@@ -458,8 +517,11 @@ export function ProfileList() {
       {/* Create Profile Modal */}
       {showCreateModal && (
         <CreateProfileModal
-          onClose={() => setShowCreateModal(false)}
+          key={createModalKey}
+          onClose={handleCreateClose}
           onSuccess={handleCreateSuccess}
+          initialTab={createHyeniPackId ? 'hyenipack' : undefined}
+          initialHyeniPackId={createHyeniPackId}
         />
       )}
 
@@ -475,6 +537,38 @@ export function ProfileList() {
           profileName={exportingProfile.name}
         />
       )}
+
+      <ConfirmModal
+        open={forcePrompt !== null}
+        title="업데이트 확인 실패"
+        message={`${forcePrompt?.message ?? ''}\n\n그래도 강제로 실행하시겠습니까?`}
+        confirmLabel="강제 실행"
+        danger
+        onConfirm={() => {
+          const id = forcePrompt?.profileId;
+          setForcePrompt(null);
+          if (id) handleLaunch(id, true);
+        }}
+        onCancel={() => setForcePrompt(null)}
+      />
+      <ConfirmModal
+        open={confirmStopId !== null}
+        title="게임 중단"
+        message="정말로 게임을 중단하시겠습니까?"
+        confirmLabel="중단"
+        danger
+        onConfirm={() => confirmStopId && performStop(confirmStopId)}
+        onCancel={() => setConfirmStopId(null)}
+      />
+      <ConfirmModal
+        open={confirmDeleteId !== null}
+        title="프로필 삭제"
+        message="정말로 이 프로필을 삭제하시겠습니까? 모든 데이터가 영구 삭제됩니다."
+        confirmLabel="삭제"
+        danger
+        onConfirm={() => confirmDeleteId && performDelete(confirmDeleteId)}
+        onCancel={() => setConfirmDeleteId(null)}
+      />
     </div>
   );
 }

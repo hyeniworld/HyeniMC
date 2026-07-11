@@ -1,6 +1,8 @@
 name = "hyenimc-worker"
 main = "src/index.js"
 compatibility_date = "2024-01-01"
+# @cloudflare/vitest-pool-workers 테스트 하니스 실행에 필요
+compatibility_flags = ["nodejs_compat"]
 
 # Worker URL (used by deployment scripts)
 # Update this to match your deployed Worker URL
@@ -22,6 +24,23 @@ r2_buckets = [
 # CURSEFORGE_API_KEY - Set via: wrangler secret put CURSEFORGE_API_KEY
 # TOKEN_CHECK_API_URL - Set via: wrangler secret put TOKEN_CHECK_API_URL
 # See ENV_SETUP.md for detailed setup instructions
+
+# Cloudflare Access (관리 패널 /admin 보호)
+# ACCESS_TEAM_DOMAIN: https://<team>.cloudflareaccess.com
+# ACCESS_AUD: Access 애플리케이션의 Audience(AUD) 태그
+[vars]
+ACCESS_TEAM_DOMAIN = "https://your-team.cloudflareaccess.com"
+ACCESS_AUD = "YOUR_ACCESS_AUD_TAG"
+# 로컬 개발 전용 인증 우회. wrangler.toml에 상시 넣지 말고, 필요할 때만:
+#   wrangler dev --var ACCESS_DEV_BYPASS:true
+# 이중 게이트(플래그 + localhost 호스트)라 프로덕션에선 켜져도 열리지 않는다.
+# ACCESS_DEV_BYPASS = "true"
+
+# 관리 패널 SPA(Vite+Preact) 정적 서빙. admin/ 빌드 산출물이 public/admin/로 나온다.
+# 실제 에셋은 Worker 없이 서빙되고, 미매칭 요청만 src/index.js로 떨어진다.
+[assets]
+directory = "./public"
+binding = "ASSETS"
 
 [env.production]
 workers_dev = false

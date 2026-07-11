@@ -249,3 +249,15 @@ wrangler login
 - [Cloudflare Workers Docs](https://developers.cloudflare.com/workers/)
 - [Cloudflare R2 Docs](https://developers.cloudflare.com/r2/)
 - [Wrangler CLI Docs](https://developers.cloudflare.com/workers/wrangler/)
+
+## HyeniPack 배포 (V2)
+
+1. HyeniMC(제작자 도구)에서 프로필 → "혜니팩 내보내기" — 혜니팩 ID/버전(SemVer)/변경사항/breaking/폴더별 정책 입력
+2. 산출물 확인: `<팩>.hyenipack` + `<팩>.latest.json` (같은 폴더에 자동 생성)
+3. 업로드: `./deploy-hyenipack.sh --pack <팩>.hyenipack` (Windows: `.\deploy-hyenipack.ps1 -Pack <팩>`)
+4. 확인: `curl $(scripts/get-worker-url.sh)/api/v2/modpacks/<id>/latest`
+5. 롤백: 이전 버전 파일 쌍으로 3번 재실행
+
+- R2 키: `modpacks/<id>/latest.json` + `modpacks/<id>/versions/<version>/pack.hyenipack`
+- 다운로드(`/download/v2/modpacks/<id>/<version>`)는 토큰 검증 필수, latest 조회는 공개(5분 캐시)
+- `breaking: true`로 배포하면 사용자는 업데이트 적용 전까지 게임 실행 불가 — 서버 비호환 업데이트에만 사용

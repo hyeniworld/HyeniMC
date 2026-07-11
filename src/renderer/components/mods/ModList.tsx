@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Plus, RefreshCw } from 'lucide-react';
 import { ModSearchModal } from './ModSearchModal';
+import { isCreatorMode } from '../../utils/appMode';
 import { useToast } from '../../contexts/ToastContext';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 
@@ -44,6 +45,7 @@ export const ModList: React.FC<ModListProps> = ({ profileId }) => {
   const [mods, setMods] = useState<Mod[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
+  const [enabledFilter, setEnabledFilter] = useState<'all' | 'enabled' | 'disabled'>('all');
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [profile, setProfile] = useState<any>(null);
   const [updates, setUpdates] = useState<ModUpdateInfo[]>([]);
@@ -282,10 +284,18 @@ export const ModList: React.FC<ModListProps> = ({ profileId }) => {
     });
   };
 
-  const filteredMods = mods.filter(mod =>
-    mod.name?.toLowerCase().includes(filter.toLowerCase()) ||
-    mod.fileName?.toLowerCase().includes(filter.toLowerCase())
-  );
+  const filteredMods = mods.filter(mod => {
+    const matchesSearch =
+      mod.name?.toLowerCase().includes(filter.toLowerCase()) ||
+      mod.fileName?.toLowerCase().includes(filter.toLowerCase());
+    const matchesEnabled =
+      enabledFilter === 'all' ||
+      (enabledFilter === 'enabled' ? mod.enabled : !mod.enabled);
+    return matchesSearch && matchesEnabled;
+  });
+
+  const enabledCount = mods.filter(m => m.enabled).length;
+  const disabledCount = mods.length - enabledCount;
 
   if (loading) {
     return (
@@ -309,6 +319,8 @@ export const ModList: React.FC<ModListProps> = ({ profileId }) => {
             </span>
           )}
         </div>
+        {/* 모드 검색/설치/업데이트는 제작자 전용 (사용자 런처에선 설치된 목록만 조회) */}
+        {isCreatorMode() && (
         <div className="flex gap-2">
           <button
             onClick={handleCheckUpdates}
@@ -344,10 +356,11 @@ export const ModList: React.FC<ModListProps> = ({ profileId }) => {
             />
           </label>
         </div>
+        )}
       </div>
 
-      {/* Search */}
-      <div className="p-4">
+      {/* Search + 활성/비활성 필터 */}
+      <div className="p-4 space-y-3">
         <input
           ref={searchInputRef}
           type="text"
@@ -356,6 +369,25 @@ export const ModList: React.FC<ModListProps> = ({ profileId }) => {
           onChange={(e) => setFilter(e.target.value)}
           className="w-full px-4 py-2 border border-gray-600 rounded-lg bg-gray-800 text-gray-200 placeholder-gray-400"
         />
+        <div className="flex gap-1 text-sm">
+          {([
+            ['all', `전체 (${mods.length})`],
+            ['enabled', `활성 (${enabledCount})`],
+            ['disabled', `비활성 (${disabledCount})`],
+          ] as const).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setEnabledFilter(key)}
+              className={`px-3 py-1 rounded-lg font-medium transition-colors ${
+                enabledFilter === key
+                  ? 'bg-purple-600 text-white'
+                  : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Mod List */}
@@ -448,12 +480,15 @@ export const ModList: React.FC<ModListProps> = ({ profileId }) => {
                   >
                     {mod.enabled ? '활성화됨' : '비활성화됨'}
                   </button>
-                  <button
-                    onClick={() => deleteMod(mod.fileName)}
-                    className="px-3 py-1 bg-red-900 text-red-300 rounded text-sm font-medium hover:bg-red-800 transition-colors"
-                  >
-                    삭제
-                  </button>
+                  {/* 모드 삭제는 제작자 전용 — 사용자 런처는 팩으로 관리(개별 삭제 숨김) */}
+                  {isCreatorMode() && (
+                    <button
+                      onClick={() => deleteMod(mod.fileName)}
+                      className="px-3 py-1 bg-red-900 text-red-300 rounded text-sm font-medium hover:bg-red-800 transition-colors"
+                    >
+                      삭제
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

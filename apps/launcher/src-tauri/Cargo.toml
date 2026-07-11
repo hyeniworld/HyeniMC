@@ -1,0 +1,27 @@
+[package]
+name = "hyenimc-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+tauri-plugin-deep-link = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-log = "2"
+log = "0.4"
+serde.workspace = true
+serde_json.workspace = true
+sysinfo = "0.33"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+notify = "6"
+reqwest = { version = "0.12", features = ["stream", "json"] }
+hyenimc-core = { path = "../../../crates/hyenimc-core" }
+hyenimc-launcher = { path = "../../../crates/hyenimc-launcher" }

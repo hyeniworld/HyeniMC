@@ -58,6 +58,11 @@ export interface HyeniPackModEntry {
     description?: string;
   };
   
+  // 다운로드 피닝 (V2 — 사용자 런처가 검색 API 없이 설치할 수 있도록 export 시 기록.
+  // 없으면 jar가 팩 zip의 mods/에 동봉되어 있어야 한다)
+  url?: string;
+  sha1?: string;
+
   // 파일 검증
   sha256: string;
   size: number;                   // 바이트
@@ -77,6 +82,68 @@ export interface HyeniPackExportOptions {
   author: string;
   description: string;
   selectedFiles: string[]; // 파일 트리에서 선택된 파일 경로 목록
+}
+
+/**
+ * V2 override 정책 (파일/폴더 단위, Longest-Prefix-Match 우선)
+ */
+export interface OverridePolicy {
+  path: string;                          // "config" 또는 "config/sodium-options.json"
+  policy: 'keep' | 'replace' | 'merge';  // UI는 keep/replace만 노출, merge는 예약
+}
+
+/**
+ * HyeniPack V2 매니페스트 (자동 업데이트 지원)
+ */
+export interface HyeniPackManifestV2 {
+  formatVersion: 2;
+  hyenipackId: string;      // /^[a-z0-9][a-z0-9-]{0,63}$/
+  name: string;
+  version: string;          // SemVer
+  author: string;
+  description?: string;
+  changelog?: string;
+  breaking?: boolean;       // true: 적용 전 게임 실행 차단 (기본 false)
+  minecraft: {
+    version: string;
+    loaderType: LoaderType;
+    loaderVersion: string;
+  };
+  mods: HyeniPackModEntry[];
+  overrides: OverridePolicy[];
+  createdAt: string;
+  exportedFrom?: {
+    launcher: 'HyeniMC';
+    version: string;
+    profileName: string;
+  };
+}
+
+export type AnyHyeniPackManifest = HyeniPackManifest | HyeniPackManifestV2;
+
+/**
+ * V2 Export 옵션
+ */
+export interface HyeniPackExportOptionsV2 extends HyeniPackExportOptions {
+  hyenipackId: string;
+  changelog?: string;
+  breaking?: boolean;
+  overridePolicies: OverridePolicy[];
+}
+
+/**
+ * R2 latest.json 스키마 (Worker /api/v2/modpacks/{id}/latest 응답)
+ */
+export interface HyeniPackLatestInfo {
+  hyenipackId: string;
+  name: string;
+  version: string;
+  changelog?: string;
+  breaking: boolean;
+  minLauncherVersion?: string;
+  fileSize: number;
+  sha256: string;
+  releaseDate: string;
 }
 
 /**
@@ -228,30 +295,6 @@ export type HyeniPackInstallStage =
   | 'applying_overrides'
   | 'generating_metadata'
   | 'complete';
-
-/**
- * HyeniPack 내보내기 옵션
- */
-export interface HyeniPackExportOptions {
-  includeOverrides: boolean;
-  includeServerFiles: boolean;
-  includeResourcePacks: boolean;
-  includeShaderPacks: boolean;
-  includeScreenshots: boolean;
-  minify: boolean;
-}
-
-/**
- * 모드팩 업데이트 확인 결과
- */
-export interface HyeniPackUpdateCheck {
-  currentVersion: string;
-  latestVersion: string;
-  updateAvailable: boolean;
-  updateUrl?: string;
-  changelog?: string;
-  breaking: boolean;
-}
 
 /**
  * 설치된 모드의 메타 파일 (.meta.json)

@@ -6,6 +6,8 @@
  * - Releases API (HyeniHelper mod distribution)
  */
 
+import { handleAdminApi } from './admin/router.js';
+
 const CURSEFORGE_BASE_URL = 'https://api.curseforge.com/v1';
 const RATE_LIMIT_PER_HOUR = 100;
 const RATE_LIMIT_WINDOW = 3600; // 1 hour in seconds
@@ -29,6 +31,29 @@ export default {
     try {
       const url = new URL(request.url);
       const path = url.pathname;
+
+      // Route: Admin API (Cloudflare Access 보호)
+      if (path.startsWith('/admin/api/')) {
+        return await handleAdminApi(request, env, ctx);
+      }
+
+      // Route: Admin SPA 셸 폴백.
+      // 여기 도달 = Cloudflare 에셋 레이어가 /admin/* 아래 실제 파일 매칭에 실패한 경우.
+      // (실제 index.html/JS/CSS는 이미 Worker 없이 직접 서빙됨.) 딥 클라이언트 경로만 여기로 온다.
+      if (path === '/admin' || path.startsWith('/admin/')) {
+        if (!env.ASSETS) {
+          return new Response(
+            JSON.stringify({ error: 'Admin SPA not configured', message: 'wrangler.toml에 [assets] 바인딩이 필요합니다.' }),
+            { status: 500, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+        return env.ASSETS.fetch(new URL('/admin/index.html', request.url));
+      }
+
+      // Route: Modpacks API v2 (HyeniPack)
+      if (path.startsWith('/api/v2/modpacks') || path.startsWith('/download/v2/modpacks')) {
+        return await handleModpacksAPI(request, env, corsHeaders);
+      }
 
       // Route: Releases API v2
       if (path.startsWith('/api/v2/mods') || path.startsWith('/download/v2/mods')) {
@@ -155,6 +180,155 @@ async function handleCurseForgeProxy(request, env, corsHeaders) {
 }
 
 /**
+ * Handle HyeniPack Modpacks API (v2)
+ * R2 layout: modpacks/{id}/latest.json, modpacks/{id}/versions/{version}/pack.hyenipack
+ */
+const MODPACK_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const MODPACK_VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
+
+/** 팩 비공개 여부 — modpacks/{id}/meta.json의 hidden. meta 없음/손상 = 공개(fail-open: meta 파손이 정상 팩 서빙을 막지 않게). 공개 목록은 반대로 손상 팩을 skip한다(보수적) — 의도된 비대칭. */
+async function isPackHidden(env, id) {
+  const obj = await env.RELEASES.get(`modpacks/${id}/meta.json`);
+  if (!obj) return false;
+  try {
+    return !!JSON.parse(await obj.text())?.hidden;
+  } catch {
+    return false;
+  }
+}
+
+async function handleModpacksAPI(request, env, corsHeaders) {
+  if (!env.RELEASES) {
+    return jsonResponse({ error: 'R2 bucket not configured' }, 500, corsHeaders);
+  }
+
+  const path = new URL(request.url).pathname;
+
+  // GET /api/v2/modpacks — 공개 팩 목록(비공개 제외). 완전 공개, 다운로드만 토큰.
+  if (path === '/api/v2/modpacks' && request.method === 'GET') {
+    const packs = [];
+    let cursor;
+    do {
+      const page = await env.RELEASES.list({ prefix: 'modpacks/', delimiter: '/', cursor });
+      for (const prefix of page.delimitedPrefixes || []) {
+        const id = prefix.slice('modpacks/'.length).replace(/\/$/, '');
+        if (!MODPACK_ID_PATTERN.test(id)) continue;
+        try {
+          const [metaObj, latestObj] = await Promise.all([
+            env.RELEASES.get(`modpacks/${id}/meta.json`),
+            env.RELEASES.get(`modpacks/${id}/latest.json`),
+          ]);
+          const meta = metaObj ? JSON.parse(await metaObj.text()) : null;
+          if (meta?.hidden) continue;
+          if (!latestObj) continue;
+          const latest = JSON.parse(await latestObj.text());
+          packs.push({
+            id,
+            name: meta?.name ?? id,
+            latestVersion: latest.version ?? null,
+            breaking: !!latest.breaking,
+            minecraft: meta?.minecraft ?? null,
+          });
+        } catch (e) {
+          // 손상 meta/latest는 목록에서 skip(보수적). 단건 라우트(isPackHidden)는 fail-open — 의도된 비대칭.
+          console.error(`[Modpacks API] list: skip ${id} (${e.message})`);
+        }
+      }
+      cursor = page.truncated ? page.cursor : undefined;
+    } while (cursor);
+    return jsonResponse({ packs }, 200, corsHeaders, 'public, max-age=60');
+  }
+
+  const latestMatch = path.match(/^\/api\/v2\/modpacks\/([^\/]+)\/latest$/);
+  if (latestMatch) {
+    const id = latestMatch[1];
+    if (!MODPACK_ID_PATTERN.test(id)) {
+      return jsonResponse({ error: 'Invalid modpack id' }, 400, corsHeaders);
+    }
+    if (await isPackHidden(env, id)) {
+      return jsonResponse({ error: 'Not Found', message: '팩을 찾을 수 없습니다.' }, 404, corsHeaders);
+    }
+    const latest = await env.RELEASES.get(`modpacks/${id}/latest.json`);
+    if (!latest) {
+      return jsonResponse({ error: 'Not Found', message: `No release for ${id}` }, 404, corsHeaders);
+    }
+    return new Response(latest.body, {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json',
+        'Cache-Control': 'public, max-age=300',
+      },
+    });
+  }
+
+  const versionsMatch = path.match(/^\/api\/v2\/modpacks\/([^\/]+)\/versions$/);
+  if (versionsMatch) {
+    const id = versionsMatch[1];
+    if (!MODPACK_ID_PATTERN.test(id)) {
+      return jsonResponse({ error: 'Invalid modpack id' }, 400, corsHeaders);
+    }
+    if (await isPackHidden(env, id)) {
+      return jsonResponse({ error: 'Not Found', message: '팩을 찾을 수 없습니다.' }, 404, corsHeaders);
+    }
+    const list = await env.RELEASES.list({ prefix: `modpacks/${id}/versions/` });
+    const versions = new Set();
+    for (const obj of list.objects) {
+      const m = obj.key.match(/versions\/(\d+\.\d+\.\d+)\//);
+      if (m) versions.add(m[1]);
+    }
+    const sorted = [...versions].sort((a, b) => compareVersions(b, a));
+    return jsonResponse({ versions: sorted }, 200, corsHeaders, 'public, max-age=600');
+  }
+
+  const dlMatch = path.match(/^\/download\/v2\/modpacks\/([^\/]+)\/([^\/]+)$/);
+  if (dlMatch) {
+    const [, id, version] = dlMatch;
+    if (!MODPACK_ID_PATTERN.test(id) || !MODPACK_VERSION_PATTERN.test(version)) {
+      return jsonResponse({ error: 'Invalid modpack id or version' }, 400, corsHeaders);
+    }
+    // hidden 체크를 토큰 검증보다 먼저 — 존재 누설·토큰체크 API 호출 방지.
+    if (await isPackHidden(env, id)) {
+      return jsonResponse({ error: 'Not Found', message: '팩을 찾을 수 없습니다.' }, 404, corsHeaders);
+    }
+
+    const url = new URL(request.url);
+    const token = url.searchParams.get('token') ||
+                  request.headers.get('Authorization')?.replace('Bearer ', '');
+    if (!token || !(await isValidToken(token, env))) {
+      return jsonResponse({
+        error: 'Unauthorized',
+        message: '유효한 토큰이 필요합니다. Discord에서 /인증 명령어로 인증하세요.',
+      }, 401, corsHeaders);
+    }
+
+    const file = await env.RELEASES.get(`modpacks/${id}/versions/${version}/pack.hyenipack`);
+    if (!file) {
+      return jsonResponse({ error: 'Not Found', message: '파일을 찾을 수 없습니다.' }, 404, corsHeaders);
+    }
+
+    console.log(`[Modpacks API] Download: ${id}@${version} (token: ${token.substring(0, 8)}...)`);
+    return new Response(file.body, {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/zip',
+        'Content-Disposition': `attachment; filename="${id}-${version}.hyenipack"`,
+        'Content-Length': file.size,
+        'Cache-Control': 'private, max-age=3600',
+        'X-Content-Type-Options': 'nosniff',
+      },
+    });
+  }
+
+  return jsonResponse({ error: 'Not Found' }, 404, corsHeaders);
+}
+
+function jsonResponse(obj, status, corsHeaders, cacheControl) {
+  const headers = { ...corsHeaders, 'Content-Type': 'application/json' };
+  if (cacheControl) headers['Cache-Control'] = cacheControl;
+  return new Response(JSON.stringify(obj), { status, headers });
+}
+
+/**
  * Handle Releases API requests
  * @param {Request} request
  * @param {Env} env
@@ -178,7 +352,7 @@ async function handleReleasesAPI(request, env, corsHeaders, version = 'v1') {
   // GET /api/mods/{modId}/latest
   const latestMatch = normalizedPath.match(/^\/api\/mods\/([^\/]+)\/latest$/);
   if (latestMatch) {
-    return await getLatestRelease(env, corsHeaders, latestMatch[1], version);
+    return await getLatestRelease(env, corsHeaders, latestMatch[1], version, url.searchParams);
   }
 
   // GET /api/mods/{modId}/versions
@@ -245,7 +419,7 @@ async function getModsList(env, corsHeaders, version = 'v1') {
 /**
  * Get latest release for a specific mod
  */
-async function getLatestRelease(env, corsHeaders, modId, version = 'v1') {
+async function getLatestRelease(env, corsHeaders, modId, version = 'v1', searchParams = null) {
   if (!env.RELEASES) {
     return new Response(JSON.stringify({ 
       error: 'R2 bucket not configured' 
@@ -255,19 +429,45 @@ async function getLatestRelease(env, corsHeaders, modId, version = 'v1') {
     });
   }
 
-  const latest = await env.RELEASES.get(`mods/${modId}/latest.json`);
-  
-  if (!latest) {
-    return new Response(JSON.stringify({ 
-      error: 'Latest version not found',
-      message: `Release information not available for ${modId}.`
-    }), {
-      status: 404,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
+  const gameVersion = searchParams?.get('gameVersion');
+  const loader = searchParams?.get('loader');
+
+  let obj = null;
+  if (gameVersion && loader) {
+    const indexObj = await env.RELEASES.get(`mods/${modId}/index.json`);
+    if (indexObj) {
+      const idx = JSON.parse(await indexObj.text());
+      const c = idx?.targets?.[loader]?.[gameVersion];
+      const resolved = c ? (c.pinned ?? c.auto) : null;
+      if (!resolved) {
+        return new Response(JSON.stringify({
+          error: 'No release for this environment',
+          message: `${modId}: no version for ${loader}/${gameVersion}.`,
+        }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+      obj = await env.RELEASES.get(`mods/${modId}/versions/${resolved}/manifest.json`);
+      if (!obj) {
+        return new Response(JSON.stringify({
+          error: 'No release for this environment',
+          message: `${modId}: resolved ${resolved} but its manifest is missing.`,
+        }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+    }
+    // 인덱스 없으면 아래 latest.json 폴백
   }
-  
-  const data = JSON.parse(await latest.text());
+
+  if (!obj) {
+    obj = await env.RELEASES.get(`mods/${modId}/latest.json`);
+  }
+
+  if (!obj) {
+    return new Response(JSON.stringify({
+      error: 'Latest version not found',
+      message: `Release information not available for ${modId}.`,
+    }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+
+  const data = JSON.parse(await obj.text());
   
   // Add download URLs based on API version
   if (data.loaders) {
@@ -322,7 +522,7 @@ async function getVersionsList(env, corsHeaders, modId, version = 'v1') {
   // Extract versions from paths
   const versions = new Set();
   for (const obj of list.objects) {
-    const match = obj.key.match(/mods\/[^\/]+\/versions\/(\d+\.\d+\.\d+)\//);
+    const match = obj.key.match(/mods\/[^\/]+\/versions\/(\d+\.\d+\.\d+(?:-(?:alpha|beta|pre)\d{3})?)\//);
     if (match) {
       versions.add(match[1]);
     }
@@ -486,19 +686,30 @@ async function isValidToken(token, env) {
 }
 
 /**
- * Compare semantic versions
+ * Compare semantic versions — x.y.z(-(alpha|beta|pre)NNN)?
+ * 프리릴리즈는 같은 x.y.z의 정식보다 낮다(alpha<beta<pre<정식). 형식 밖은 숫자 세그먼트 비교.
  */
+const PRERELEASE_LABEL_RANK = { alpha: 1, beta: 2, pre: 3 };
+
 function compareVersions(a, b) {
-  const aParts = a.split('.').map(Number);
-  const bParts = b.split('.').map(Number);
-  
-  for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
-    const aPart = aParts[i] || 0;
-    const bPart = bParts[i] || 0;
-    
-    if (aPart > bPart) return 1;
-    if (aPart < bPart) return -1;
+  const parse = (v) => {
+    const m = (v || '').match(/^(\d+)\.(\d+)\.(\d+)(?:-(alpha|beta|pre)(\d{3}))?$/);
+    if (m) {
+      return {
+        nums: [Number(m[1]), Number(m[2]), Number(m[3])],
+        rank: m[4] ? PRERELEASE_LABEL_RANK[m[4]] : 4,
+        num: m[5] ? Number(m[5]) : 0,
+      };
+    }
+    const parts = (v || '').split('.').map(Number);
+    return { nums: [parts[0] || 0, parts[1] || 0, parts[2] || 0], rank: 4, num: 0 };
+  };
+  const pa = parse(a);
+  const pb = parse(b);
+  for (let i = 0; i < 3; i++) {
+    if (pa.nums[i] !== pb.nums[i]) return pa.nums[i] > pb.nums[i] ? 1 : -1;
   }
-  
+  if (pa.rank !== pb.rank) return pa.rank > pb.rank ? 1 : -1;
+  if (pa.num !== pb.num) return pa.num > pb.num ? 1 : -1;
   return 0;
 }

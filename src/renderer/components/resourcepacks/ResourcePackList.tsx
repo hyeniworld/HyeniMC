@@ -157,9 +157,8 @@ export const ResourcePackList: React.FC<ResourcePackListProps> = ({ profileId })
         <h2 className="text-xl font-semibold text-gray-200">
           리소스팩 ({filteredPacks.length})
         </h2>
-        <button onClick={handleFileUpload} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-          리소스팩 추가
-        </button>
+        {/* 리소스팩은 읽기전용 — 추가/삭제는 개요 탭 '폴더 열기'로 직접 관리 */}
+        <span className="text-xs text-gray-500">개요 탭의 '폴더 열기'로 관리하세요</span>
       </div>
 
       {/* Search */}
@@ -217,24 +216,17 @@ export const ResourcePackList: React.FC<ResourcePackListProps> = ({ profileId })
                   )}
                 </div>
 
-                {/* Actions */}
+                {/* 읽기전용 — 활성 상태 표시만(조작은 폴더에서 직접) */}
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => togglePack(pack.fileName, pack.enabled)}
-                    className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                  <span
+                    className={`px-3 py-1 rounded text-sm font-medium ${
                       pack.enabled
-                        ? 'bg-green-900 text-green-300 hover:bg-green-800'
-                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                        ? 'bg-green-900 text-green-300'
+                        : 'bg-gray-700 text-gray-400'
                     }`}
                   >
                     {pack.enabled ? '활성화됨' : '비활성화됨'}
-                  </button>
-                  <button
-                    onClick={() => deletePack(pack.fileName)}
-                    className="px-3 py-1 bg-red-900 text-red-300 rounded text-sm font-medium hover:bg-red-800 transition-colors"
-                  >
-                    삭제
-                  </button>
+                  </span>
                 </div>
               </div>
             </div>

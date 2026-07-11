@@ -44,6 +44,7 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
   const [javaInstallations, setJavaInstallations] = useState<JavaInstallation[]>([]);
   const [selectedJava, setSelectedJava] = useState<string>(profile?.javaPath || '');
   const [loadingJava, setLoadingJava] = useState(true);
+  const [recommendedJava, setRecommendedJava] = useState<number>(17);
   
   // JVM arguments
   const [jvmArgs, setJvmArgs] = useState(profile?.jvmArgs?.join(' ') || '');
@@ -93,6 +94,15 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
       setLoaderVersion('');
     }
   }, [loaderType, gameVersion, includeUnstableVersions]);
+
+  // 게임 버전 변경 시 권장 Java 갱신 (26.1+는 Java 25 등)
+  useEffect(() => {
+    if (!gameVersion) return;
+    window.electronAPI.java
+      .getRecommended(gameVersion)
+      .then((v: number) => setRecommendedJava(v))
+      .catch(() => {});
+  }, [gameVersion]);
 
   // Initialize from profile (only when profile ID changes)
   useEffect(() => {
@@ -219,14 +229,15 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
       
       if (result.success && result.versions) {
         setLoaderVersions(result.versions);
-        
-        // Check if profile has a loader version that's not in the current list
+
+        // 프로필에 저장된 로더 버전이 안정 목록에 없으면(=불안정 버전) 자동으로 불안정 포함.
+        // 단, 현재 선택한 로더가 프로필의 로더와 같을 때만 — 다른 로더로 바꾼 경우
+        // 저장 버전은 애초에 이 목록에 없는 게 정상이므로 자동 체크하면 안 된다(무한 유발).
         const profileLoaderVersion = profile?.loaderVersion;
+        const isSameLoaderAsProfile = loaderType === profile?.loaderType;
         const versionExists = result.versions.find((v: any) => v.version === profileLoaderVersion);
-        
-        if (profileLoaderVersion && !versionExists && !includeUnstableVersions) {
-          // Profile has a version that's not in stable list
-          // Automatically enable unstable versions to find it
+
+        if (isSameLoaderAsProfile && profileLoaderVersion && !versionExists && !includeUnstableVersions) {
           console.log(`[ProfileSettings] Loader version ${profileLoaderVersion} not found in stable list, enabling unstable versions`);
           setIncludeUnstableVersions(true);
           return; // useEffect will trigger reload with unstable versions
@@ -380,9 +391,8 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
   const loaderTypeOptions = [
     { value: 'vanilla', label: 'Vanilla (바닐라)' },
     { value: 'fabric', label: 'Fabric' },
-    { value: 'forge', label: 'Forge' },
     { value: 'neoforge', label: 'NeoForge' },
-    { value: 'quilt', label: 'Quilt' },
+    { value: 'forge', label: 'Forge' },
   ];
 
   return (
@@ -735,6 +745,35 @@ export function ProfileSettingsTab({ profile, onUpdate }: ProfileSettingsTabProp
           </div>
         ) : (
           <div className="space-y-3">
+            {/* 권장 Java 안내 — 게임 버전(26.1+ 등)에 필요한 최소 버전 */}
+            {(() => {
+              const hasCompatible = javaInstallations.some(j => j.majorVersion >= recommendedJava);
+              const selected = javaInstallations.find(j => j.path === selectedJava);
+              const selectedOk = !selected || selected.majorVersion >= recommendedJava;
+              return (
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className={`px-2 py-1 rounded font-medium ${
+                    hasCompatible
+                      ? 'bg-green-900/30 text-green-300 border border-green-800'
+                      : 'bg-yellow-900/30 text-yellow-300 border border-yellow-800'
+                  }`}>
+                    권장: Java {recommendedJava}+
+                  </span>
+                  {!selectedOk && (
+                    <span className="text-yellow-400">⚠ 선택한 Java가 권장 버전보다 낮습니다</span>
+                  )}
+                  {!hasCompatible && (
+                    <button
+                      type="button"
+                      onClick={() => window.electronAPI.shell.openExternal(`https://adoptium.net/temurin/releases/?version=${recommendedJava}`)}
+                      className="px-2 py-1 bg-yellow-700 hover:bg-yellow-600 rounded text-white"
+                    >
+                      Java {recommendedJava} 설치 안내
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
             {javaInstallations.map((java, index) => (
               <button
                 key={index}

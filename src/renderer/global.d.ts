@@ -9,7 +9,7 @@ declare global {
         get: (id: string) => Promise<any>;
         update: (id: string, data: any) => Promise<any>;
         delete: (id: string) => Promise<void>;
-        launch: (id: string, accountId?: string) => Promise<void>;
+        launch: (id: string, accountId?: string, force?: boolean) => Promise<void>;
         toggleFavorite: (id: string) => Promise<any>;
         getStats: (profileId: string) => Promise<any>;
         recordLaunch: (profileId: string) => Promise<void>;
@@ -129,7 +129,7 @@ declare global {
         installUpdate: (profilePath: string, updateInfo: any) => Promise<{ success: boolean; message?: string }>;
       };
       workerMods: {
-        checkUpdates: (profilePath: string, gameVersion: string, loaderType: string, serverAddress?: string) => Promise<any[]>;
+        checkUpdates: (profilePath: string, gameVersion: string, loaderType: string, loaderVersion: string, serverAddress?: string) => Promise<any[]>;
         installMultiple: (profilePath: string, updates: any[]) => Promise<any[]>;
       };
       launcher: {
@@ -137,6 +137,34 @@ declare global {
         downloadUpdate: () => Promise<{ success: boolean }>;
         quitAndInstall: () => Promise<{ success: boolean }>;
         getVersion: () => Promise<{ success: boolean; version: string }>;
+      };
+      hyenipack: {
+        import: (filePath: string, profileId: string, accountId?: string) => Promise<{ success: boolean; error?: string }>;
+        preview: (filePath: string) => Promise<{ success: boolean; manifest?: any; error?: string }>;
+        // 온라인 목록·토큰
+        listAvailable: () => Promise<Array<{
+          id: string;
+          name: string;
+          latestVersion?: string | null;
+          breaking?: boolean;
+          minecraft?: { version: string; loaderType: string; loaderVersion?: string } | null;
+        }>>;
+        hasAnyToken: () => Promise<boolean>;
+        listTokens: () => Promise<any[]>;
+        removeToken: (receivedAt: number) => Promise<boolean>;
+        // 통일된 설치 흐름 (워커 다운로드 → 기존 import 재사용)
+        downloadFromWorker: (packId: string) => Promise<{ path: string; version: string }>;
+        applyMatchingToken: (profileId: string) => Promise<boolean>;
+        removeTempFile: (path: string) => Promise<void>;
+        // 팩 업데이트
+        checkUpdate: (profileId: string) => Promise<any>;
+        getInstalled: (profileId: string) => Promise<{ hyenipackId: string; version: string } | null>;
+        // 제작자 전용(export/getFileTree 등) 폴백 — 명시 선언 외 메서드 허용
+        [key: string]: (...args: any[]) => Promise<any>;
+      };
+      dialog: {
+        selectFile: (opts?: { filters?: { name: string; extensions: string[] }[] }) => Promise<string | null>;
+        [key: string]: (...args: any[]) => Promise<any>;
       };
       on: (channel: string, callback: (...args: any[]) => void) => () => void;
       once: (channel: string, callback: (...args: any[]) => void) => void;

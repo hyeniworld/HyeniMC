@@ -1,0 +1,26 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "메인 창 기본 권한 (M0 스파이크)",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "deep-link:default",
+    "updater:default",
+    "opener:default",
+    {
+      "identifier": "opener:allow-open-path",
+      "allow": [
+        {
+          "path": "$HOME/**"
+        }
+      ]
+    },
+    "opener:allow-open-url",
+    "dialog:default",
+    "dialog:allow-open"
+  ]
+}

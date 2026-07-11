@@ -109,7 +109,12 @@ func (s *loaderServiceServer) InstallStream(req *pb.InstallRequest, stream pb.Lo
         if err := send("Finalizing Quilt install...", 2, 3, vid); err != nil { return err }
         return send("Completed", 3, 3, vid)
     case "forge":
-        return status.Error(codes.Unimplemented, "Forge install not implemented (deprecated)")
+        vid := forgeVersionID(lv)
+        if err := send("Preparing Forge install...", 0, 4, vid); err != nil { return err }
+        if err := send("Downloading Forge installer...", 1, 4, vid); err != nil { return err }
+        if _, err := s.Install(stream.Context(), req); err != nil { return err }
+        if err := send("Finalizing Forge install...", 3, 4, vid); err != nil { return err }
+        return send("Completed", 4, 4, vid)
     default:
         return status.Error(codes.InvalidArgument, "unknown loader_type")
     }
@@ -171,6 +176,85 @@ func (s *loaderServiceServer) fetchNeoForge(ctx context.Context, gameVersion str
         }
     }
     return out, nil
+}
+
+// Forge: maven-metadata.xml에서 `<mc>-<build>` 버전 목록을 가져와 MC 프리픽스로 필터.
+// (Tauri hyenimc-launcher::loader의 forge_versions와 동일 소스/의미)
+const forgeMavenMetadata = "https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml"
+
+// parseMavenVersions extracts <version> tag contents from maven-metadata.xml without an XML dep.
+func parseMavenVersions(body string) []string {
+    var out []string
+    rest := body
+    for {
+        i := strings.Index(rest, "<version>")
+        if i < 0 {
+            break
+        }
+        rest = rest[i+len("<version>"):]
+        j := strings.Index(rest, "</version>")
+        if j < 0 {
+            break
+        }
+        if v := strings.TrimSpace(rest[:j]); v != "" {
+            out = append(out, v)
+        }
+        rest = rest[j+len("</version>"):]
+    }
+    return out
+}
+
+// forgeVersionID: maven "1.20.1-47.4.20" -> installer가 만드는 버전 id "1.20.1-forge-47.4.20".
+func forgeVersionID(forgeVersion string) string {
+    if i := strings.Index(forgeVersion, "-"); i >= 0 {
+        return forgeVersion[:i] + "-forge-" + forgeVersion[i+1:]
+    }
+    return forgeVersion
+}
+
+func (s *loaderServiceServer) fetchForge(ctx context.Context, gameVersion string) ([]*pb.LoaderVersion, error) {
+    req, err := http.NewRequestWithContext(ctx, http.MethodGet, forgeMavenMetadata, nil)
+    if err != nil { return nil, status.Errorf(codes.Internal, "build request: %v", err) }
+    resp, err := http.DefaultClient.Do(req)
+    if err != nil { return nil, status.Errorf(codes.Unavailable, "fetch forge: %v", err) }
+    defer resp.Body.Close()
+    if resp.StatusCode != http.StatusOK { return nil, status.Errorf(codes.Unavailable, "forge status: %s", resp.Status) }
+    body, err := io.ReadAll(resp.Body)
+    if err != nil { return nil, status.Errorf(codes.Internal, "read forge: %v", err) }
+
+    // Forge maven 버전은 `<mc>-<build>` (예: 1.20.1-47.4.20). MC 프리픽스로 필터('-' 경계로 1.20.1 vs 1.20.10 구분).
+    prefix := gameVersion + "-"
+    var out []*pb.LoaderVersion
+    for _, v := range parseMavenVersions(string(body)) {
+        if !strings.HasPrefix(v, prefix) {
+            continue
+        }
+        stable := !(strings.Contains(v, "beta") || strings.Contains(v, "rc"))
+        out = append(out, &pb.LoaderVersion{Version: v, Stable: stable})
+    }
+    return out, nil
+}
+
+// ensureLauncherProfiles: Forge installer는 대상 디렉터리에 launcher_profiles.json이 있어야 실행된다.
+func ensureLauncherProfiles(instanceDir string) error {
+    p := filepath.Join(instanceDir, "launcher_profiles.json")
+    if _, err := os.Stat(p); err == nil {
+        return nil
+    }
+    if err := os.MkdirAll(instanceDir, 0o755); err != nil {
+        return err
+    }
+    profiles := map[string]any{
+        "profiles":        map[string]any{},
+        "selectedProfile": "(Default)",
+        "clientToken":     "00000000-0000-0000-0000-000000000000",
+        "launcherVersion": map[string]any{"name": "HyeniMC", "format": 21},
+    }
+    b, err := json.MarshalIndent(profiles, "", "  ")
+    if err != nil {
+        return err
+    }
+    return os.WriteFile(p, b, 0o644)
 }
 
 type cacheEntry struct {
@@ -263,15 +347,15 @@ func (s *loaderServiceServer) fetchQuilt(ctx context.Context, gameVersion string
 func semverParts(v string) []int {
     v = strings.TrimSpace(v)
     v = strings.TrimPrefix(v, "v")
-    if i := strings.IndexAny(v, "-+"); i >= 0 {
-        v = v[:i]
-    }
-    parts := strings.Split(v, ".")
-    out := make([]int, 0, len(parts))
-    for _, p := range parts {
+    // Split on '.', '-', '+' so full versions like Forge "1.20.1-47.4.20" compare across
+    // the build segment too. (Truncating at '-' would tie all builds of one MC version,
+    // sorting "47.4.9" above "47.4.20" by string fallback.)
+    fields := strings.FieldsFunc(v, func(r rune) bool { return r == '.' || r == '-' || r == '+' })
+    out := make([]int, 0, len(fields))
+    for _, p := range fields {
         n, err := strconv.Atoi(p)
         if err != nil {
-            // non-numeric segment -> treat as 0 to keep ordering stable
+            // non-numeric segment (e.g. "beta") -> 0 to keep ordering stable
             n = 0
         }
         out = append(out, n)
@@ -319,8 +403,7 @@ func (s *loaderServiceServer) GetVersions(ctx context.Context, req *pb.GetVersio
     case "neoforge":
         versions, err = s.fetchNeoForge(cctx, req.GetGameVersion())
     case "forge":
-        // Forge deprecated in app; keep unimplemented for now
-        return nil, status.Error(codes.Unimplemented, "forge not implemented (deprecated)")
+        versions, err = s.fetchForge(cctx, req.GetGameVersion())
     default:
         return nil, status.Error(codes.InvalidArgument, "unknown loader_type")
     }
@@ -406,7 +489,7 @@ func (s *loaderServiceServer) CheckInstalled(ctx context.Context, req *pb.CheckI
     case "quilt":
         versionId = fmt.Sprintf("quilt-loader-%s-%s", lv, gv)
     case "forge":
-        return &pb.CheckInstalledResponse{Installed: false}, nil
+        versionId = forgeVersionID(lv)
     default:
         return nil, status.Error(codes.InvalidArgument, "unknown loader_type")
     }
@@ -581,7 +664,52 @@ func (s *loaderServiceServer) Install(ctx context.Context, req *pb.InstallReques
         }
         return &pb.InstallResponse{Success: true, VersionId: versionId}, nil
     case "forge":
-        return nil, status.Error(codes.Unimplemented, "Forge install not implemented (deprecated)")
+        // lv = Forge maven 버전 "1.20.1-47.4.20". 버전 id는 "1.20.1-forge-47.4.20".
+        versionId := forgeVersionID(lv)
+        versionDir := filepath.Join(inst, "versions", versionId)
+        profilePath := filepath.Join(versionDir, versionId+".json")
+        if err := os.MkdirAll(versionDir, 0o755); err != nil {
+            return nil, status.Errorf(codes.Internal, "create dir: %v", err)
+        }
+        // Forge installer는 대상 디렉터리에 launcher_profiles.json이 있어야 동작.
+        if err := ensureLauncherProfiles(inst); err != nil {
+            return nil, status.Errorf(codes.Internal, "launcher_profiles: %v", err)
+        }
+
+        tempDir := filepath.Join(inst, ".temp")
+        if err := os.MkdirAll(tempDir, 0o755); err != nil {
+            return nil, status.Errorf(codes.Internal, "create temp dir: %v", err)
+        }
+        installerURL := fmt.Sprintf("https://maven.minecraftforge.net/net/minecraftforge/forge/%s/forge-%s-installer.jar", lv, lv)
+        installerPath := filepath.Join(tempDir, fmt.Sprintf("forge-%s-installer.jar", lv))
+        {
+            cctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+            defer cancel()
+            reqHttp, err := http.NewRequestWithContext(cctx, http.MethodGet, installerURL, nil)
+            if err != nil { return nil, status.Errorf(codes.Internal, "installer request: %v", err) }
+            resp, err := http.DefaultClient.Do(reqHttp)
+            if err != nil { return nil, status.Errorf(codes.Unavailable, "fetch installer: %v", err) }
+            defer resp.Body.Close()
+            if resp.StatusCode != http.StatusOK { return nil, status.Errorf(codes.Unavailable, "installer status: %s", resp.Status) }
+            f, err := os.Create(installerPath)
+            if err != nil { return nil, status.Errorf(codes.Internal, "create installer: %v", err) }
+            if _, err := io.Copy(f, resp.Body); err != nil { _ = f.Close(); return nil, status.Errorf(codes.Internal, "write installer: %v", err) }
+            if err := f.Close(); err != nil { return nil, status.Errorf(codes.Internal, "close installer: %v", err) }
+        }
+
+        // Forge는 --installClient (NeoForge의 --install-client와 다름). 시스템 java 사용(NeoForge 설치와 동일).
+        runCtx, cancelRun := context.WithTimeout(ctx, 5*time.Minute)
+        defer cancelRun()
+        cmd := exec.CommandContext(runCtx, "java", "-jar", installerPath, "--installClient", inst)
+        out, err := cmd.CombinedOutput()
+        _ = os.Remove(installerPath)
+        if err != nil {
+            return nil, status.Errorf(codes.Internal, "forge installer 실패: %v\n%s", err, string(out))
+        }
+        if _, err := os.Stat(profilePath); err != nil {
+            return nil, status.Errorf(codes.Internal, "forge installer가 버전 json을 생성하지 않음 (%s)", versionId)
+        }
+        return &pb.InstallResponse{Success: true, VersionId: versionId}, nil
     default:
         return nil, status.Error(codes.InvalidArgument, "unknown loader_type")
     }

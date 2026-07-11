@@ -10,6 +10,7 @@ import { useDownloadProgress } from './hooks/useDownloadProgress';
 import { ToastProvider, useToast } from './contexts/ToastContext';
 import { ErrorDialogProvider } from './contexts/ErrorDialogContext';
 import { HyeniDecorations } from './components/common/HyeniDecorations';
+import { HyeniPackSuggestDialog } from './components/hyeni/HyeniPackSuggestDialog';
 import { useLauncherUpdate } from './hooks/useLauncherUpdate';
 import { LauncherUpdateBanner } from './components/launcher/LauncherUpdateBanner';
 import packageJson from '../../package.json';
@@ -44,6 +45,8 @@ function App() {
                 <Route path="settings" element={<SettingsPage />} />
               </Route>
             </Routes>
+            {/* 딥링크 혜니팩 설치 제안 — useNavigate 사용을 위해 Router 안쪽에 마운트(전역 유지) */}
+            <HyeniPackSuggestDialog />
           </HashRouter>
           {/* Global Download/Install Modal (rich) */}
           <GlobalDownloadModal />
@@ -82,11 +85,15 @@ function MainLayout() {
   useEffect(() => {
     // Auth success
     const unsubSuccess = window.electronAPI.on('auth:success', (data: any) => {
-      console.log('[App] Auth success:', data);
-      toast.success(
-        '✨ 혜니월드 인증 완료!',
-        `${data.servers} 서버 인증이 완료되었습니다. (${data.profileCount}개 프로필)\n\nHyeniHelper 설정이 자동으로 업데이트되었습니다.`
-      );
+      if (data?.profileCount === 0) {
+        // 프로필 0개(신규 온보딩) — 자동 업데이트할 프로필이 없으므로 거짓 안내를 피한다.
+        toast.success('인증 완료', '인증되었습니다. 혜니팩 설치 시 자동 적용됩니다.');
+      } else {
+        toast.success(
+          '✨ 혜니월드 인증 완료!',
+          `${data.servers} 서버 인증이 완료되었습니다. (${data.profileCount}개 프로필)\n\nHyeniHelper 설정이 자동으로 업데이트되었습니다.`
+        );
+      }
     });
 
     // Auth error
@@ -124,15 +131,13 @@ function MainLayout() {
       {/* Header */}
       <header className={`border-b border-gray-800 bg-gray-900/80 backdrop-blur-md z-50 shadow-lg flex-shrink-0 transition-all duration-300 ${updateAvailable ? 'mt-[68px]' : ''}`}>
         <div className="container mx-auto px-6 py-4 relative">
-          {/* macOS: Draggable area for window movement - covers entire header */}
-          {isMacOS && (
-            <div 
-              className="absolute inset-0" 
-              style={{ WebkitAppRegion: 'drag' } as any}
-            />
-          )}
-          
-          <div className="flex items-center justify-between relative z-10">
+          {/* 헤더 빈 영역 드래그로 창 이동. data-tauri-drag-region=Tauri, WebkitAppRegion=Electron.
+              Tauri는 인터랙티브 자식(button/a/input)을 자동 제외하므로 컨테이너에 직접 지정. */}
+          <div
+            className="flex items-center justify-between relative z-10"
+            {...(isMacOS ? { 'data-tauri-drag-region': true } : {})}
+            style={isMacOS ? ({ WebkitAppRegion: 'drag' } as any) : undefined}
+          >
             <div className={`flex items-center gap-3 ${isMacOS ? 'ml-20' : ''}`}>
               <div className="w-10 h-10 bg-gradient-to-br from-hyeni-pink-600 via-hyeni-pink-500 to-hyeni-pink-600 rounded-xl shadow-lg flex items-center justify-center">
                 <Sparkles className="w-6 h-6" />

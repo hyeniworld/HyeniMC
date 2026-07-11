@@ -6,12 +6,17 @@ import { ResourcePackList } from '../components/resourcepacks/ResourcePackList';
 import { ShaderPackList } from '../components/shaderpacks/ShaderPackList';
 import { ProfileSettingsTab } from '../components/profiles/ProfileSettingsTab';
 import { ExportHyeniPackModal } from '../components/profiles/ExportHyeniPackModal';
+import { ConfirmModal } from '../components/common/ConfirmModal';
+import { isCreatorMode } from '../utils/appMode';
+import { errorText } from '../utils/errorText';
 import { WorkerModUpdatePanel } from '../components/worker-mods/WorkerModUpdatePanel';
+import { HyeniPackSection } from '../components/hyeni/HyeniPackSection';
 import { useWorkerModUpdates } from '../hooks/useWorkerModUpdates';
 import { useDownloadStore } from '../store/downloadStore';
 import { useToast } from '../contexts/ToastContext';
 import { IPC_EVENTS } from '../../shared/constants/ipc';
-import { Package, Trash2 } from 'lucide-react';
+import { FORCE_LAUNCH_MARKER } from '../../shared/constants/launch';
+import { Package, Trash2, Loader2 } from 'lucide-react';
 
 type TabType = 'overview' | 'mods' | 'resourcepacks' | 'shaderpacks' | 'settings';
 
@@ -27,6 +32,9 @@ export const ProfileDetailPage: React.FC = () => {
   const [isLaunching, setIsLaunching] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showStopConfirm, setShowStopConfirm] = useState(false);
+  // 업데이트 확인 실패 시 강제 실행 확인 다이얼로그 메시지
+  const [forceMsg, setForceMsg] = useState<string | null>(null);
   const showDownload = useDownloadStore(s => s.show);
   const setDl = useDownloadStore(s => s.setProgress);
   const resetDownload = useDownloadStore(s => s.reset);
@@ -126,9 +134,15 @@ export const ProfileDetailPage: React.FC = () => {
     }
   };
 
-  const handleLaunch = React.useCallback(async () => {
+  const handleLaunch = React.useCallback(async (force = false) => {
     if (!profileId) return;
-    
+
+    // 계정 필수 — 오프라인 미지원(정품 서버 전용). 다운로드 시작 전에 안내.
+    if (!selectedAccountId) {
+      toast.warning('로그인 필요', 'Microsoft 계정으로 로그인해야 게임을 실행할 수 있습니다.');
+      return;
+    }
+
     if (isRunning) {
       toast.warning('실행 중', '이 프로필은 이미 실행 중입니다!');
       return;
@@ -161,7 +175,7 @@ export const ProfileDetailPage: React.FC = () => {
     }, 60000);
 
     try {
-      await window.electronAPI.profile.launch(profileId, selectedAccountId);
+      await window.electronAPI.profile.launch(profileId, selectedAccountId, force);
       clearTimeout(timeoutId);
       // State will be updated by event listener
     } catch (error) {
@@ -169,12 +183,20 @@ export const ProfileDetailPage: React.FC = () => {
       console.error('Failed to launch:', error);
       setIsRunning(false);
       setIsLaunching(false);
-      
+
+      const raw = error instanceof Error ? error.message : String(error);
+      // 업데이트 확인 실패(강제 실행 가능) → 다운로드 모달/토스트 대신 [강제 실행]/[닫기] 확인
+      if (raw.includes(FORCE_LAUNCH_MARKER)) {
+        resetDownload();
+        setForceMsg(raw.split(FORCE_LAUNCH_MARKER)[1]?.trim() || '업데이트 서버에 연결할 수 없습니다.');
+        return;
+      }
+
       // 에러 상태 설정
-      const errorMsg = error instanceof Error ? error.message : '게임 실행에 실패했습니다.';
+      const errorMsg = errorText(error, '게임 실행에 실패했습니다.');
       setDl({ error: errorMsg });
       toast.error('실행 실패', errorMsg);
-      
+
       // 3초 후 자동으로 모달 닫기
       setTimeout(() => {
         resetDownload();
@@ -195,13 +217,11 @@ export const ProfileDetailPage: React.FC = () => {
     };
   }, [handleLaunch]);
 
-  const handleStop = async () => {
+  const handleStop = () => setShowStopConfirm(true);
+
+  const performStop = async () => {
+    setShowStopConfirm(false);
     if (!profileId) return;
-
-    if (!confirm('정말로 게임을 중단하시겠습니까?')) {
-      return;
-    }
-
     try {
       await window.electronAPI.game.stop(profileId);
       // State will be updated by event listener
@@ -293,7 +313,7 @@ export const ProfileDetailPage: React.FC = () => {
             </button>
           ) : (
             <button
-              onClick={handleLaunch}
+              onClick={() => handleLaunch()}
               className="px-6 py-3 rounded-lg font-semibold transition-colors bg-green-600 hover:bg-green-700 text-white"
             >
               ▶ 게임 실행
@@ -337,14 +357,18 @@ export const ProfileDetailPage: React.FC = () => {
                   {profile.installationStatus === 'installing' && '설치 진행 중'}
                   {profile.installationStatus === 'incomplete' && '설치 미완료'}
                   {profile.installationStatus === 'failed' && '설치 실패'}
+                  {profile.installationStatus === 'delete-failed' && '삭제 실패'}
                 </h3>
                 <p className="text-sm text-gray-300 mb-2">
                   {profile.installationStatus === 'installing' && '이 프로필은 현재 모드팩 설치가 진행 중입니다. 설치가 완료될 때까지 기다려주세요.'}
                   {profile.installationStatus === 'incomplete' && '이 프로필은 모드팩 설치가 완료되지 않았습니다. 런처를 닫는 등의 이유로 설치가 중단되었을 수 있습니다.'}
                   {profile.installationStatus === 'failed' && '이 프로필의 모드팩 설치가 실패했습니다. 네트워크 연결을 확인하거나 다시 시도해주세요.'}
+                  {profile.installationStatus === 'delete-failed' && '이 프로필은 삭제 도중 일부 파일이 지워지지 않아 불완전한 상태입니다. 다른 프로그램이 파일을 사용 중일 수 있으니, 잠시 후 다시 삭제해주세요.'}
                 </p>
                 <p className="text-sm text-gray-400">
-                  이 프로필로는 게임을 실행할 수 없습니다. 프로필을 삭제하고 다시 생성해주세요.
+                  {profile.installationStatus === 'delete-failed'
+                    ? '이 프로필은 사용할 수 없습니다. 다시 삭제해주세요.'
+                    : '이 프로필로는 게임을 실행할 수 없습니다. 프로필을 삭제하고 다시 생성해주세요.'}
                 </p>
               </div>
             </div>
@@ -354,20 +378,43 @@ export const ProfileDetailPage: React.FC = () => {
 
       {/* Content */}
       <div className="flex-1 overflow-auto">
-        {activeTab === 'overview' && <OverviewTab profile={profile} />}
+        {activeTab === 'overview' && <OverviewTab profile={profile} onReload={loadProfile} isRunning={isRunning} />}
         {activeTab === 'mods' && profileId && <ModList profileId={profileId} />}
         {activeTab === 'resourcepacks' && profileId && <ResourcePackList profileId={profileId} />}
         {activeTab === 'shaderpacks' && profileId && <ShaderPackList profileId={profileId} />}
         {activeTab === 'settings' && <ProfileSettingsTab profile={profile} onUpdate={loadProfile} />}
       </div>
+
+      <ConfirmModal
+        open={forceMsg !== null}
+        title="업데이트 확인 실패"
+        message={`${forceMsg ?? ''}\n\n그래도 강제로 실행하시겠습니까?`}
+        confirmLabel="강제 실행"
+        danger
+        onConfirm={() => {
+          setForceMsg(null);
+          handleLaunch(true);
+        }}
+        onCancel={() => setForceMsg(null)}
+      />
+      <ConfirmModal
+        open={showStopConfirm}
+        title="게임 중단"
+        message="정말로 게임을 중단하시겠습니까?"
+        confirmLabel="중단"
+        danger
+        onConfirm={performStop}
+        onCancel={() => setShowStopConfirm(false)}
+      />
     </div>
   );
 };
 
 // Overview Tab
-const OverviewTab: React.FC<{ profile: any }> = ({ profile }) => {
+const OverviewTab: React.FC<{ profile: any; onReload: () => void; isRunning: boolean }> = ({ profile, onReload, isRunning }) => {
   const toast = useToast();
   const navigate = useNavigate();
+  const { selectedAccountId } = useAccount();
   const [profilePath, setProfilePath] = useState<string>('');
   const [showExportModal, setShowExportModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -397,6 +444,7 @@ const OverviewTab: React.FC<{ profile: any }> = ({ profile }) => {
     profilePath,
     gameVersion: profile?.gameVersion || '',
     loaderType: profile?.loaderType || '',
+    loaderVersion: profile?.loaderVersion || '',
     serverAddress: profile?.serverAddress,
     autoCheck: true,
     checkInterval: 30 * 60 * 1000 // 30 minutes
@@ -433,41 +481,59 @@ const OverviewTab: React.FC<{ profile: any }> = ({ profile }) => {
   };
 
   const handleShowLogs = async () => {
-    if (!profile?.id) {
+    // 저장된 실제 인스턴스 경로 우선(userData 재구성보다 정확)
+    const dir = profile?.gameDirectory || (await getInstancePath().catch(() => ''));
+    if (!dir) {
       toast.error('오류', '프로필 정보가 올바르지 않습니다.');
       return;
     }
-
-    try {
-      const instancePath = await getInstancePath();
-      const logPath = `${instancePath}/logs/latest.log`;
-      console.log('[Overview] Opening log:', logPath);
-      await window.electronAPI.shell.openPath(logPath);
-    } catch (error) {
-      console.error('Failed to open logs:', error);
-      toast.error('오류', '로그 파일을 찾을 수 없습니다. 게임을 한 번 실행해주세요.');
+    // latest.log → logs 폴더 → 인스턴스 폴더 순으로 폴백(게임 미실행 시 로그 파일이 없을 수 있음)
+    const candidates = [`${dir}/logs/latest.log`, `${dir}/logs`, dir];
+    for (const target of candidates) {
+      try {
+        await window.electronAPI.shell.openPath(target);
+        return;
+      } catch (error) {
+        console.warn('[Overview] openPath 실패, 폴백:', target, error);
+      }
     }
+    toast.error('오류', '로그를 찾을 수 없습니다. 게임을 한 번 실행해주세요.');
   };
 
   const handleExport = () => {
     setShowExportModal(true);
   };
 
+  const [deleting, setDeleting] = useState(false);
+
   const handleDelete = async () => {
     if (!profile?.id) return;
-    
+    setDeleting(true);
     try {
       await window.electronAPI.profile.delete(profile.id);
       toast.success('성공', '프로필이 삭제되었습니다.');
-      navigate('/');
+      navigate('/'); // 성공 시 이 페이지 언마운트 → 스피너 자연 종료
     } catch (error) {
       console.error('Failed to delete profile:', error);
-      toast.error('오류', '프로필 삭제에 실패했습니다.');
+      const msg = error instanceof Error ? error.message : '프로필 삭제에 실패했습니다.';
+      toast.error('오류', msg);
+      // 삭제 실패 시 백엔드가 '불완전'으로 표시했을 수 있으므로 프로필을 다시 불러와 안내를 노출한다.
+      onReload();
+      setDeleting(false);
     }
   };
 
   return (
     <div className="p-6 space-y-4">
+      {/* 혜니팩 섹션 — 팩 프로필일 때만 렌더(온라인 배너 + 파일 업데이트) */}
+      {profile?.id && (
+        <HyeniPackSection
+          profileId={profile.id}
+          accountId={selectedAccountId ?? undefined}
+          onUpdated={onReload}
+        />
+      )}
+
       {/* Worker Mods Update Panel (Multi-Mod System) */}
       {profilePath && hasWorkerModUpdates && (
         <WorkerModUpdatePanel
@@ -532,7 +598,9 @@ const OverviewTab: React.FC<{ profile: any }> = ({ profile }) => {
             <div className="font-medium text-gray-200">로그 보기</div>
             <div className="text-xs text-gray-400">게임 로그 확인</div>
           </button>
-          <button 
+          {/* 혜니팩 내보내기는 제작자 전용 (사용자 런처에서 숨김) */}
+          {isCreatorMode() && (
+          <button
             onClick={handleExport}
             className="p-4 border border-gray-700 rounded-lg hover:bg-purple-900 hover:border-purple-800 transition-colors text-left"
           >
@@ -542,15 +610,20 @@ const OverviewTab: React.FC<{ profile: any }> = ({ profile }) => {
             <div className="font-medium text-gray-200">혜니팩 내보내기</div>
             <div className="text-xs text-gray-400">모드팩 파일로 저장</div>
           </button>
-          <button 
+          )}
+          <button
             onClick={() => setShowDeleteConfirm(true)}
-            className="p-4 border border-gray-700 rounded-lg hover:bg-red-900 hover:border-red-800 transition-colors text-left"
+            disabled={isRunning}
+            title={isRunning ? '게임 실행 중에는 삭제할 수 없습니다. 먼저 게임을 종료하세요.' : undefined}
+            className="p-4 border border-gray-700 rounded-lg hover:bg-red-900 hover:border-red-800 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:border-gray-700"
           >
             <div className="flex items-center gap-2 text-2xl mb-2">
               <Trash2 className="w-6 h-6 text-red-400" />
             </div>
             <div className="font-medium text-gray-200">프로필 삭제</div>
-            <div className="text-xs text-gray-400">영구적으로 제거</div>
+            <div className="text-xs text-gray-400">
+              {isRunning ? '게임 종료 후 가능' : '영구적으로 제거'}
+            </div>
           </button>
         </div>
       </div>
@@ -578,17 +651,16 @@ const OverviewTab: React.FC<{ profile: any }> = ({ profile }) => {
             </p>
             <div className="flex gap-3">
               <button
-                onClick={() => {
-                  handleDelete();
-                  setShowDeleteConfirm(false);
-                }}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded-lg font-medium transition-colors"
+                onClick={() => handleDelete()}
+                disabled={deleting}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded-lg font-medium transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
               >
-                삭제
+                {deleting ? (<><Loader2 className="w-4 h-4 animate-spin" /> 삭제 중...</>) : '삭제'}
               </button>
               <button
                 onClick={() => setShowDeleteConfirm(false)}
-                className="flex-1 btn-secondary"
+                disabled={deleting}
+                className="flex-1 btn-secondary disabled:opacity-60"
               >
                 취소
               </button>

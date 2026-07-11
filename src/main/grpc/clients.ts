@@ -18,11 +18,6 @@ import {
   type DownloadStarted,
   type DownloadCancel,
 } from '../gen/launcher/download';
-import {
-  AssetServiceClient,
-  type PrefetchAssetsRequest,
-  type PrefetchAssetsResponse,
-} from '../gen/launcher/asset';
 import type { ClientReadableStream } from '@grpc/grpc-js';
 import {
   InstanceServiceClient,
@@ -136,7 +131,6 @@ let healthClient: HealthServiceClient | null = null;
 let versionClient: VersionServiceClient | null = null;
 let loaderClient: LoaderServiceClient | null = null;
 let lastAddr: string | null = null;
-let assetClient: AssetServiceClient | null = null;
 let settingsClient: SettingsServiceClient | null = null;
 let modClient: ModServiceClient | null = null;
 let cacheClient: CacheServiceClient | null = null;
@@ -155,15 +149,6 @@ function ensureSettingsClient(): SettingsServiceClient {
     lastAddr = addr;
   }
   return settingsClient;
-}
-
-function ensureAssetClient(): AssetServiceClient {
-  const addr = ensureAddr();
-  if (!assetClient || lastAddr !== addr) {
-    assetClient = new AssetServiceClient(addr, credentials.createInsecure());
-    lastAddr = addr;
-  }
-  return assetClient;
 }
 
 function ensureLoaderClient(): LoaderServiceClient {

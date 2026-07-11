@@ -1,5 +1,16 @@
 name: Release Launcher
 
+# 태그 push 시 Tauri 런처를 빌드해 GitHub Release에 번들 + latest.json(자동 업데이트 피드)을 게시.
+# 버전은 package.json이 단일 소스(sync-version이 tauri.conf/Cargo.toml에 전파) — 태그는 package.json version과 일치시킬 것.
+#
+# 필요한 리포지토리 시크릿:
+#   TAURI_SIGNING_PRIVATE_KEY           : ~/.tauri/hyenimc.key 파일 내용 (updater 서명 — latest.json/*.sig)
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  : 위 키 비밀번호 (없으면 빈 문자열 시크릿)
+#   HYENIMC_WORKER_URL, AZURE_CLIENT_ID, AUTHORIZED_SERVER_DOMAINS : 앱 빌드 시 build.rs가 .env에서 주입
+#   (macOS 코드서명/공증) APPLE_* : 아래 주석 참고 — 배포/전환용, 현재 미배선
+#
+# 참고: 기존 Electron 사용자 → Tauri 전환(latest.yml 브릿지)은 별도 1회성 작업이라 여기 포함하지 않음(설계 §6, 검증 필요).
+
 on:
   push:
     tags:
@@ -9,140 +20,90 @@ permissions:
   contents: write
 
 jobs:
-  release-windows:
-    runs-on: windows-latest
-    
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: '--target universal-apple-darwin'
+          - platform: windows-latest
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
+
     steps:
       - name: Check out code
-        uses: actions/checkout@v3
-      
+        uses: actions/checkout@v4
+
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: '18'
-      
-      - name: Setup Go
-        uses: actions/setup-go@v4
+          node-version: '20'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
         with:
-          go-version: '1.21'
-      
+          # macOS universal 번들에 두 아키텍처 타깃 필요
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: '. -> target'
+
       - name: Install dependencies
-        run: npm install
-      
-      - name: Create .env file
+        run: npm ci
+
+      # build.rs가 컴파일 시점에 읽어 바이너리에 임베드하는 앱 설정 (Go 백엔드/proto는 Tauri에서 불필요 — 제거)
+      - name: Create .env file (Windows)
+        if: matrix.platform == 'windows-latest'
         run: |
           @"
           HYENIMC_WORKER_URL=${{ secrets.HYENIMC_WORKER_URL }}
           AZURE_CLIENT_ID=${{ secrets.AZURE_CLIENT_ID }}
           AUTHORIZED_SERVER_DOMAINS=${{ secrets.AUTHORIZED_SERVER_DOMAINS }}
           "@ | Out-File -FilePath .env -Encoding utf8
-      
-      - name: Generate config files
-        run: npm run generate:config
-      
-      - name: Generate protobuf code
-        run: npm run proto:gen
-      
-      - name: Build backend (Windows)
-        run: npm run backend:build:win-x64
-      
-      - name: Build and package
-        run: npm run build && npx electron-builder --win --publish never
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-release
-          path: |
-            release/*.exe
-            release/*.blockmap
-            release/latest.yml
-  
-  release-macos:
-    runs-on: macos-latest
-    
-    steps:
-      - name: Check out code
-        uses: actions/checkout@v3
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-      
-      - name: Setup Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: '1.21'
-      
-      - name: Install dependencies
-        run: npm install
-      
-      - name: Create .env file
+
+      - name: Create .env file (macOS)
+        if: matrix.platform == 'macos-latest'
         run: |
           cat > .env << 'EOF'
           HYENIMC_WORKER_URL=${{ secrets.HYENIMC_WORKER_URL }}
           AZURE_CLIENT_ID=${{ secrets.AZURE_CLIENT_ID }}
           AUTHORIZED_SERVER_DOMAINS=${{ secrets.AUTHORIZED_SERVER_DOMAINS }}
-          APPLE_ID=${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD=${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID=${{ secrets.APPLE_TEAM_ID }}
           EOF
-      
+
+      # 렌더러(vite)가 @shared/config/server-config를 import → 빌드 전에 생성 필요
       - name: Generate config files
         run: npm run generate:config
-      
-      - name: Generate protobuf code
-        run: npm run proto:gen
-      
-      - name: Build backend (macOS)
-        run: npm run backend:build:mac-universal
-      
-      - name: Build and package
-        run: npm run build && npx electron-builder --mac --arm64 --x64 --universal --publish never
+
+      # package.json version → tauri.conf.json / Cargo.toml 전파 (버전 단일 소스)
+      - name: Sync version
+        run: npm run sync-version
+
+      - name: Build & release (Tauri)
+        uses: tauri-apps/tauri-action@v0
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-release
-          path: |
-            release/*.dmg
-            release/*.zip
-            release/*.blockmap
-            release/latest-mac.yml
-  
-  create-release:
-    needs: [release-windows, release-macos]
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Download Windows artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: windows-release
-          path: release/
-      
-      - name: Download macOS artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: macos-release
-          path: release/
-      
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            release/*.exe
-            release/*.dmg
-            release/*.zip
-            release/*.blockmap
-            release/*.yml
-          draft: false
-          prerelease: false
-          generate_release_notes: true
-        env:
+          # tauri-action이 GitHub Release 생성/자산 업로드에 사용. GitHub이 자동 제공하는
+          # 토큰이라 별도 시크릿 등록 불필요(permissions: contents: write와 함께 동작).
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # updater 서명 — createUpdaterArtifacts:true가 이 키로 latest.json/*.sig를 서명
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # (macOS 코드서명/공증 — 배포/전환에 필요. 인증서 import 후 아래 env 배선 필요)
+          # APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          # APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          # APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          # APPLE_ID: ${{ secrets.APPLE_ID }}
+          # APPLE_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          # tauri 프로젝트 루트 (src-tauri 상위). 프론트 빌드는 tauri.conf의 beforeBuildCommand가 처리.
+          projectPath: apps/launcher
+          tagName: ${{ github.ref_name }}
+          releaseName: 'HyeniMC ${{ github.ref_name }}'
+          releaseBody: '자동 생성된 릴리스입니다.'
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}

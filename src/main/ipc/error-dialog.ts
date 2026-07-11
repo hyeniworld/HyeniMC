@@ -25,16 +25,14 @@ export function registerErrorDialogHandlers() {
           break;
         
         case 'fixJavaVersion':
-          // Java 버전 자동 수정
-          // ConfigurationFixer에서 처리 후 profile update
+          // Java 버전 자동 수정 (미구현 — Renderer 안내만)
           break;
-        
+
         case 'fixDangerousMemory':
         case 'reduceMinMemory':
         case 'reduceMaxMemory':
         case 'adjustMemory':
-          // 메모리 설정 자동 수정
-          // ConfigurationFixer에서 처리 후 profile update
+          // 메모리 설정 자동 수정 (미구현 — Renderer 안내만)
           break;
         
         case 'selectGameDirectory':

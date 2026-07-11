@@ -10,7 +10,7 @@ import * as crypto from 'crypto';
 import { app } from 'electron';
 import AdmZip from 'adm-zip';
 import { 
-  HyeniPackManifest, 
+  AnyHyeniPackManifest, 
   HyeniPackImportProgress,
   FailedMod,
   HyeniPackImportResult,
@@ -52,7 +52,7 @@ export class HyeniPackImporter {
   /**
    * 혜니팩 파일 미리보기 (manifest만 읽기)
    */
-  async previewHyeniPack(packFilePath: string): Promise<HyeniPackManifest> {
+  async previewHyeniPack(packFilePath: string): Promise<AnyHyeniPackManifest> {
     const zip = new AdmZip(packFilePath);
     const manifestEntry = zip.getEntry('hyenipack.json');
     
@@ -61,13 +61,14 @@ export class HyeniPackImporter {
     }
     
     const manifestText = manifestEntry.getData().toString('utf8');
-    const manifest: HyeniPackManifest = JSON.parse(manifestText);
-    
-    // 포맷 버전 확인
-    if (manifest.formatVersion !== 1) {
-      throw new Error(`Unsupported format version: ${manifest.formatVersion}`);
+    const manifest: AnyHyeniPackManifest = JSON.parse(manifestText);
+
+    // 포맷 버전 확인 — V1(로컬 동봉)과 V2(CDN url 피닝) 모두 지원.
+    // import 로직은 mods[].metadata(API 재조회) + 피닝 url + mods/ 추출로 두 형식을 함께 처리.
+    if (manifest.formatVersion !== 1 && manifest.formatVersion !== 2) {
+      throw new Error(`Unsupported format version: ${(manifest as { formatVersion: number }).formatVersion}`);
     }
-    
+
     return manifest;
   }
   
@@ -90,7 +91,7 @@ export class HyeniPackImporter {
     });
     this.timeoutManager.start();
 
-    let manifest: HyeniPackManifest | null = null;
+    let manifest: AnyHyeniPackManifest | null = null;
 
     try {
       // 취소 체크
@@ -148,6 +149,18 @@ export class HyeniPackImporter {
       
       // API 호출을 병렬로 처리 (재시도 + 타임아웃)
       const apiPromises = manifest.mods.map(async (modEntry) => {
+        // V2: export 시 피닝된 CDN url이 있으면 API 재조회 없이 직접 다운로드
+        // (빠르고 Modrinth/CF rate-limit 회피 — 300+ 모드 팩 재-import에 필수).
+        // fileName은 이미 디스크 이름(.disabled 포함)이라 그대로 사용.
+        if (modEntry.url) {
+          downloadTasks.push({
+            modEntry,
+            finalFileName: modEntry.fileName,
+            downloadUrl: modEntry.url,
+            sha1: modEntry.sha1,
+          });
+          return;
+        }
         if (modEntry.metadata && modEntry.metadata.source && modEntry.metadata.projectId) {
           let attempts = 0;
           try {
@@ -479,7 +492,7 @@ export class HyeniPackImporter {
   /**
    * 최종 결과 구축
    */
-  private buildResult(manifest: HyeniPackManifest): HyeniPackImportResult {
+  private buildResult(manifest: AnyHyeniPackManifest): HyeniPackImportResult {
     const expectedMods = manifest.mods.length;
     const partialSuccess = this.installedCount > 0 && this.failedMods.length > 0;
     
@@ -517,7 +530,7 @@ export class HyeniPackImporter {
    */
   private async createMetadata(
     modsDir: string,
-    manifest: HyeniPackManifest
+    manifest: AnyHyeniPackManifest
   ): Promise<void> {
     const metadata: any = {
       version: 1,

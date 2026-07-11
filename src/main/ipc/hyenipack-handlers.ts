@@ -7,7 +7,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { hyeniPackExporter } from '../services/hyenipack-exporter';
 import { hyeniPackImporter } from '../services/hyenipack-importer';
-import { HyeniPackExportOptions, HyeniPackImportProgress, FileTreeNode } from '../../shared/types/hyenipack';
+import { HyeniPackExportOptionsV2, HyeniPackImportProgress, FileTreeNode } from '../../shared/types/hyenipack';
 
 export function registerHyeniPackHandlers() {
   /**
@@ -116,7 +116,7 @@ export function registerHyeniPackHandlers() {
    */
   ipcMain.handle(
     'hyenipack:export',
-    async (event, profileId: string, options: HyeniPackExportOptions, outputPath?: string) => {
+    async (event, profileId: string, options: HyeniPackExportOptionsV2, outputPath?: string) => {
       try {
         // Profile 정보 가져오기
         const { profileRpc } = await import('../grpc/clients');

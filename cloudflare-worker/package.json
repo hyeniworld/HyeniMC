@@ -3,11 +3,19 @@
   "version": "2.0.0",
   "description": "HyeniMC Worker - CurseForge API proxy & Mod distribution (R2)",
   "scripts": {
-    "deploy": "wrangler publish",
+    "build:admin": "npm --prefix admin install && npm --prefix admin run build",
+    "deploy": "npm run build:admin && wrangler deploy",
     "dev": "wrangler dev",
-    "tail": "wrangler tail"
+    "tail": "wrangler tail",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "fflate": "^0.8.2"
   },
   "devDependencies": {
-    "wrangler": "^3.0.0"
+    "wrangler": "^3.0.0",
+    "vitest": "^2.1.0",
+    "@cloudflare/vitest-pool-workers": "^0.5.0"
   }
 }

@@ -3,13 +3,19 @@ import { useToast } from '../../contexts/ToastContext';
 import { X, Loader2, Package, Settings, FileArchive } from 'lucide-react';
 import { ModpackSearchModal } from '../modpack/ModpackSearchModal';
 import { ImportModpackTab } from './ImportModpackTab';
+import { HyeniPackImportTab } from './HyeniPackImportTab';
 import { IPC_EVENTS } from '../../../shared/constants/ipc';
+import { isCreatorMode } from '../../utils/appMode';
 
 interface CreateProfileModalProps {
   isOpen?: boolean;
   onClose: () => void;
   onSuccess: () => void;
   initialModpackId?: string;
+  /** 초기 탭(기본 custom). 딥링크 혜니팩 설치는 'hyenipack'으로 연다. */
+  initialTab?: 'custom' | 'hyenipack';
+  /** 혜니팩 탭에서 자동 선택할 팩 id(딥링크 제안 경유). */
+  initialHyeniPackId?: string;
 }
 
 interface JavaInstallation {
@@ -20,9 +26,9 @@ interface JavaInstallation {
   architecture: string;
 }
 
-export function CreateProfileModal({ isOpen, onClose, onSuccess, initialModpackId }: CreateProfileModalProps) {
+export function CreateProfileModal({ isOpen, onClose, onSuccess, initialModpackId, initialTab, initialHyeniPackId }: CreateProfileModalProps) {
   const toast = useToast();
-  const [tab, setTab] = useState<'custom' | 'modpack' | 'import'>('custom');
+  const [tab, setTab] = useState<'custom' | 'modpack' | 'import' | 'hyenipack'>(initialTab ?? 'custom');
   const [step, setStep] = useState<'basic' | 'modpack' | 'installing'>('basic');
   const [showModpackSearch, setShowModpackSearch] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -301,7 +307,7 @@ export function CreateProfileModal({ isOpen, onClose, onSuccess, initialModpackI
             </button>
           </div>
 
-          {/* Tabs */}
+          {/* Tabs — 사용자: 커스텀 + 혜니팩 / 제작자: 커스텀 + 온라인 + 파일 */}
           <div className="flex gap-2 mb-6 bg-gray-800 p-1 rounded-lg">
             <button
               type="button"
@@ -316,32 +322,50 @@ export function CreateProfileModal({ isOpen, onClose, onSuccess, initialModpackI
               <Settings className="w-4 h-4" />
               커스텀
             </button>
-            <button
-              type="button"
-              onClick={() => setTab('modpack')}
-              disabled={loading || importing}
-              className={`flex-1 py-2 px-3 rounded-md font-medium transition-all flex items-center justify-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed ${
-                tab === 'modpack'
-                  ? 'bg-purple-600 text-white shadow-lg'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-700'
-              }`}
-            >
-              <Package className="w-4 h-4" />
-              온라인
-            </button>
-            <button
-              type="button"
-              onClick={() => setTab('import')}
-              disabled={loading || importing}
-              className={`flex-1 py-2 px-3 rounded-md font-medium transition-all flex items-center justify-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed ${
-                tab === 'import'
-                  ? 'bg-purple-600 text-white shadow-lg'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-700'
-              }`}
-            >
-              <FileArchive className="w-4 h-4" />
-              파일
-            </button>
+            {isCreatorMode() ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setTab('modpack')}
+                  disabled={loading || importing}
+                  className={`flex-1 py-2 px-3 rounded-md font-medium transition-all flex items-center justify-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed ${
+                    tab === 'modpack'
+                      ? 'bg-purple-600 text-white shadow-lg'
+                      : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                  }`}
+                >
+                  <Package className="w-4 h-4" />
+                  온라인
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTab('import')}
+                  disabled={loading || importing}
+                  className={`flex-1 py-2 px-3 rounded-md font-medium transition-all flex items-center justify-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed ${
+                    tab === 'import'
+                      ? 'bg-purple-600 text-white shadow-lg'
+                      : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                  }`}
+                >
+                  <FileArchive className="w-4 h-4" />
+                  파일
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setTab('hyenipack')}
+                disabled={loading || importing}
+                className={`flex-1 py-2 px-3 rounded-md font-medium transition-all flex items-center justify-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed ${
+                  tab === 'hyenipack'
+                    ? 'bg-purple-600 text-white shadow-lg'
+                    : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                }`}
+              >
+                <Package className="w-4 h-4" />
+                혜니팩
+              </button>
+            )}
           </div>
 
           {/* Custom Profile Tab */}
@@ -430,31 +454,18 @@ export function CreateProfileModal({ isOpen, onClose, onSuccess, initialModpackI
               >
                 <option value="vanilla">바닐라</option>
                 <option value="fabric">Fabric</option>
-                <option value="quilt">Quilt</option>
-                <option value="forge">Forge (권장하지 않음)</option>
-                <option value="neoforge">NeoForge ⭐</option>
+                <option value="neoforge">NeoForge</option>
+                <option value="forge">Forge</option>
               </select>
             </div>
           </div>
-
-          {/* Forge deprecation warning */}
-          {formData.loaderType === 'forge' && (
-            <div className="bg-yellow-900/20 border border-yellow-800 rounded-lg p-3">
-              <p className="text-sm text-yellow-300 font-semibold mb-1">
-                ⚠ Forge는 권장하지 않습니다
-              </p>
-              <p className="text-xs text-yellow-400">
-                Forge 개발이 중단되었습니다. 대신 <strong>NeoForge</strong>를 사용하시는 것을 강력히 권장합니다.
-              </p>
-            </div>
-          )}
 
           {/* Loader Version */}
           {formData.loaderType !== 'vanilla' && (
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="text-sm font-semibold text-gray-300">
-                  {formData.loaderType === 'fabric' ? 'Fabric' : formData.loaderType === 'quilt' ? 'Quilt' : formData.loaderType === 'neoforge' ? 'NeoForge' : 'Forge'} 버전
+                  {formData.loaderType === 'fabric' ? 'Fabric' : formData.loaderType === 'forge' ? 'Forge' : 'NeoForge'} 버전
                 </label>
                 <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer hover:text-gray-300 transition-colors">
                   <input
@@ -568,6 +579,21 @@ export function CreateProfileModal({ isOpen, onClose, onSuccess, initialModpackI
                     );
                   })()}
                 </div>
+                {/* 권장 버전 이상이 하나도 없으면 설치 안내 (예: 26.1+는 Java 25 강제) */}
+                {!javaInstallations.some(j => j.majorVersion >= recommendedJava) && (
+                  <div className="flex items-center justify-between gap-2 bg-yellow-900/20 border border-yellow-800 rounded-lg p-2 mt-1">
+                    <span className="text-xs text-yellow-300">
+                      이 버전은 Java {recommendedJava} 이상이 필요합니다. 설치되어 있지 않습니다.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => window.electronAPI.shell.openExternal(`https://adoptium.net/temurin/releases/?version=${recommendedJava}`)}
+                      className="shrink-0 px-2 py-1 text-xs bg-yellow-700 hover:bg-yellow-600 rounded"
+                    >
+                      Java {recommendedJava} 다운로드
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="bg-red-900/20 border border-red-800 rounded-lg p-3">
@@ -660,10 +686,18 @@ export function CreateProfileModal({ isOpen, onClose, onSuccess, initialModpackI
 
           {/* Import Tab */}
           {tab === 'import' && (
-            <ImportModpackTab 
+            <ImportModpackTab
               onSuccess={onSuccess}
               onImportingChange={setImporting}
               onProfileIdChange={setInstallingProfileId}
+            />
+          )}
+
+          {tab === 'hyenipack' && (
+            <HyeniPackImportTab
+              onSuccess={onSuccess}
+              onImportingChange={setImporting}
+              initialPackId={initialHyeniPackId}
             />
           )}
         </div>

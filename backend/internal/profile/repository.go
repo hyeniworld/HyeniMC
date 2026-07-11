@@ -123,10 +123,10 @@ func (r *Repository) Get(id string) (*domain.Profile, error) {
 	var serverAddr sql.NullString
 	
 	err := r.db.QueryRow(`
-		SELECT id, name, description, icon, game_version, loader_type, loader_version,
+		SELECT id, name, COALESCE(description, '') AS description, COALESCE(icon, '') AS icon, game_version, loader_type, COALESCE(loader_version, '') AS loader_version,
 			game_directory, java_path, memory_min, memory_max, resolution_width,
-			resolution_height, fullscreen, jvm_args, game_args, modpack_id,
-			modpack_source, installation_status, created_at, updated_at, last_played, total_play_time,
+			resolution_height, fullscreen, jvm_args, game_args, COALESCE(modpack_id, '') AS modpack_id,
+			COALESCE(modpack_source, '') AS modpack_source, installation_status, created_at, updated_at, last_played, total_play_time,
 			favorite, server_address
 		FROM profiles WHERE id = ?
 	`, id).Scan(
@@ -183,10 +183,10 @@ func (r *Repository) Get(id string) (*domain.Profile, error) {
 // List retrieves all profiles
 func (r *Repository) List() ([]*domain.Profile, error) {
 	rows, err := r.db.Query(`
-		SELECT id, name, description, icon, game_version, loader_type, loader_version,
+		SELECT id, name, COALESCE(description, '') AS description, COALESCE(icon, '') AS icon, game_version, loader_type, COALESCE(loader_version, '') AS loader_version,
 			game_directory, java_path, memory_min, memory_max, resolution_width,
-			resolution_height, fullscreen, jvm_args, game_args, modpack_id,
-			modpack_source, installation_status, created_at, updated_at, last_played, total_play_time,
+			resolution_height, fullscreen, jvm_args, game_args, COALESCE(modpack_id, '') AS modpack_id,
+			COALESCE(modpack_source, '') AS modpack_source, installation_status, created_at, updated_at, last_played, total_play_time,
 			favorite, server_address
 		FROM profiles
 		ORDER BY last_played DESC, created_at DESC

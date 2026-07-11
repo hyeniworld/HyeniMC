@@ -19,6 +19,14 @@
     - Configs: 내장 정책 기반 처리
 ```
 
+> **구현 확정 사항 (2026-07-06):**
+> - 매니페스트/latest.json에 `breaking: boolean` 필드 추가. **"메이저/마이너 변경 시 업데이트 불가" 규칙은 폐기**하고 breaking 플래그로 대체 — breaking=true면 런처가 적용 전까지 게임 실행 차단(우회 불가), false면 "나중에" 허용.
+> - 업데이트 서버 접근 불가 시: 기본 실행 차단 + 런처 설정(고급)의 강제 실행 옵션으로 우회 가능.
+> - 팩 배포는 Worker 경유(`/api/v2/modpacks/{id}/latest|versions`, `/download/v2/modpacks/{id}/{version}`), R2 직접 접근 없음. 다운로드는 토큰 검증 필수.
+> - R2 키: `modpacks/<id>/latest.json` + `modpacks/<id>/versions/<version>/pack.hyenipack` (registry.json은 단일 팩 운영이라 보류).
+> - **Export/배포 측(본 문서 Phase 1·3)은 구현 완료 (2026-07-06)** — exporter가 latest.json 사이드카까지 생성, `cloudflare-worker/deploy-hyenipack.sh(.ps1)`로 업로드.
+> - 런처 측(자동 업데이트 체크·하이브리드 동기화·Import UI — 본 문서 Phase 1.5/2/4)은 **Electron이 아닌 Tauri 재작성 M4에서 구현** ([architecture/TAURI_MIGRATION_PHASE1.md](architecture/TAURI_MIGRATION_PHASE1.md) 참조).
+
 ---
 
 ## 🎯 설계 철학 (Phase 3 개선)
@@ -182,9 +190,9 @@ hyenimc-releases/modpacks/
 - ❌ **삭제됨**: `changes/` 디렉토리 (더 이상 불필요)
 - ✅ **추가됨**: Manifest에 `overrides` 필드 (내장 정책)
 
-**버전 정책:**
-- ✅ 업데이트 가능: 같은 메이저.마이너 내 (1.0.x → 1.0.y)
-- ❌ 업데이트 불가: 메이저/마이너 변경 시 (1.0.x → 1.1.x)
+**버전 정책:** *(폐기 — 2026-07-06, breaking 플래그로 대체)*
+- ~~✅ 업데이트 가능: 같은 메이저.마이너 내 (1.0.x → 1.0.y)~~
+- ~~❌ 업데이트 불가: 메이저/마이너 변경 시 (1.0.x → 1.1.x)~~
 
 ---
 
@@ -732,9 +740,9 @@ function isValidHyenipackId(id) {
 - Config 폴더 기본 정책: `keep`
 - 특정 파일 예외 정책: `replace` (Cascading Rule로 해결)
 
-### 버전 정책
-- ✅ 업데이트 가능: 같은 메이저.마이너 내 (1.0.x → 1.0.y)
-- ❌ 업데이트 불가: 메이저/마이너 변경 시 (1.0.x → 1.1.x)
+### 버전 정책 *(폐기 — 2026-07-06, breaking 플래그로 대체)*
+- ~~✅ 업데이트 가능: 같은 메이저.마이너 내 (1.0.x → 1.0.y)~~
+- ~~❌ 업데이트 불가: 메이저/마이너 변경 시 (1.0.x → 1.1.x)~~
 
 ### loaderType 변경 처리
 - Fabric → Forge 등 로더 변경 시 경고 표시

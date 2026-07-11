@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { SectionCard } from '../components/common/SectionCard';
 import { Slider } from '../components/common/Slider';
 import { useToast } from '../contexts/ToastContext';
-import { RefreshCw, Download, CheckCircle2 } from 'lucide-react';
+import { RefreshCw, Download, CheckCircle2, Trash2 } from 'lucide-react';
+import { ConfirmDialog } from '../components/common/ConfirmDialog';
 
 type DownloadSettings = {
   request_timeout_ms?: number;
@@ -49,41 +50,120 @@ export const SettingsPage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState<GlobalSettings>({});
   const [original, setOriginal] = useState<GlobalSettings>({});
-  const [tab, setTab] = useState<'download'|'java'|'resolution'|'cache'|'update'>('download');
+  const [tab, setTab] = useState<'download'|'java'|'resolution'|'cache'|'update'|'auth'>('download');
   const [javaList, setJavaList] = useState<Array<{ path: string; version: string; majorVersion: number; vendor?: string; architecture: string }>>([]);
   const [systemMemory, setSystemMemory] = useState(16384);
-  const [cacheStats, setCacheStats] = useState<{ size: number; files: number }>({ size: 0, files: 0 });
+  const [cacheStats, setCacheStats] = useState<{ size: number; files: number } | null>(null);
+  const [cacheStatsLoading, setCacheStatsLoading] = useState(false);
+  const cacheLoadedRef = useRef(false);
+  const [javaLoading, setJavaLoading] = useState(false);
+  const javaLoadedRef = useRef(false);
+  const mountedRef = useRef(true);
   const [currentVersion, setCurrentVersion] = useState('');
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<'checking' | 'available' | 'not-available' | 'error' | null>(null);
+  const [tokens, setTokens] = useState<Array<{ servers: string[]; receivedAt: number }> | null>(null);
+  const [tokensError, setTokensError] = useState(false);
+  const [tokenToDelete, setTokenToDelete] = useState<{ receivedAt: number; label: string } | null>(null);
+  const [removingToken, setRemovingToken] = useState(false);
   const s = settings;
 
+  const loadTokens = async () => {
+    try {
+      const list = await window.electronAPI.hyenipack.listTokens();
+      setTokens(Array.isArray(list) ? list : []);
+      setTokensError(false);
+    } catch {
+      setTokensError(true);
+    }
+  };
+
+  // 캐시 통계 측정(무거운 디스크 walk) — 언마운트 후 setState 방지(mountedRef).
+  const loadCacheStats = useCallback(async () => {
+    setCacheStatsLoading(true);
+    try {
+      const stats = await window.electronAPI.settings.getCacheStats();
+      if (mountedRef.current) setCacheStats(stats);
+    } catch {
+      if (mountedRef.current) setCacheStats({ size: 0, files: 0 });
+    } finally {
+      if (mountedRef.current) setCacheStatsLoading(false);
+    }
+  }, []);
+
+  // 캐시 탭을 처음 열 때만 lazy 측정. 다른 탭으로 전환해도 측정은 백그라운드로 계속되고
+  // 결과는 mountedRef 가드로 안전하게 반영된다(측정 중 탭 전환 무해).
   useEffect(() => {
+    if (tab === 'cache' && !cacheLoadedRef.current) {
+      cacheLoadedRef.current = true;
+      loadCacheStats();
+    }
+  }, [tab, loadCacheStats]);
+
+  // Java 감지(~400ms, 파일시스템 스캔+java -version)를 설정 마운트에서 제거하고
+  // Java 탭 첫 진입 시로 지연 — 설정 창이 즉시 뜬다. 캐시 State라 2회차부터는 즉시.
+  const loadJava = useCallback(async () => {
+    setJavaLoading(true);
+    try {
+      const list = await window.electronAPI.java.getCached();
+      if (mountedRef.current) setJavaList(list || []);
+    } catch {
+      // 실패 시 빈 목록 유지
+    } finally {
+      if (mountedRef.current) setJavaLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (tab === 'java' && !javaLoadedRef.current) {
+      javaLoadedRef.current = true;
+      loadJava();
+    }
+  }, [tab, loadJava]);
+
+  const handleRemoveToken = async () => {
+    if (!tokenToDelete) return;
+    setRemovingToken(true);
+    try {
+      await window.electronAPI.hyenipack.removeToken(tokenToDelete.receivedAt);
+      await loadTokens();
+      toast.success('인증 제거됨', '이 기기에서 인증을 제거했습니다.');
+    } catch {
+      toast.error('제거 실패', '인증 제거에 실패했습니다.');
+    } finally {
+      setRemovingToken(false);
+      setTokenToDelete(null);
+    }
+  };
+
+  useEffect(() => {
+    // StrictMode(dev)는 mount→cleanup→mount로 이펙트를 이중 호출한다. cleanup에서 false로
+    // 둔 mountedRef를 재mount 때 반드시 true로 되돌려야 한다(안 그러면 영구 false → 이후
+    // 모든 비동기 setState 가드가 막혀 캐시 측정 결과가 반영 안 됨).
+    mountedRef.current = true;
     (async () => {
       try {
         // Get system memory
         const sysMem = await window.electronAPI.system.getMemory?.() || 16384;
         setSystemMemory(sysMem);
-        
+
         // Get settings
         const gs = await window.electronAPI.settings.get();
         const filled = fillDefaults(gs || {});
         setSettings(filled);
         setOriginal(filled);
-        
-        // Get cached Java installations (no re-detection)
-        const cachedJava = await window.electronAPI.java.getCached();
-        setJavaList(cachedJava || []);
-        
-        // Get cache stats
-        const stats = await window.electronAPI.settings.getCacheStats();
-        setCacheStats(stats);
-        
+
+        // Java 감지·캐시 통계는 여기서 미리 하지 않는다 — java 감지(~400ms)와 shared/ 전수 walk가
+        // 설정 열기를 지연시킨다. 각각 Java 탭·캐시 탭 진입 시 lazy 로드(위 useEffect)로 옮겼다.
+
         // Get launcher version
         const versionResult = await window.electronAPI.launcher.getVersion();
         if (versionResult.success) {
           setCurrentVersion(versionResult.version);
         }
+
+        // 저장된 혜니 인증 토큰 현황(표시 전용) 로드
+        await loadTokens();
       } finally {
         setLoading(false);
       }
@@ -106,6 +186,7 @@ export const SettingsPage: React.FC = () => {
     });
 
     return () => {
+      mountedRef.current = false;
       cleanup1?.();
       cleanup2?.();
       cleanup3?.();
@@ -258,6 +339,7 @@ export const SettingsPage: React.FC = () => {
           <TabButton active={tab==='resolution'} onClick={() => setTab('resolution')}>해상도</TabButton>
           <TabButton active={tab==='cache'} onClick={() => setTab('cache')}>캐시</TabButton>
           <TabButton active={tab==='update'} onClick={() => setTab('update')}>자동 업데이트</TabButton>
+          <TabButton active={tab==='auth'} onClick={() => setTab('auth')}>혜니 인증</TabButton>
         </div>
 
         {tab==='download' && (
@@ -295,14 +377,19 @@ export const SettingsPage: React.FC = () => {
         )}
 
         {tab==='java' && (
-          <SectionCard title="Java" subtitle="프로필에서 미설정 시 사용됩니다." action={<button onClick={async()=>{ const list=await window.electronAPI.java.detect(true); setJavaList(list||[]); }} className="px-3 py-1.5 text-sm bg-gray-800 border border-gray-700 rounded-md hover:bg-gray-750">재감지</button>}>
+          <SectionCard title="Java" subtitle="프로필에서 미설정 시 사용됩니다." action={<button disabled={javaLoading} onClick={async()=>{ setJavaLoading(true); try { const list=await window.electronAPI.java.detect(true); if(mountedRef.current) setJavaList(list||[]); } finally { if(mountedRef.current) setJavaLoading(false); } }} className="px-3 py-1.5 text-sm bg-gray-800 border border-gray-700 rounded-md hover:bg-gray-750 disabled:opacity-50">{javaLoading ? '감지 중…' : '재감지'}</button>}>
             <div className="space-y-6">
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-sm text-gray-300 font-medium">Java 설치 목록</span>
                   <span className="text-xs text-gray-500">{javaList.length}개 감지됨</span>
                 </div>
-                {javaList.length > 0 ? (
+                {javaLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-gray-400 py-2 mb-4">
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    Java 설치 감지 중…
+                  </div>
+                ) : javaList.length > 0 ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
                     {javaList.map(j => {
                       const active = s.java?.java_path === j.path;
@@ -556,16 +643,23 @@ export const SettingsPage: React.FC = () => {
               {/* Cache statistics */}
               <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-4">
                 <div className="text-sm text-gray-400 mb-3">캐시 통계</div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <div className="text-2xl font-semibold text-purple-400">{(cacheStats.size / 1024 / 1024 / 1024).toFixed(2)} GB</div>
-                    <div className="text-xs text-gray-500">현재 사용량</div>
+                {cacheStats === null || cacheStatsLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-gray-400 py-2">
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    캐시 용량 측정 중…
                   </div>
-                  <div>
-                    <div className="text-2xl font-semibold text-purple-400">{cacheStats.files.toLocaleString()}</div>
-                    <div className="text-xs text-gray-500">캐시된 파일 수</div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-2xl font-semibold text-purple-400">{(cacheStats.size / 1024 / 1024 / 1024).toFixed(2)} GB</div>
+                      <div className="text-xs text-gray-500">현재 사용량</div>
+                    </div>
+                    <div>
+                      <div className="text-2xl font-semibold text-purple-400">{cacheStats.files.toLocaleString()}</div>
+                      <div className="text-xs text-gray-500">캐시된 파일 수</div>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
               
               {/* Cache settings */}
@@ -596,8 +690,7 @@ export const SettingsPage: React.FC = () => {
                       const result = await window.electronAPI.settings.resetCache();
                       if (result.success) {
                         toast.success('캐시 삭제 완료', result.message);
-                        const stats = await window.electronAPI.settings.getCacheStats();
-                        setCacheStats(stats);
+                        await loadCacheStats(); // 삭제 후 재측정(측정 중 표시 포함)
                       } else {
                         toast.error('캐시 삭제 실패', result.message);
                       }
@@ -611,6 +704,76 @@ export const SettingsPage: React.FC = () => {
             </div>
           </SectionCard>
         )}
+
+        {/* 혜니 인증 탭 — 저장된 인증 현황(표시 전용). 방송 노출 안전: 서버 주소·토큰 값 미표시 */}
+        {tab==='auth' && (
+        <SectionCard
+          title="혜니 인증"
+          subtitle="Discord /인증으로 받은 인증 현황입니다. 서버 주소와 토큰 값은 표시되지 않습니다."
+          action={
+            <button
+              onClick={loadTokens}
+              className="px-3 py-1.5 text-sm bg-gray-800 border border-gray-700 rounded-md hover:bg-gray-750"
+            >
+              새로고침
+            </button>
+          }
+        >
+          {tokensError ? (
+            <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-4 text-center">
+              <p className="text-sm text-gray-400">확인할 수 없습니다</p>
+            </div>
+          ) : tokens === null ? (
+            <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-4 text-center">
+              <p className="text-sm text-gray-400">불러오는 중...</p>
+            </div>
+          ) : tokens.length === 0 ? (
+            <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-4 text-center">
+              <p className="text-sm text-gray-400">저장된 인증이 없습니다.</p>
+              <p className="text-xs text-gray-500 mt-1">Discord에서 /인증 명령어로 인증하세요.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="text-sm text-gray-300">인증 {tokens.length}개 저장됨</div>
+              <div className="space-y-2">
+                {tokens.map((t, i) => {
+                  const label = t.servers.length > 0
+                    ? `서버 ${t.servers.length}곳에서 사용하는 인증`
+                    : '일반 인증 (대상 서버 미지정)';
+                  return (
+                    <div key={i} className="bg-gray-900/50 border border-gray-800 rounded-lg p-3 flex items-center justify-between gap-4">
+                      <div className="text-sm text-gray-200 min-w-0 truncate">{label}</div>
+                      <div className="flex items-center gap-3 flex-shrink-0">
+                        <div className="text-xs text-gray-500">
+                          {new Date(t.receivedAt * 1000).toLocaleString()} 등록
+                        </div>
+                        <button
+                          onClick={() => setTokenToDelete({ receivedAt: t.receivedAt, label })}
+                          title="이 기기에서 인증 제거"
+                          className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded-md transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </SectionCard>
+        )}
+
+        <ConfirmDialog
+          isOpen={tokenToDelete !== null}
+          variant="danger"
+          title="인증 제거"
+          message={`'${tokenToDelete?.label ?? ''}'을(를) 이 기기에서 제거합니다.\n\n로컬에서만 제거되며 서버측 인증은 만료 시까지 유효합니다. 다시 사용하려면 Discord /인증으로 재인증하세요.`}
+          confirmText={removingToken ? '제거 중...' : '제거'}
+          cancelText="취소"
+          onConfirm={handleRemoveToken}
+          onCancel={() => setTokenToDelete(null)}
+        />
 
         {/* Sticky action bar for small screens */}
         <div className="md:hidden sticky bottom-0 left-0 right-0 bg-gray-900/90 backdrop-blur border-t border-gray-800 px-4 py-3 flex gap-2">

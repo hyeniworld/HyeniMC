@@ -10,6 +10,7 @@ interface UseWorkerModUpdatesOptions {
   profilePath: string;
   gameVersion: string;
   loaderType: string;
+  loaderVersion: string;
   serverAddress?: string;
   autoCheck?: boolean;
   checkInterval?: number; // in milliseconds
@@ -19,6 +20,7 @@ export function useWorkerModUpdates({
   profilePath,
   gameVersion,
   loaderType,
+  loaderVersion,
   serverAddress,
   autoCheck = true,
   checkInterval = 30 * 60 * 1000 // 30 minutes
@@ -46,6 +48,7 @@ export function useWorkerModUpdates({
         profilePath,
         gameVersion,
         loaderType,
+        loaderVersion,
         serverAddress
       );
 
@@ -62,7 +65,7 @@ export function useWorkerModUpdates({
     } finally {
       setIsChecking(false);
     }
-  }, [profilePath, gameVersion, loaderType, serverAddress]);
+  }, [profilePath, gameVersion, loaderType, loaderVersion, serverAddress]);
 
   // Update ref whenever checkForUpdates changes
   useEffect(() => {
@@ -156,7 +159,10 @@ export function useWorkerModUpdates({
         };
       }
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '모드 설치에 실패했습니다.';
+      // Electron IPC는 에러를 Error 객체로, Tauri invoke는 Result<_,String>의 Err을
+      // 평문 문자열로 reject한다. 문자열도 표면화해야 "Discord /인증" 같은 구체 안내가 살아난다.
+      const errorMsg =
+        err instanceof Error ? err.message : typeof err === 'string' ? err : '모드 설치에 실패했습니다.';
       console.error('[Worker Mods] 모드 설치 실패:', err);
       setError(errorMsg);
       return { 
