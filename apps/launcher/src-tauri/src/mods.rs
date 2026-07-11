@@ -204,6 +204,7 @@ pub fn mod_toggle(
     // 파일만 rename — 캐시 정합은 다음 mod_list가 개수/mtime 차이로 자동 처리.
     modmeta::toggle_mod(&mods_dir(&db, &profile_id)?, &file_name, enabled)
         .map_err(cmd_err("mod_toggle"))?;
+    log::info!("[mods] 토글: {file_name} → {} (profile={profile_id})", if enabled { "활성" } else { "비활성" });
     Ok(serde_json::json!({ "success": true }))
 }
 
@@ -214,5 +215,6 @@ pub fn mod_remove(
     file_name: String,
 ) -> Result<serde_json::Value, String> {
     modmeta::remove_mod(&mods_dir(&db, &profile_id)?, &file_name).map_err(cmd_err("mod_remove"))?;
+    log::info!("[mods] 삭제: {file_name} (profile={profile_id})");
     Ok(serde_json::json!({ "success": true }))
 }

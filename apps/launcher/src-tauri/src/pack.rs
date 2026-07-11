@@ -75,6 +75,7 @@ pub async fn hyenipack_import(
     };
     let dirs = game_dirs_for(&profile)?;
     let cfg = crate::game::download_config(&settings);
+    log::info!("[pack] 혜니팩 import 시작: profile={profile_id} file={file_path}");
 
     // CF 프록시용 토큰 (계정 있으면)
     let token = match &account_id {
@@ -127,6 +128,10 @@ pub async fn hyenipack_import(
     let now = now_secs();
     hyenimc_core::profile::update_profile(&db.0.lock().unwrap(), &profile_id, &patch, now)
         .map_err(cmd_err("pack"))?;
+    log::info!(
+        "[pack] 혜니팩 import 완료: profile={profile_id} ({} {} / {})",
+        manifest.minecraft.version, manifest.minecraft.loader_type, manifest.minecraft.loader_version
+    );
     Ok(())
 }
 
@@ -235,6 +240,7 @@ pub async fn pack_download_from_worker(
     let data_dir = hyenimc_core::paths::legacy_data_dir()
         .ok_or_else(|| "데이터 디렉터리를 결정할 수 없습니다.".to_string())?;
     let dest = data_dir.join(".temp").join(format!("{pack_id}-{version}.hyenipack"));
+    log::info!("[pack] 워커 다운로드 시작: pack={pack_id} v{version}");
 
     let app2 = app.clone();
     let pid = pack_id.clone();
@@ -264,6 +270,7 @@ pub async fn pack_download_from_worker(
     )
     .await
     .map_err(cmd_err("pack"))?;
+    log::info!("[pack] 워커 다운로드 완료: pack={pack_id} v{version} → {}", dest.display());
     Ok(PackDownloadResult { path: dest.display().to_string(), version })
 }
 

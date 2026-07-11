@@ -47,6 +47,7 @@ pub fn account_list(db: State<DbState>) -> Result<Vec<hyenimc_core::account::Acc
 
 #[tauri::command]
 pub fn account_remove(db: State<DbState>, id: String) -> Result<bool, String> {
+    log::info!("[account] 계정 제거: id={id}");
     hyenimc_core::account::remove_account(&db.0.lock().unwrap(), &id).map_err(cmd_err("account"))
 }
 
@@ -57,6 +58,7 @@ pub async fn account_login_microsoft(
     db: State<'_, DbState>,
     crypto: State<'_, CryptoState>,
 ) -> Result<hyenimc_core::account::Account, String> {
+    log::info!("[account] MS 로그인 시작");
     let client_id = client_id()?;
     let (verifier, challenge) = auth::generate_pkce();
     let state = auth::generate_state();
@@ -88,7 +90,7 @@ pub async fn account_login_microsoft(
         expires_at: now_ms() + session.expires_in * 1000,
     };
     let conn = db.0.lock().unwrap();
-    hyenimc_core::account::save_microsoft_account(
+    let account = hyenimc_core::account::save_microsoft_account(
         &conn,
         &crypto.key,
         &crypto.device_id,
@@ -98,7 +100,9 @@ pub async fn account_login_microsoft(
         profile.active_skin_url().as_deref(),
         now_secs(),
     )
-    .map_err(cmd_err("account"))
+    .map_err(cmd_err("account"))?;
+    log::info!("[account] MS 로그인 성공: {} ({})", profile.name, profile.id);
+    Ok(account)
 }
 
 /// 토큰 갱신 (만료 임박 시 자동) — MS refresh → MC 세션 재발급 → 저장

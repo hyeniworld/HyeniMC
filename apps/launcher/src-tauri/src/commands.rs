@@ -64,9 +64,14 @@ pub fn profile_create(db: State<DbState>, data: NewProfile) -> Result<hyenimc_co
     )
     .map_err(cmd_err("commands"))?;
 
-    hyenimc_core::profile::get_profile(&conn, &created.id)
+    let profile = hyenimc_core::profile::get_profile(&conn, &created.id)
         .map_err(cmd_err("commands"))?
-        .ok_or_else(|| "created profile vanished".into())
+        .ok_or_else(|| "created profile vanished".to_string())?;
+    log::info!(
+        "[profile] 생성: '{}' ({} / {}) id={}",
+        profile.name, profile.game_version, profile.loader_type, profile.id
+    );
+    Ok(profile)
 }
 
 #[tauri::command]
@@ -85,8 +90,10 @@ pub async fn profile_delete(
     game_state: State<'_, GameState>,
     id: String,
 ) -> Result<bool, String> {
+    log::info!("[profile] 삭제 요청: id={id}");
     // 0) 실행 중이면 차단 — 사용 중인 파일을 지우면 게임이 깨지므로 먼저 종료해야 한다.
     if game_state.is_running(&id) {
+        log::warn!("[profile] 삭제 거부(실행 중): id={id}");
         return Err("게임이 실행 중인 프로필은 삭제할 수 없습니다. 먼저 게임을 종료하세요.".into());
     }
 
@@ -113,6 +120,7 @@ pub async fn profile_delete(
             _ => true,
         };
         if delete_failed {
+            log::warn!("[profile] 파일 삭제 실패(불완전, delete-failed 표시): id={id}");
             let conn = db.0.lock().unwrap();
             let _ = conn.execute(
                 "UPDATE profiles SET installation_status = 'delete-failed' WHERE id = ?1",
@@ -131,6 +139,7 @@ pub async fn profile_delete(
         let conn = db.0.lock().unwrap();
         hyenimc_core::profile::delete_profile(&conn, &id).map_err(cmd_err("commands"))?
     };
+    log::info!("[profile] 삭제 완료: id={id} (db_deleted={deleted})");
     Ok(deleted)
 }
 
