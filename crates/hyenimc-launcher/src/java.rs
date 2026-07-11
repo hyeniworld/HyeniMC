@@ -94,12 +94,13 @@ pub fn parse_major(version: &str) -> u32 {
 /// 특정 java 실행 파일을 실행해 유효성/버전을 확인 (실행 전 검증에 사용). 유효한 Java가 아니면 None.
 pub async fn probe(java_path: &std::path::Path) -> Option<JavaInstallation> {
     // properties까지 한 번에 얻어 vendor/os.arch도 채운다(별도 호출 불필요).
-    let output = tokio::process::Command::new(java_path)
-        .arg("-XshowSettings:properties")
-        .arg("-version")
-        .output()
-        .await
-        .ok()?;
+    let mut cmd = tokio::process::Command::new(java_path);
+    cmd.arg("-XshowSettings:properties").arg("-version");
+    // Windows: GUI(windows_subsystem) 릴리스에서 java.exe 실행 시 콘솔 창이 뜨는 것 방지.
+    // 감지는 후보마다 probe를 호출하므로 이게 없으면 콘솔 창이 여러 개 깜빡인다(launch.rs·loader.rs와 동일).
+    #[cfg(windows)]
+    cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    let output = cmd.output().await.ok()?;
     let text = String::from_utf8_lossy(&output.stderr);
     let version = parse_java_version_output(&text)?;
     let vendor = parse_property(&text, "java.vendor").unwrap_or_default();
@@ -211,12 +212,12 @@ pub async fn detect_java_installations() -> Vec<JavaInstallation> {
 }
 
 async fn which_java() -> Result<std::path::PathBuf, ()> {
-    let cmd = if cfg!(windows) { "where" } else { "which" };
-    let out = tokio::process::Command::new(cmd)
-        .arg("java")
-        .output()
-        .await
-        .map_err(|_| ())?;
+    let exe = if cfg!(windows) { "where" } else { "which" };
+    let mut cmd = tokio::process::Command::new(exe);
+    cmd.arg("java");
+    #[cfg(windows)]
+    cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW — where.exe 콘솔 창 방지
+    let out = cmd.output().await.map_err(|_| ())?;
     let text = String::from_utf8_lossy(&out.stdout);
     let first = text.lines().next().ok_or(())?.trim();
     if first.is_empty() {
