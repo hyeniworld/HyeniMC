@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { SectionCard } from '../components/common/SectionCard';
 import { Slider } from '../components/common/Slider';
 import { useToast } from '../contexts/ToastContext';
-import { RefreshCw, Download, CheckCircle2 } from 'lucide-react';
+import { RefreshCw, Download, CheckCircle2, Trash2 } from 'lucide-react';
+import { ConfirmDialog } from '../components/common/ConfirmDialog';
 
 type DownloadSettings = {
   request_timeout_ms?: number;
@@ -58,6 +59,8 @@ export const SettingsPage: React.FC = () => {
   const [updateStatus, setUpdateStatus] = useState<'checking' | 'available' | 'not-available' | 'error' | null>(null);
   const [tokens, setTokens] = useState<Array<{ servers: string[]; receivedAt: number }> | null>(null);
   const [tokensError, setTokensError] = useState(false);
+  const [tokenToDelete, setTokenToDelete] = useState<{ receivedAt: number; label: string } | null>(null);
+  const [removingToken, setRemovingToken] = useState(false);
   const s = settings;
 
   const loadTokens = async () => {
@@ -67,6 +70,21 @@ export const SettingsPage: React.FC = () => {
       setTokensError(false);
     } catch {
       setTokensError(true);
+    }
+  };
+
+  const handleRemoveToken = async () => {
+    if (!tokenToDelete) return;
+    setRemovingToken(true);
+    try {
+      await window.electronAPI.hyenipack.removeToken(tokenToDelete.receivedAt);
+      await loadTokens();
+      toast.success('인증 제거됨', '이 기기에서 인증을 제거했습니다.');
+    } catch {
+      toast.error('제거 실패', '인증 제거에 실패했습니다.');
+    } finally {
+      setRemovingToken(false);
+      setTokenToDelete(null);
     }
   };
 
@@ -659,23 +677,44 @@ export const SettingsPage: React.FC = () => {
             <div className="space-y-3">
               <div className="text-sm text-gray-300">인증 {tokens.length}개 저장됨</div>
               <div className="space-y-2">
-                {tokens.map((t, i) => (
-                  <div key={i} className="bg-gray-900/50 border border-gray-800 rounded-lg p-3 flex items-center justify-between gap-4">
-                    <div className="text-sm text-gray-200 min-w-0 truncate">
-                      {t.servers.length > 0
-                        ? `서버 ${t.servers.length}곳에서 사용하는 인증`
-                        : '일반 인증 (대상 서버 미지정)'}
+                {tokens.map((t, i) => {
+                  const label = t.servers.length > 0
+                    ? `서버 ${t.servers.length}곳에서 사용하는 인증`
+                    : '일반 인증 (대상 서버 미지정)';
+                  return (
+                    <div key={i} className="bg-gray-900/50 border border-gray-800 rounded-lg p-3 flex items-center justify-between gap-4">
+                      <div className="text-sm text-gray-200 min-w-0 truncate">{label}</div>
+                      <div className="flex items-center gap-3 flex-shrink-0">
+                        <div className="text-xs text-gray-500">
+                          {new Date(t.receivedAt * 1000).toLocaleString()} 등록
+                        </div>
+                        <button
+                          onClick={() => setTokenToDelete({ receivedAt: t.receivedAt, label })}
+                          title="이 기기에서 인증 제거"
+                          className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded-md transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
-                    <div className="text-xs text-gray-500 flex-shrink-0">
-                      {new Date(t.receivedAt * 1000).toLocaleString()} 등록
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
         </SectionCard>
         )}
+
+        <ConfirmDialog
+          isOpen={tokenToDelete !== null}
+          variant="danger"
+          title="인증 제거"
+          message={`'${tokenToDelete?.label ?? ''}'을(를) 이 기기에서 제거합니다.\n\n로컬에서만 제거되며 서버측 인증은 만료 시까지 유효합니다. 다시 사용하려면 Discord /인증으로 재인증하세요.`}
+          confirmText={removingToken ? '제거 중...' : '제거'}
+          cancelText="취소"
+          onConfirm={handleRemoveToken}
+          onCancel={() => setTokenToDelete(null)}
+        />
 
         {/* Sticky action bar for small screens */}
         <div className="md:hidden sticky bottom-0 left-0 right-0 bg-gray-900/90 backdrop-blur border-t border-gray-800 px-4 py-3 flex gap-2">

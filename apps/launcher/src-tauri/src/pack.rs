@@ -158,6 +158,14 @@ pub fn hyeni_list_tokens(db: State<'_, DbState>) -> Result<Vec<StoredTokenInfo>,
         .collect())
 }
 
+/// 저장소에서 인증 토큰 1개 제거(receivedAt으로 지목). 로컬 제거만 — 서버측 무효화는 아니다.
+/// 제거되면 true(대상 없으면 false). 방송 안전을 위해 서버 주소 없이 receivedAt으로만 지목한다.
+#[tauri::command]
+pub fn hyeni_remove_token(db: State<'_, DbState>, received_at: i64) -> Result<bool, String> {
+    let conn = db.0.lock().unwrap();
+    hyenimc_core::hyeni_tokens::remove_token(&conn, received_at, now_secs()).map_err(|e| e.to_string())
+}
+
 /// 팩 미리보기 — 설치 없이 매니페스트만 읽기 (preload hyenipack.preview 대응)
 #[tauri::command]
 pub fn hyenipack_preview(file_path: String) -> Result<hyenipack::PackManifest, String> {

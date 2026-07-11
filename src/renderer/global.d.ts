@@ -151,6 +151,7 @@ declare global {
         }>>;
         hasAnyToken: () => Promise<boolean>;
         listTokens: () => Promise<any[]>;
+        removeToken: (receivedAt: number) => Promise<boolean>;
         // 통일된 설치 흐름 (워커 다운로드 → 기존 import 재사용)
         downloadFromWorker: (packId: string) => Promise<{ path: string; version: string }>;
         applyMatchingToken: (profileId: string) => Promise<boolean>;

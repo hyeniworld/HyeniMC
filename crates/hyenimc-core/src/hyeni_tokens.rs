@@ -88,6 +88,19 @@ pub fn any_token(conn: &Connection) -> Result<Option<String>, CoreError> {
     Ok(list_tokens(conn)?.into_iter().next().map(|t| t.token))
 }
 
+/// received_at으로 저장소 엔트리 1개 제거. 제거되면 true, 대상 없으면 false.
+/// 로컬 저장소에서만 제거 — Worker의 서버측 토큰 유효성은 만료까지 그대로다.
+pub fn remove_token(conn: &Connection, received_at: i64, now_secs: i64) -> Result<bool, CoreError> {
+    let mut tokens = read_raw(conn)?;
+    let before = tokens.len();
+    tokens.retain(|t| t.received_at != received_at);
+    if tokens.len() == before {
+        return Ok(false);
+    }
+    write_raw(conn, &tokens, now_secs)?;
+    Ok(true)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -132,6 +145,25 @@ mod tests {
         let list = list_tokens(&conn).unwrap();
         assert_eq!(list.len(), 2);
         assert_eq!(list[0].token, "unscoped2");
+    }
+
+    #[test]
+    fn remove_token_by_received_at() {
+        let conn = db();
+        upsert_token(&conn, "tok-a", &["mc.a.com".into()], 100).unwrap();
+        upsert_token(&conn, "tok-b", &["mc.b.com".into()], 200).unwrap();
+        // 대상 없음 → false, 목록 불변
+        assert!(!remove_token(&conn, 999, 300).unwrap());
+        assert_eq!(list_tokens(&conn).unwrap().len(), 2);
+        // received_at 매칭 제거 → true, 나머지 보존
+        assert!(remove_token(&conn, 100, 300).unwrap());
+        let list = list_tokens(&conn).unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].token, "tok-b");
+        // 마지막 제거 → 빈 목록
+        assert!(remove_token(&conn, 200, 400).unwrap());
+        assert!(list_tokens(&conn).unwrap().is_empty());
+        assert_eq!(any_token(&conn).unwrap(), None);
     }
 
     #[test]
