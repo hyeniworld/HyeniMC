@@ -8,6 +8,8 @@ use hyenimc_core::profile::{NewProfile, ProfilePatch};
 use hyenimc_core::rusqlite::Connection;
 use hyenimc_core::settings::GlobalSettings;
 
+use crate::util::cmd_err;
+
 use crate::game::GameState;
 
 pub struct DbState(pub Mutex<Connection>);
@@ -22,7 +24,7 @@ fn now_secs() -> i64 {
 #[tauri::command]
 pub fn profile_list(db: State<DbState>) -> Result<Vec<hyenimc_core::Profile>, String> {
     let conn = db.0.lock().unwrap();
-    let mut profiles = hyenimc_core::list_profiles(&conn).map_err(|e| e.to_string())?;
+    let mut profiles = hyenimc_core::list_profiles(&conn).map_err(cmd_err("commands"))?;
     // 플레이 시간/통계는 profile_stats 테이블이 원본(profiles.total_play_time은 미사용) —
     // Electron(Go)과 동일하게 stats 값으로 채운다.
     for p in &mut profiles {
@@ -36,7 +38,7 @@ pub fn profile_list(db: State<DbState>) -> Result<Vec<hyenimc_core::Profile>, St
 #[tauri::command]
 pub fn profile_get(db: State<DbState>, id: String) -> Result<Option<hyenimc_core::Profile>, String> {
     let conn = db.0.lock().unwrap();
-    let mut profile = hyenimc_core::profile::get_profile(&conn, &id).map_err(|e| e.to_string())?;
+    let mut profile = hyenimc_core::profile::get_profile(&conn, &id).map_err(cmd_err("commands"))?;
     if let Some(p) = profile.as_mut() {
         if let Ok(stats) = hyenimc_core::stats::get_stats(&conn, &p.id) {
             p.total_play_time = stats.total_play_time;
@@ -53,17 +55,17 @@ pub fn profile_create(db: State<DbState>, data: NewProfile) -> Result<hyenimc_co
 
     // id는 create_profile 내부에서 생성되므로, 생성 후 실경로로 갱신
     let created = hyenimc_core::profile::create_profile(&conn, &data, "", now_secs())
-        .map_err(|e| e.to_string())?;
+        .map_err(cmd_err("commands"))?;
     let dir = instances.join(&created.id);
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(cmd_err("commands"))?;
     conn.execute(
         "UPDATE profiles SET game_directory = ?1 WHERE id = ?2",
         hyenimc_core::rusqlite::params![dir.display().to_string(), created.id],
     )
-    .map_err(|e| e.to_string())?;
+    .map_err(cmd_err("commands"))?;
 
     hyenimc_core::profile::get_profile(&conn, &created.id)
-        .map_err(|e| e.to_string())?
+        .map_err(cmd_err("commands"))?
         .ok_or_else(|| "created profile vanished".into())
 }
 
@@ -74,7 +76,7 @@ pub fn profile_update(
     data: ProfilePatch,
 ) -> Result<Option<hyenimc_core::Profile>, String> {
     hyenimc_core::profile::update_profile(&db.0.lock().unwrap(), &id, &data, now_secs())
-        .map_err(|e| e.to_string())
+        .map_err(cmd_err("commands"))
 }
 
 #[tauri::command]
@@ -127,7 +129,7 @@ pub async fn profile_delete(
     // 3) 파일 정리 후 DB 행 삭제 (짧은 락)
     let deleted = {
         let conn = db.0.lock().unwrap();
-        hyenimc_core::profile::delete_profile(&conn, &id).map_err(|e| e.to_string())?
+        hyenimc_core::profile::delete_profile(&conn, &id).map_err(cmd_err("commands"))?
     };
     Ok(deleted)
 }
@@ -138,7 +140,7 @@ pub fn profile_toggle_favorite(
     id: String,
 ) -> Result<Option<hyenimc_core::Profile>, String> {
     hyenimc_core::profile::toggle_favorite(&db.0.lock().unwrap(), &id, now_secs())
-        .map_err(|e| e.to_string())
+        .map_err(cmd_err("commands"))
 }
 
 #[tauri::command]
@@ -146,13 +148,13 @@ pub fn profile_get_stats(
     db: State<DbState>,
     profile_id: String,
 ) -> Result<hyenimc_core::stats::ProfileStats, String> {
-    hyenimc_core::stats::get_stats(&db.0.lock().unwrap(), &profile_id).map_err(|e| e.to_string())
+    hyenimc_core::stats::get_stats(&db.0.lock().unwrap(), &profile_id).map_err(cmd_err("commands"))
 }
 
 #[tauri::command]
 pub fn profile_record_launch(db: State<DbState>, profile_id: String) -> Result<(), String> {
     hyenimc_core::stats::record_launch(&db.0.lock().unwrap(), &profile_id, now_secs())
-        .map_err(|e| e.to_string())
+        .map_err(cmd_err("commands"))
 }
 
 #[tauri::command]
@@ -162,25 +164,25 @@ pub fn profile_record_play_time(
     seconds: i64,
 ) -> Result<(), String> {
     hyenimc_core::stats::record_play_time(&db.0.lock().unwrap(), &profile_id, seconds)
-        .map_err(|e| e.to_string())
+        .map_err(cmd_err("commands"))
 }
 
 #[tauri::command]
 pub fn profile_record_crash(db: State<DbState>, profile_id: String) -> Result<(), String> {
     hyenimc_core::stats::record_crash(&db.0.lock().unwrap(), &profile_id, now_secs())
-        .map_err(|e| e.to_string())
+        .map_err(cmd_err("commands"))
 }
 
 #[tauri::command]
 pub fn settings_get(db: State<DbState>) -> Result<GlobalSettings, String> {
-    hyenimc_core::settings::get_settings(&db.0.lock().unwrap()).map_err(|e| e.to_string())
+    hyenimc_core::settings::get_settings(&db.0.lock().unwrap()).map_err(cmd_err("commands"))
 }
 
 #[tauri::command]
 pub fn settings_update(db: State<DbState>, settings: serde_json::Value) -> Result<(), String> {
     let conn = db.0.lock().unwrap();
-    let parsed: GlobalSettings = serde_json::from_value(settings).map_err(|e| e.to_string())?;
-    hyenimc_core::settings::update_settings(&conn, &parsed, now_secs()).map_err(|e| e.to_string())
+    let parsed: GlobalSettings = serde_json::from_value(settings).map_err(cmd_err("commands"))?;
+    hyenimc_core::settings::update_settings(&conn, &parsed, now_secs()).map_err(cmd_err("commands"))
 }
 
 /// 재다운로드 가능한 캐시 디렉터리 = `<userData>/shared` (shared 에셋/라이브러리).

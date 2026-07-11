@@ -9,6 +9,7 @@ use zip::write::SimpleFileOptions;
 
 use crate::commands::DbState;
 use crate::game::{game_dirs_for, load_profile_pub, GameState};
+use crate::util::cmd_err;
 
 fn add_file(
     zip: &mut zip::ZipWriter<std::fs::File>,
@@ -36,7 +37,7 @@ pub fn crash_export_report(
     let instance = &dirs.instance_dir;
 
     let downloads = downloads_dir().ok_or_else(|| "다운로드 폴더를 찾을 수 없습니다".to_string())?;
-    std::fs::create_dir_all(&downloads).map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&downloads).map_err(cmd_err("crash_export_report"))?;
 
     let safe_name: String = profile
         .name
@@ -45,7 +46,7 @@ pub fn crash_export_report(
         .collect();
     let out_path = downloads.join(format!("hyenimc-crash-{safe_name}.zip"));
 
-    let file = std::fs::File::create(&out_path).map_err(|e| e.to_string())?;
+    let file = std::fs::File::create(&out_path).map_err(cmd_err("crash_export_report"))?;
     let mut zip = zip::ZipWriter::new(file);
     let opts = SimpleFileOptions::default();
 
@@ -94,7 +95,7 @@ pub fn crash_export_report(
         let _ = zip.write_all(serde_json::to_string_pretty(&info).unwrap_or_default().as_bytes());
     }
 
-    zip.finish().map_err(|e| e.to_string())?;
+    zip.finish().map_err(cmd_err("crash_export_report"))?;
     Ok(out_path.display().to_string())
 }
 
@@ -127,8 +128,8 @@ pub fn crash_open_logs(
     let profile = load_profile_pub(&db, &profile_id)?;
     let dirs = game_dirs_for(&profile)?;
     let logs_dir = dirs.instance_dir.join("logs");
-    std::fs::create_dir_all(&logs_dir).map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&logs_dir).map_err(cmd_err("crash_open_logs"))?;
     app.opener()
         .open_path(logs_dir.display().to_string(), None::<String>)
-        .map_err(|e| e.to_string())
+        .map_err(cmd_err("crash_open_logs"))
 }

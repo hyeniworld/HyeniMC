@@ -9,6 +9,7 @@ use hyenimc_launcher::hyenipack;
 use hyenimc_launcher::install::GameDirs;
 
 use crate::account::CryptoState;
+use crate::util::cmd_err;
 use crate::commands::DbState;
 use crate::game::{game_dirs_for, load_profile_pub};
 
@@ -69,7 +70,7 @@ pub async fn hyenipack_import(
 ) -> Result<(), String> {
     let (profile, settings) = {
         let p = load_profile_pub(&db, &profile_id)?;
-        let s = hyenimc_core::settings::get_settings(&db.0.lock().unwrap()).map_err(|e| e.to_string())?;
+        let s = hyenimc_core::settings::get_settings(&db.0.lock().unwrap()).map_err(cmd_err("pack"))?;
         (p, s)
     };
     let dirs = game_dirs_for(&profile)?;
@@ -114,7 +115,7 @@ pub async fn hyenipack_import(
         },
     )
     .await
-    .map_err(|e| e.to_string())?;
+    .map_err(cmd_err("pack"))?;
 
     // 프로필 게임/로더 버전 반영 (다음 실행 시 로더 설치)
     let patch = hyenimc_core::profile::ProfilePatch {
@@ -125,7 +126,7 @@ pub async fn hyenipack_import(
     };
     let now = now_secs();
     hyenimc_core::profile::update_profile(&db.0.lock().unwrap(), &profile_id, &patch, now)
-        .map_err(|e| e.to_string())?;
+        .map_err(cmd_err("pack"))?;
     Ok(())
 }
 
@@ -133,7 +134,7 @@ pub async fn hyenipack_import(
 #[tauri::command]
 pub fn hyeni_has_any_token(db: State<'_, DbState>) -> Result<bool, String> {
     let conn = db.0.lock().unwrap();
-    Ok(hyenimc_core::hyeni_tokens::any_token(&conn).map_err(|e| e.to_string())?.is_some())
+    Ok(hyenimc_core::hyeni_tokens::any_token(&conn).map_err(cmd_err("pack"))?.is_some())
 }
 
 /// 저장된 인증 토큰 현황(표시 전용) — 토큰 값은 반환하지 않는다.
@@ -148,7 +149,7 @@ pub struct StoredTokenInfo {
 #[tauri::command]
 pub fn hyeni_list_tokens(db: State<'_, DbState>) -> Result<Vec<StoredTokenInfo>, String> {
     let conn = db.0.lock().unwrap();
-    let tokens = hyenimc_core::hyeni_tokens::list_tokens(&conn).map_err(|e| e.to_string())?;
+    let tokens = hyenimc_core::hyeni_tokens::list_tokens(&conn).map_err(cmd_err("pack"))?;
     Ok(tokens
         .into_iter()
         .map(|t| StoredTokenInfo {
@@ -163,13 +164,13 @@ pub fn hyeni_list_tokens(db: State<'_, DbState>) -> Result<Vec<StoredTokenInfo>,
 #[tauri::command]
 pub fn hyeni_remove_token(db: State<'_, DbState>, received_at: i64) -> Result<bool, String> {
     let conn = db.0.lock().unwrap();
-    hyenimc_core::hyeni_tokens::remove_token(&conn, received_at, now_secs()).map_err(|e| e.to_string())
+    hyenimc_core::hyeni_tokens::remove_token(&conn, received_at, now_secs()).map_err(cmd_err("pack"))
 }
 
 /// 팩 미리보기 — 설치 없이 매니페스트만 읽기 (preload hyenipack.preview 대응)
 #[tauri::command]
 pub fn hyenipack_preview(file_path: String) -> Result<hyenipack::PackManifest, String> {
-    hyenipack::read_manifest_from_zip(&PathBuf::from(&file_path)).map_err(|e| e.to_string())
+    hyenipack::read_manifest_from_zip(&PathBuf::from(&file_path)).map_err(cmd_err("pack"))
 }
 
 /// 팩 업데이트 확인 (없으면 null, 네트워크 실패는 에러)
@@ -183,7 +184,7 @@ pub async fn pack_check_update(
     let http = reqwest::Client::new();
     hyenipack::check_pack_update(&http, &worker_base()?, &dirs.instance_dir)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(cmd_err("pack"))
 }
 
 /// 현재 프로필에 설치된 팩 메타(없으면 null). 팩 프로필 여부 판별 + 현재 버전 표시용.
@@ -204,7 +205,7 @@ pub async fn pack_list_available() -> Result<Vec<hyenimc_launcher::hyenipack::Pa
     let http = reqwest::Client::new();
     hyenimc_launcher::hyenipack::fetch_pack_list(&http, &worker_base()?)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(cmd_err("pack"))
 }
 
 #[derive(serde::Serialize)]
@@ -225,7 +226,7 @@ pub async fn pack_download_from_worker(
     let http = reqwest::Client::new();
     let version = hyenimc_launcher::hyenipack::fetch_pack_latest_version(&http, &base, &pack_id)
         .await
-        .map_err(|e| e.to_string())?
+        .map_err(cmd_err("pack"))?
         .ok_or_else(|| "혜니팩을 찾을 수 없습니다(비공개이거나 존재하지 않음).".to_string())?;
     // 프로필이 아직 없으므로 저장소 토큰만 사용(다운로드는 스코프 무관)
     let token = resolve_download_token(&db, None).ok_or_else(|| {
@@ -262,7 +263,7 @@ pub async fn pack_download_from_worker(
         },
     )
     .await
-    .map_err(|e| e.to_string())?;
+    .map_err(cmd_err("pack"))?;
     Ok(PackDownloadResult { path: dest.display().to_string(), version })
 }
 

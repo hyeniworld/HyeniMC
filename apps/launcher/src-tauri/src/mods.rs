@@ -12,6 +12,7 @@ use hyenimc_launcher::modmeta::{self, InstalledMod};
 
 use crate::commands::DbState;
 use crate::game::load_profile_pub;
+use crate::util::cmd_err;
 
 const DISABLED: &str = ".disabled";
 
@@ -107,7 +108,7 @@ pub async fn mod_list(
     // 캐시 조회(빠름)
     let cached = {
         let conn = db.0.lock().unwrap();
-        mod_cache::list_cached_mods(&conn, &profile_id).map_err(|e| e.to_string())?
+        mod_cache::list_cached_mods(&conn, &profile_id).map_err(cmd_err("mod_list"))?
     };
     let cache_map: HashMap<String, CachedMod> =
         cached.into_iter().map(|m| (m.file_name.clone(), m)).collect();
@@ -170,13 +171,13 @@ pub async fn mod_list(
                 .collect()
         })
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(cmd_err("mod_list"))?;
 
         {
             let conn = db.0.lock().unwrap();
             let dir_str = dir.to_string_lossy();
             mod_cache::upsert_mods(&conn, &profile_id, &dir_str, &parsed, now_secs())
-                .map_err(|e| e.to_string())?;
+                .map_err(cmd_err("mod_list"))?;
         }
         result.extend(parsed);
     }
@@ -185,7 +186,7 @@ pub async fn mod_list(
     {
         let conn = db.0.lock().unwrap();
         let names: Vec<String> = disk.iter().map(|f| f.disk_name.clone()).collect();
-        mod_cache::delete_missing(&conn, &profile_id, &names).map_err(|e| e.to_string())?;
+        mod_cache::delete_missing(&conn, &profile_id, &names).map_err(cmd_err("mod_list"))?;
     }
 
     let mut installed: Vec<InstalledMod> = result.iter().map(to_installed).collect();
@@ -202,7 +203,7 @@ pub fn mod_toggle(
 ) -> Result<serde_json::Value, String> {
     // 파일만 rename — 캐시 정합은 다음 mod_list가 개수/mtime 차이로 자동 처리.
     modmeta::toggle_mod(&mods_dir(&db, &profile_id)?, &file_name, enabled)
-        .map_err(|e| e.to_string())?;
+        .map_err(cmd_err("mod_toggle"))?;
     Ok(serde_json::json!({ "success": true }))
 }
 
@@ -212,6 +213,6 @@ pub fn mod_remove(
     profile_id: String,
     file_name: String,
 ) -> Result<serde_json::Value, String> {
-    modmeta::remove_mod(&mods_dir(&db, &profile_id)?, &file_name).map_err(|e| e.to_string())?;
+    modmeta::remove_mod(&mods_dir(&db, &profile_id)?, &file_name).map_err(cmd_err("mod_remove"))?;
     Ok(serde_json::json!({ "success": true }))
 }

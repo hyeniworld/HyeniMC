@@ -11,6 +11,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use hyenimc_launcher::download::DownloadConfig;
 use hyenimc_launcher::install::{ensure_version, native_jars_for, GameDirs};
 use hyenimc_launcher::launch::{build_arguments, build_classpath, spawn_game, GameHandle, LaunchSpec};
+use crate::util::cmd_err;
 use hyenimc_launcher::manifest::{VersionManifest, VERSION_MANIFEST_URL};
 
 use crate::commands::DbState;
@@ -105,7 +106,7 @@ pub fn game_dirs_for(profile: &hyenimc_core::Profile) -> Result<GameDirs, String
 
 fn load_profile(db: &State<'_, DbState>, profile_id: &str) -> Result<hyenimc_core::Profile, String> {
     hyenimc_core::profile::get_profile(&db.0.lock().unwrap(), profile_id)
-        .map_err(|e| e.to_string())?
+        .map_err(cmd_err("game"))?
         .ok_or_else(|| format!("프로필 없음: {profile_id}"))
 }
 
@@ -134,10 +135,10 @@ async fn resolve_version_url(
         .get(VERSION_MANIFEST_URL)
         .send()
         .await
-        .map_err(|e| e.to_string())?
+        .map_err(cmd_err("game"))?
         .json()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(cmd_err("game"))?;
     Ok(manifest
         .versions
         .into_iter()
@@ -190,7 +191,7 @@ async fn ensure_profile_version(
         );
     })
     .await
-    .map_err(|e| e.to_string())?;
+    .map_err(cmd_err("game"))?;
     Ok(detail)
 }
 
@@ -246,11 +247,11 @@ pub async fn loader_get_versions(
     let mut list: Vec<hyenimc_launcher::loader::LoaderVersion> = match loader_type.as_str() {
         "fabric" => hyenimc_launcher::loader::fabric_loader_versions(&http, &game_version)
             .await
-            .map_err(|e| e.to_string())?,
+            .map_err(cmd_err("game"))?,
         "neoforge" => {
             let all = hyenimc_launcher::loader::neoforge_versions(&http)
                 .await
-                .map_err(|e| e.to_string())?;
+                .map_err(cmd_err("game"))?;
             let mut list: Vec<_> = all
                 .into_iter()
                 .filter(|v| hyenimc_launcher::loader::neoforge_matches_mc(v, &game_version))
@@ -267,7 +268,7 @@ pub async fn loader_get_versions(
         "forge" => {
             let all = hyenimc_launcher::loader::forge_versions(&http, &game_version)
                 .await
-                .map_err(|e| e.to_string())?;
+                .map_err(cmd_err("game"))?;
             let mut list: Vec<_> = all
                 .into_iter()
                 .map(|v| hyenimc_launcher::loader::LoaderVersion {
@@ -295,10 +296,10 @@ pub async fn version_list_minecraft() -> Result<Vec<VersionEntry>, String> {
         .get(VERSION_MANIFEST_URL)
         .send()
         .await
-        .map_err(|e| e.to_string())?
+        .map_err(cmd_err("game"))?
         .json()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(cmd_err("game"))?;
     Ok(manifest
         .versions
         .into_iter()
@@ -314,7 +315,7 @@ pub async fn game_download_version(
 ) -> Result<(), String> {
     let (profile, settings) = {
         let p = load_profile(&db, &profile_id)?;
-        let s = hyenimc_core::settings::get_settings(&db.0.lock().unwrap()).map_err(|e| e.to_string())?;
+        let s = hyenimc_core::settings::get_settings(&db.0.lock().unwrap()).map_err(cmd_err("game"))?;
         (p, s)
     };
     let dirs = game_dirs_for(&profile)?;
@@ -360,7 +361,7 @@ pub async fn game_launch(
             let exists = {
                 let conn = db.0.lock().unwrap();
                 hyenimc_core::account::get_account(&conn, aid)
-                    .map_err(|e| e.to_string())?
+                    .map_err(cmd_err("game"))?
                     .is_some()
             };
             if !exists {
@@ -371,7 +372,7 @@ pub async fn game_launch(
 
     let (profile, settings) = {
         let p = load_profile(&db, &profile_id)?;
-        let s = hyenimc_core::settings::get_settings(&db.0.lock().unwrap()).map_err(|e| e.to_string())?;
+        let s = hyenimc_core::settings::get_settings(&db.0.lock().unwrap()).map_err(cmd_err("game"))?;
         (p, s)
     };
     let dirs = game_dirs_for(&profile)?;
@@ -519,7 +520,7 @@ pub async fn game_launch(
             let _ = app.emit("game:log", serde_json::json!({ "profileId": profile_id, "line": "[loader] Fabric 설치 확인 중..." }));
             hyenimc_launcher::loader::install_fabric(&http, &profile.game_version, &loader_version, &dirs, &cfg)
                 .await
-                .map_err(|e| e.to_string())?
+                .map_err(cmd_err("game"))?
         }
         "neoforge" if !loader_version.is_empty() => {
             let _ = app.emit("game:log", serde_json::json!({ "profileId": profile_id, "line": "[loader] NeoForge 설치 확인 중..." }));
@@ -529,7 +530,7 @@ pub async fn game_launch(
                 let _ = app_log.emit("game:log", serde_json::json!({ "profileId": pid, "line": line }));
             })
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(cmd_err("game"))?
         }
         "forge" if !loader_version.is_empty() => {
             let _ = app.emit("game:log", serde_json::json!({ "profileId": profile_id, "line": "[loader] Forge 설치 확인 중..." }));
@@ -539,7 +540,7 @@ pub async fn game_launch(
                 let _ = app_log.emit("game:log", serde_json::json!({ "profileId": pid, "line": line }));
             })
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(cmd_err("game"))?
         }
         _ => profile.game_version.clone(),
     };
@@ -575,18 +576,18 @@ pub async fn game_launch(
                 },
             )
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(cmd_err("game"))?;
         }
     }
 
     // 로더 프로필이면 병합된 상세를 다시 로드
     let detail = hyenimc_launcher::install::load_version_detail(&dirs, &version_id)
-        .map_err(|e| e.to_string())?;
+        .map_err(cmd_err("game"))?;
 
     // ④ natives + classpath + 인자
     let native_jars = native_jars_for(&detail, &dirs);
     let natives_dir = hyenimc_launcher::natives::extract_natives(&dirs.version_dir(&version_id), &native_jars)
-        .map_err(|e| e.to_string())?;
+        .map_err(cmd_err("game"))?;
     let (classpath, missing) = build_classpath(&detail, &dirs);
     log::info!(
         "실행 준비: version_id={version_id} java={java_path} classpath_libs={} 누락={}",
@@ -607,7 +608,7 @@ pub async fn game_launch(
         let account = {
             let conn = db.0.lock().unwrap();
             hyenimc_core::account::get_account(&conn, aid)
-                .map_err(|e| e.to_string())?
+                .map_err(cmd_err("game"))?
                 .ok_or_else(|| format!("계정 없음: {aid}"))?
         };
         (account.name, account.uuid, Some(tokens.access_token), Some("msa".to_string()))
@@ -630,11 +631,11 @@ pub async fn game_launch(
         fullscreen: profile.fullscreen.unwrap_or(settings.resolution.fullscreen),
     };
     let args = build_arguments(&detail, &spec, &dirs, &natives_dir, &classpath)
-        .map_err(|e| e.to_string())?;
+        .map_err(cmd_err("game"))?;
 
     // ④ 통계 + spawn + 이벤트
     hyenimc_core::stats::record_launch(&db.0.lock().unwrap(), &profile_id, now_secs())
-        .map_err(|e| e.to_string())?;
+        .map_err(cmd_err("game"))?;
 
     // 새 실행마다 로그 버퍼 초기화 (크래시 리포트용)
     game_state.log_buffers.lock().unwrap().insert(profile_id.clone(), Vec::new());
@@ -691,7 +692,7 @@ pub async fn game_launch(
         },
     )
     .await
-    .map_err(|e| e.to_string())?;
+    .map_err(cmd_err("game"))?;
 
     game_state.running.lock().unwrap().insert(
         profile_id.clone(),

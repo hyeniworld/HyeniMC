@@ -9,6 +9,8 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_updater::UpdaterExt;
 
+use crate::util::cmd_err;
+
 /// 다운로드된 업데이트를 quitAndInstall까지 들고 있기 위한 보관소
 #[derive(Default)]
 pub struct PendingUpdate {
@@ -50,7 +52,7 @@ pub async fn launcher_check_updates(
     db: tauri::State<'_, crate::commands::DbState>,
 ) -> Result<UpdateCheckResult, String> {
     let current = app.package_info().version.to_string();
-    let updater = app.updater().map_err(|e| e.to_string())?;
+    let updater = app.updater().map_err(cmd_err("launcher_check_updates"))?;
     match updater.check().await {
         Ok(Some(update)) => {
             let version = update.version.clone();
@@ -179,7 +181,7 @@ pub async fn launcher_quit_and_install(
     let bytes = update
         .download(|_c, _t| {}, || {})
         .await
-        .map_err(|e| e.to_string())?;
-    update.install(bytes).map_err(|e| e.to_string())?;
+        .map_err(cmd_err("launcher_quit_and_install"))?;
+    update.install(bytes).map_err(cmd_err("launcher_quit_and_install"))?;
     app.restart();
 }

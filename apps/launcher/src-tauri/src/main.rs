@@ -11,24 +11,27 @@ mod launcher;
 mod mods;
 mod resources;
 mod pack;
+mod util;
 
 use std::sync::Mutex;
 use tauri::Manager;
 use tauri_plugin_deep_link::DeepLinkExt;
 
+use crate::util::cmd_err;
+
 fn open_legacy_db() -> Result<hyenimc_core::rusqlite::Connection, String> {
     let data_dir = hyenimc_core::paths::legacy_data_dir()
         .ok_or_else(|| "legacy data dir을 결정할 수 없음".to_string())?;
     let db_path = hyenimc_core::paths::database_path(&data_dir);
-    hyenimc_core::open_database(&db_path).map_err(|e| e.to_string())
+    hyenimc_core::open_database(&db_path).map_err(cmd_err("open_legacy_db"))
 }
 
 /// DB 상태 — 스파이크/디버그 검증용.
 #[tauri::command]
 fn db_status(db: tauri::State<commands::DbState>) -> Result<serde_json::Value, String> {
     let conn = db.0.lock().unwrap();
-    let version = hyenimc_core::db::schema_version(&conn).map_err(|e| e.to_string())?;
-    let profiles = hyenimc_core::list_profiles(&conn).map_err(|e| e.to_string())?;
+    let version = hyenimc_core::db::schema_version(&conn).map_err(cmd_err("db_status"))?;
+    let profiles = hyenimc_core::list_profiles(&conn).map_err(cmd_err("db_status"))?;
     Ok(serde_json::json!({
         "schemaVersion": version,
         "profileCount": profiles.len(),

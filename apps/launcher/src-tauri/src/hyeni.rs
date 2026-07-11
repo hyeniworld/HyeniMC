@@ -8,6 +8,7 @@ use hyenimc_launcher::hyeni as hy;
 use hyenimc_launcher::workermods;
 
 use crate::commands::DbState;
+use crate::util::cmd_err;
 
 /// 승인 서버 도메인 (기존 shared/config/server-config.ts와 동일)
 const AUTHORIZED_DOMAINS: [&str; 2] = ["*.devbug.ing", "*.devbug.me"];
@@ -65,7 +66,7 @@ pub async fn worker_mods_check(
         has_authorized_server,
     )
     .await
-    .map_err(|e| e.to_string())?;
+    .map_err(cmd_err("worker_mods_check"))?;
 
     // 로더 호환 판단 → 필요하면 각 업데이트에 required_loader_version 스탬프(표시용).
     // 실제 로더 설치/프로필 반영은 다음 게임 실행(game.rs)이 수행한다.
@@ -313,7 +314,7 @@ fn apply_auth(app: &AppHandle, token: &str, servers: &[String]) -> Result<(usize
     }
     let profiles = {
         let conn = db.0.lock().unwrap();
-        hyenimc_core::list_profiles(&conn).map_err(|e| e.to_string())?
+        hyenimc_core::list_profiles(&conn).map_err(cmd_err("apply_auth"))?
     };
 
     // 프로필별 독립 처리 — 한 프로필 실패가 전체를 막지 않음 (TS handleAuthRequest 의미)

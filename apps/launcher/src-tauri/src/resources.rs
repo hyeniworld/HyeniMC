@@ -13,6 +13,7 @@ use hyenimc_launcher::hyenipack::read_provided_packs;
 
 use crate::commands::DbState;
 use crate::game::game_dirs_for;
+use crate::util::cmd_err;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -270,7 +271,7 @@ pub fn file_watch_start(
             );
         }
     })
-    .map_err(|e| e.to_string())?;
+    .map_err(cmd_err("file_watch_start"))?;
 
     // mods/resourcepacks/shaderpacks만 감시 — 인스턴스 전체 재귀 감시는 logs/saves 등 무관한
     // 변경까지 콜백을 깨워 낭비다. 없으면 생성 후 비재귀 감시(팩은 폴더의 직계 자식).
