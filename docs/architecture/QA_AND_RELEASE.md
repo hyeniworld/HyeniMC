@@ -42,10 +42,12 @@ npm run build:tauri   # 배포 번들 (arm64/x64 dmg + nsis)
 - [x] 리소스/셰이더팩 리스트 (팩 제공분/사용자 추가분 구분 배지) + 폴더 열기 + 파일 감시 반영
 - [ ] 크래시 리포트 export (Downloads에 zip — Windows USERPROFILE 경로 확인) + 로그 폴더 열기
 
-### E. 자동 업데이트 & 교체 설치 — ❌ 미검증 (updater 서버/릴리스 구성 필요)
-- [ ] 런처 업데이트 확인/다운로드/설치 (updater 서버 구성 후)
-- [ ] **Windows**: 기존 Electron 판 위에 Tauri NSIS 설치 → 기존 판 자동 제거 + 데이터 보존 (installer-hooks.nsh)
+### E. 자동 업데이트 & 교체 설치 — ⚠️ Windows 교체 설치 완료, 자동 업데이트(E.1)·macOS 남음
+- [ ] 런처 업데이트 확인/다운로드/설치 (updater 서버/릴리스 구성 후 — 태그 push → release-launcher.yml)
+- [x] **Windows**: 기존 Electron 판 위에 Tauri NSIS 설치 → 기존 판 자동 제거 + 데이터 보존 (installer-hooks.nsh) — **검증 완료 2026-07-11**. electron-builder 언인스톨 키가 appId 문자열이 아니라 GUID(`85ce1611-…`, appId에서 계산·버전 무관)라 초기 훅이 못 찾던 버그 수정. v0.1.0~0.3.4 전 버전 동일 appId → 모두 커버.
 - [ ] **macOS**: Squirrel.Mac zip 교체 검증 (동일 Developer ID) / 실패 시 브릿지 릴리스
+
+> **Electron 인앱 자동 업데이트(electron-updater) → Tauri 브릿지는 별도 과제(설계 §6, 미구현)**: Electron은 `latest.yml`을, Tauri 릴리스는 `latest.json`만 생성. 실서비스 전환 때 마지막 Electron 릴리스에 `latest.yml`+Tauri 설치 유도가 필요. E.1/E.2 검증엔 무관.
 
 ### F. Electron→Tauri 이식 완결 & 감사 정정 검증 (2026-07-08 세션)
 
