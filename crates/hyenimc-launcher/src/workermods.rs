@@ -441,18 +441,24 @@ pub async fn resolve_loader_for_updates(
     }
 }
 
-pub fn download_url(worker_base: &str, update: &WorkerModUpdate, token: &str) -> String {
-    let loader_type = &update.loader_type;
-    let game_version = &update.game_version;
-    let encoded: String = token
-        .bytes()
+/// 쿼리 파라미터 값용 percent-encoding(RFC 3986 unreserved만 남기고 나머지 %XX).
+/// 토큰은 base64라 `+`/`/`/`=`를 포함할 수 있는데, 인코딩하지 않으면 쿼리에서 `+`가 공백으로
+/// 해석되어 서버가 잘못된 토큰을 받는다(다운로드 401의 원인). 팩·모드 다운로드 URL 공용.
+pub fn encode_query_value(s: &str) -> String {
+    s.bytes()
         .map(|b| match b {
             b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
                 (b as char).to_string()
             }
             _ => format!("%{b:02X}"),
         })
-        .collect();
+        .collect()
+}
+
+pub fn download_url(worker_base: &str, update: &WorkerModUpdate, token: &str) -> String {
+    let loader_type = &update.loader_type;
+    let game_version = &update.game_version;
+    let encoded = encode_query_value(token);
     format!(
         "{worker_base}/download/v2/mods/{}/versions/{}/{loader_type}/{game_version}/{}?token={encoded}",
         update.mod_id, update.latest_version, update.file
@@ -662,6 +668,13 @@ mod tests {
         .unwrap();
         let fi = &latest.loaders["neoforge"].game_versions["1.21.1"];
         assert_eq!(fi.file, "hyenihelper-neoforge-1.21.1-1.0.5.jar");
+    }
+
+    #[test]
+    fn encode_query_value_escapes_base64() {
+        // base64 토큰의 +//= 가 percent-encode 되어야 함(팩·모드 다운로드 공용 — 401 방지)
+        assert_eq!(encode_query_value("v+CDG/h6I="), "v%2BCDG%2Fh6I%3D");
+        assert_eq!(encode_query_value("plain-token_1.0"), "plain-token_1.0");
     }
 
     #[test]

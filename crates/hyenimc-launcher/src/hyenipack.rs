@@ -562,12 +562,13 @@ pub async fn download_pack_version(
     dest: &Path,
     mut on_progress: impl FnMut(u64, Option<u64>),
 ) -> Result<(), LauncherError> {
+    // 토큰은 base64(+//=) — percent-encode하지 않으면 쿼리에서 `+`가 공백으로 해석돼 401.
     let url = format!(
         "{}/download/v2/modpacks/{}/{}?token={}",
         worker_base.trim_end_matches('/'),
         hyenipack_id,
         version,
-        token
+        crate::workermods::encode_query_value(token)
     );
     let mut resp = http.get(&url).send().await?.error_for_status()?;
     let total = resp.content_length();
