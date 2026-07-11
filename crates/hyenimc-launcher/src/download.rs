@@ -18,6 +18,15 @@ pub struct DownloadTask {
     pub sha1: Option<String>,
     pub sha256: Option<String>,
     pub size: Option<u64>,
+    /// true면 기존 파일 체크섬이 일치해도 스킵하지 않고 항상 새로 받아 덮어쓴다.
+    /// 설치 의도가 있는 경로(워커 모드 업데이트)용 — 에셋/라이브러리는 false(스킵=캐시).
+    pub force: bool,
+}
+
+/// download_one 결과 — 스킵을 조용히 삼키지 않고 호출측(download_all 요약 로그)에 알린다.
+enum DownloadOutcome {
+    Downloaded,
+    Skipped,
 }
 
 #[derive(Debug, Clone)]
@@ -161,23 +170,27 @@ async fn download_one(
     client: &reqwest::Client,
     task: &DownloadTask,
     cfg: &DownloadConfig,
-) -> Result<(), LauncherError> {
+) -> Result<DownloadOutcome, LauncherError> {
     // 이미 존재 + 체크섬 일치(또는 기대치 없음) → 스킵, 불일치 → 재다운로드.
+    // force 태스크는 스킵하지 않는다(설치 의도 — 항상 원본에서 새로 받아 덮어씀).
     // 존재/체크섬 판정은 동기 파일 IO(대용량 SHA1 포함 가능)이므로 blocking 풀로 넘겨
     // async executor 워커를 막지 않는다(수천 개 에셋 스킵 시 정체 방지).
-    let (dest, task_for_check) = (task.dest.clone(), task.clone());
-    let skip = tokio::task::spawn_blocking(move || {
-        dest.exists() && checksums_match(&dest, &task_for_check).unwrap_or(false)
-    })
-    .await
-    .unwrap_or(false);
-    if skip {
-        return Ok(());
+    if !task.force {
+        let (dest, task_for_check) = (task.dest.clone(), task.clone());
+        let skip = tokio::task::spawn_blocking(move || {
+            dest.exists() && checksums_match(&dest, &task_for_check).unwrap_or(false)
+        })
+        .await
+        .unwrap_or(false);
+        if skip {
+            log::debug!("다운로드 스킵(기존 파일 체크섬 일치): {}", task.dest.display());
+            return Ok(DownloadOutcome::Skipped);
+        }
     }
     let mut attempt = 0u32;
     loop {
         match fetch_to_file(client, task, cfg.timeout).await {
-            Ok(()) => return Ok(()),
+            Ok(()) => return Ok(DownloadOutcome::Downloaded),
             Err(e) => {
                 if e.retryable && attempt < cfg.max_retries {
                     log::warn!(
@@ -235,11 +248,15 @@ pub async fn download_all(
 
     let mut completed = 0usize;
     let mut bytes = 0u64;
+    let mut skipped = 0usize;
     let mut first_err = None;
     while let Some((result, task)) = futs.next().await {
         match result {
-            Ok(()) => {
+            Ok(outcome) => {
                 completed += 1;
+                if matches!(outcome, DownloadOutcome::Skipped) {
+                    skipped += 1;
+                }
                 if let Some(sz) = task.size {
                     bytes += sz;
                 }
@@ -256,6 +273,10 @@ pub async fn download_all(
             }
             Err(e) => first_err = first_err.or(Some(e)),
         }
+    }
+    // 스킵을 조용히 삼키지 않는다 — "다운로드 없이 완료"가 로그에 보이게(개별 경로는 debug).
+    if skipped > 0 {
+        log::info!("다운로드 완료: {total}개 중 {skipped}개는 기존 파일 체크섬 일치로 스킵");
     }
     match first_err {
         None => Ok(()),
@@ -325,6 +346,7 @@ mod tests {
             sha1: Some(sha.clone()),
             sha256: None,
             size: None,
+            force: false,
         };
         download_all(&client, vec![task()], &cfg, |_| {}).await.unwrap();
         assert_eq!(std::fs::read(&dest).unwrap(), b"hello-mc");
@@ -333,6 +355,12 @@ mod tests {
         // 동일 SHA1 파일 존재 → 재다운로드 없음
         download_all(&client, vec![task()], &cfg, |_| {}).await.unwrap();
         assert_eq!(hits.load(Ordering::SeqCst), first_hits);
+
+        // force=true → 동일 파일이 있어도 항상 새로 받아 덮어쓴다 (워커 모드 설치 의도)
+        let forced = DownloadTask { force: true, ..task() };
+        download_all(&client, vec![forced], &cfg, |_| {}).await.unwrap();
+        assert!(hits.load(Ordering::SeqCst) > first_hits);
+        assert_eq!(std::fs::read(&dest).unwrap(), b"hello-mc");
     }
 
     #[tokio::test]
@@ -348,6 +376,7 @@ mod tests {
             sha1: Some(sha1_hex(b"retry-ok")),
             sha256: None,
             size: None,
+            force: false,
         };
         download_all(&client, vec![task], &cfg, |_| {}).await.unwrap();
         assert_eq!(std::fs::read(&dest).unwrap(), b"retry-ok");
@@ -368,6 +397,7 @@ mod tests {
             sha1: None,
             sha256: Some(hex::encode(sha2::Sha256::digest(b"body-256"))),
             size: None,
+            force: false,
         };
         download_all(&client, vec![good], &cfg, |_| {}).await.unwrap();
 
@@ -378,6 +408,7 @@ mod tests {
             sha1: None,
             sha256: Some("0".repeat(64)),
             size: None,
+            force: false,
         };
         let err = download_all(&client, vec![bad], &cfg, |_| {}).await.unwrap_err();
         assert!(matches!(err, LauncherError::DownloadFailed { .. }));
@@ -395,6 +426,7 @@ mod tests {
             sha1: Some("0000000000000000000000000000000000000000".into()),
             sha256: None,
             size: None,
+            force: false,
         };
         let err = download_all(&client, vec![task], &cfg, |_| {}).await.unwrap_err();
         assert!(matches!(err, LauncherError::DownloadFailed { .. }));
@@ -413,6 +445,7 @@ mod tests {
                 sha1: None,
                 sha256: None,
                 size: None,
+                force: false,
             })
             .collect();
         download_all(&reqwest::Client::new(), tasks, &DownloadConfig { timeout: std::time::Duration::from_secs(5), retry_base_ms: 1, ..Default::default() }, move |p| {

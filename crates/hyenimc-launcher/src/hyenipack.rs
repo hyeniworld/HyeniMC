@@ -264,6 +264,7 @@ pub async fn install_pack(
                     sha1: m.sha1.clone(),
                     sha256: m.sha256.clone(),
                     size: m.size,
+                    force: false, // 팩 재적용 시 동일 바이트는 스킵 허용(plan 단계에서 이미 버전으로 거름)
                 });
             }
             None => from_zip.push(m),

@@ -144,6 +144,7 @@ pub async fn ensure_version(
             sha1: Some(client_dl.sha1.clone()),
             sha256: None,
             size: Some(client_dl.size),
+            force: false,
         });
     }
     let os_key = native_classifier_key();
@@ -160,6 +161,7 @@ pub async fn ensure_version(
                         sha1: Some(artifact.sha1.clone()),
                         sha256: None,
                         size: Some(artifact.size),
+                        force: false,
                     });
                 }
             }
@@ -175,6 +177,7 @@ pub async fn ensure_version(
                                 sha1: Some(artifact.sha1.clone()),
                                 sha256: None,
                                 size: Some(artifact.size),
+                                force: false,
                             });
                         }
                     }
@@ -207,6 +210,7 @@ pub async fn ensure_version(
                 sha1: Some(index_ref.sha1.clone()),
                 sha256: None,
                 size: index_ref.size,
+                force: false,
             }],
             cfg,
             |_| {},
@@ -230,6 +234,7 @@ pub async fn ensure_version(
                     sha1: None,
                     sha256: None,
                     size: Some(obj.size),
+                    force: false,
                 }
             })
             .collect();

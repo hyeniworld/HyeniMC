@@ -207,7 +207,7 @@ pub async fn install_fabric(
             .clone()
             .unwrap_or_else(|| FABRIC_FALLBACK_REPOS[0].to_string());
         let base = if base.ends_with('/') { base } else { format!("{base}/") };
-        tasks.push(DownloadTask { url: format!("{base}{rel}"), dest, sha1: None, sha256: None, size: None });
+        tasks.push(DownloadTask { url: format!("{base}{rel}"), dest, sha1: None, sha256: None, size: None, force: false });
     }
     download_all(http, tasks, cfg, |_| {}).await?;
     Ok(version_id)
@@ -255,6 +255,7 @@ async fn run_forge_family_installer(
             sha1: None,
             sha256: None,
             size: None,
+            force: false,
         }],
         cfg,
         |_| {},

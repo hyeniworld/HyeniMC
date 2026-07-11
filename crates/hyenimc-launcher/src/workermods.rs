@@ -523,6 +523,8 @@ pub async fn install_updates(
                 sha1: None,
                 sha256: update.sha256.clone(),
                 size: update.size,
+                // 모드 업데이트는 설치 의도 — 기존 파일 체크섬이 같아도 스킵하지 않고 항상 새로 받는다
+                force: true,
             }],
             cfg,
             |_| {},
